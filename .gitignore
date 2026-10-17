@@ -1,0 +1,9 @@
+.env.local
+.DS_Store
+node_modules
+.next
+.venv-proxy
+*.tsbuildinfo
+AGENTS.md
+CLAUDE.md
+public/_test

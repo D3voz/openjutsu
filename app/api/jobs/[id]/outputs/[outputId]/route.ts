@@ -1,0 +1,21 @@
+import { getOutput } from "../../../../../../lib/comfy.ts";
+
+export const runtime = "nodejs";
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string; outputId: string }> }) {
+  try {
+    const { id, outputId } = await params;
+    const { name, response } = await getOutput(id, outputId, request.headers.get("Range"));
+    if (!response.ok || !response.body) return Response.json({ error: "The output is not ready." }, { status: 502 });
+
+    const headers = new Headers({ "Cache-Control": "private, max-age=300" });
+    for (const header of ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"]) {
+      const value = response.headers.get(header);
+      if (value) headers.set(header, value);
+    }
+    if (new URL(request.url).searchParams.has("download")) headers.set("Content-Disposition", `attachment; filename="${name.replace(/"/g, "")}"`);
+    return new Response(response.body, { status: response.status, headers });
+  } catch (error) {
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to download the output." }, { status: 502 });
+  }
+}
