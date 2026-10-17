@@ -4,11 +4,11 @@ import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "rea
 import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
-import { CLIP_SECONDS, MAX_SEED, RESOLUTIONS, type Resolution } from "../lib/simple.ts";
+import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
 
 type Character = { file: File; url: string; role: string };
 type Kind = "simple" | "mask";
-type Run = { id: string; kind: Kind; clips: number; clipSeconds: number; startedAt: number };
+type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number };
 type Progress = NodeInfo & { step: number | null; steps: number | null };
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
@@ -52,6 +52,16 @@ function clipShare(progress: Progress) {
   return 0.05;
 }
 
+function MarginPicker({ value, onChange }: { value: Margin; onChange: (margin: Margin) => void }) {
+  return (
+    <div className="segmented">
+      {(Object.keys(MARGINS) as Margin[]).map((m) => (
+        <button key={m} className={m === value ? "on" : ""} onClick={() => onChange(m)}>{m[0].toUpperCase() + m.slice(1)}</button>
+      ))}
+    </div>
+  );
+}
+
 function DropZone({ accept, onFiles, multiple, children, className }: {
   accept: string; onFiles: (files: File[]) => void; multiple?: boolean; children: ReactNode; className?: string;
 }) {
@@ -75,6 +85,7 @@ export function Openjutsu() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [resolution, setResolution] = useState<Resolution>("736p");
   const [hatFix, setHatFix] = useState(false);
+  const [margin, setMargin] = useState<Margin>("normal");
   const [seed, setSeed] = useState(0);
   const [clipSeconds, setClipSeconds] = useState(CLIP_SECONDS.default);
   const [submitting, setSubmitting] = useState(false);
@@ -152,6 +163,7 @@ export function Openjutsu() {
     form.set("mode", kind);
     form.set("video", video.file);
     form.set("hat_fix", String(hatFix));
+    form.set("margin", margin);
     if (kind === "simple" && character) {
       form.set("picture", character.file);
       form.set("role", character.role);
@@ -163,7 +175,7 @@ export function Openjutsu() {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
-      const next: Run = { id: body.id, kind, clips: Math.max(clips, 1), clipSeconds, startedAt: Date.now() };
+      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds, startedAt: Date.now() };
       writeRun(next);
       setJob(body);
       setProgress(null);
@@ -218,6 +230,7 @@ export function Openjutsu() {
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
           onCancel={cancel} onReset={reset} onGenerate={video && character && !submitting ? () => submit("simple") : null}
+          margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
         />
       ) : (
         <>
@@ -286,6 +299,10 @@ export function Openjutsu() {
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>
+            <div className="setting">
+              <span>Mask margin <small>Room around the person for a differently built character. Check mask shows it.</small></span>
+              <MarginPicker value={margin} onChange={setMargin} />
+            </div>
             <details>
               <summary>Advanced</summary>
               <div className="setting">
@@ -318,16 +335,22 @@ export function Openjutsu() {
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onGenerate }: {
+function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onGenerate, margin, onMargin, onRecheck }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
   onCancel: () => void; onReset: () => void; onGenerate: (() => void) | null;
+  margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
 }) {
   const status = job?.status ?? "queued";
   const clips = Math.max(run.clips, progress?.clip ?? 1);
   const mask = run.kind === "mask";
 
   if (mask && status === "succeeded" && job?.video) {
-    return <MaskCheck url={job.video.url} clipSeconds={run.clipSeconds} onGenerate={onGenerate} onBack={onReset} />;
+    return (
+      <MaskCheck
+        url={job.video.url} clipSeconds={run.clipSeconds} checked={run.margin ?? "normal"} margin={margin}
+        onMargin={onMargin} onRecheck={onRecheck} onGenerate={onGenerate} onBack={onReset}
+      />
+    );
   }
 
   if (status === "succeeded" && job?.video) {
@@ -377,8 +400,9 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
   );
 }
 
-function MaskCheck({ url, clipSeconds, onGenerate, onBack }: {
-  url: string; clipSeconds: number; onGenerate: (() => void) | null; onBack: () => void;
+function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onGenerate, onBack }: {
+  url: string; clipSeconds: number; checked: Margin; margin: Margin; onMargin: (margin: Margin) => void;
+  onRecheck: (() => void) | null; onGenerate: (() => void) | null; onBack: () => void;
 }) {
   const player = useRef<HTMLVideoElement>(null);
   const [frames, setFrames] = useState(0);
@@ -427,8 +451,15 @@ function MaskCheck({ url, clipSeconds, onGenerate, onBack }: {
         Anything outside the cyan area stays as it is, so the new character should fit inside it.
       </p>
       <p className="hint">The check tracks the whole video at once and the render tracks each clip, so they can differ slightly.</p>
+      <div className="setting">
+        <span>Mask margin <small>{margin === checked ? `Showing ${checked}.` : `Showing ${checked}; check again to see ${margin}.`} Tight keeps more background, loose gives a bigger character more room.</small></span>
+        <MarginPicker value={margin} onChange={onMargin} />
+      </div>
       <div className="row">
-        <button className="primary" disabled={!onGenerate} onClick={() => onGenerate?.()}>Looks good, generate</button>
+        {margin !== checked && <button className="primary" disabled={!onRecheck} onClick={() => onRecheck?.()}>Check again</button>}
+        <button className={margin === checked ? "primary" : "secondary"} disabled={!onGenerate} onClick={() => onGenerate?.()}>
+          {margin === checked ? "Looks good, generate" : `Generate with ${margin}`}
+        </button>
         <button className="secondary" onClick={onBack}>Back to settings</button>
       </div>
       {!onGenerate && <p className="hint">Add a character photo in the settings to generate.</p>}

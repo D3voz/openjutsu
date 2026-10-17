@@ -9,7 +9,7 @@ const load = (name: string): ApiGraph => JSON.parse(readFileSync(new URL(`../wor
 const graph = load("simple");
 const mask = load("mask");
 const HAT_TYPES = ["CLIPTextEncode", "SAM3_VideoTrack", "SAM3_TrackToMask", "GrowMaskWithBlur", "MaskComposite", "MaskComposite"];
-const settings = (hatFix: boolean): SimpleSettings => ({ role: " the  singer ", resolution: "480p", hatFix, seed: 7, clipSeconds: 6 });
+const settings = (hatFix: boolean): SimpleSettings => ({ role: " the  singer ", resolution: "480p", hatFix, margin: "loose", seed: 7, clipSeconds: 6 });
 
 test("the node ids match the export", () => {
   const types = { picture: "LoadImage", video: "VHS_LoadVideo", plan: "H3OneClickSwapPlan", loopStart: "MiniMaxH3ChainLoopStart", peopleMask: "H3PeopleMask",
@@ -26,6 +26,7 @@ test("without hat fix the hat nodes go and the grow mask reads the people mask",
   assert.deepEqual(pruned[NODES.growMask].inputs.mask, [NODES.peopleMask, 0]);
   const plan = pruned[NODES.plan].inputs;
   assert.deepEqual([plan.resolution, plan.seed, plan.clip_seconds, plan.roles], ["480p", 7, 6, "the singer"]);
+  assert.equal(pruned[NODES.growMask].inputs.expand, 60);
   assert.ok(graph[NODES.hat[0]], "the source graph is not modified");
 });
 
@@ -53,10 +54,11 @@ test("clip count follows the Swap Plan grid", () => {
 });
 
 test("the mask check drops the hat nodes without hat fix", () => {
-  const pruned = pruneMask(mask, false);
+  const pruned = pruneMask(mask, false, "tight");
+  assert.equal(pruned[MASK_NODES.growMask].inputs.expand, 20);
   for (const id of MASK_NODES.hat) assert.equal(pruned[id], undefined);
   assert.deepEqual(pruned[MASK_NODES.growMask].inputs.mask, [MASK_NODES.peopleMask, 0]);
-  assert.equal(Object.keys(pruneMask(mask, true)).length, Object.keys(mask).length);
+  assert.equal(Object.keys(pruneMask(mask, true, "normal")).length, Object.keys(mask).length);
 });
 
 test("clip starts follow the Swap Plan's 39-frame overlap", () => {

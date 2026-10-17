@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { submitMask, submitSimple } from "../../../lib/comfy.ts";
-import { CLIP_SECONDS, MAX_SEED, RESOLUTIONS, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
+import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
 
@@ -9,6 +9,12 @@ function parseVideo(form: FormData) {
   if (!(video instanceof File) || video.size === 0) throw new Error("Drop a source video.");
   if (!video.type.startsWith("video/") && !/\.(mp4|mov|mkv|webm|avi)$/i.test(video.name)) throw new Error("The source must be a video file.");
   return video;
+}
+
+function parseMask(form: FormData) {
+  const margin = String(form.get("margin") ?? "normal");
+  if (!Object.hasOwn(MARGINS, margin)) throw new Error("Choose a supported mask margin.");
+  return { hatFix: form.get("hat_fix") === "true", margin: margin as Margin };
 }
 
 function parseSimple(form: FormData) {
@@ -25,7 +31,7 @@ function parseSimple(form: FormData) {
     throw new Error(`Clip length must be ${CLIP_SECONDS.min}-${CLIP_SECONDS.max} s.`);
   }
 
-  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), resolution: resolution as Resolution, hatFix: form.get("hat_fix") === "true", seed, clipSeconds };
+  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), resolution: resolution as Resolution, ...parseMask(form), seed, clipSeconds };
   return { picture, settings };
 }
 
@@ -36,8 +42,8 @@ export async function POST(request: Request) {
     const mode = form.get("mode");
     const video = parseVideo(form);
     if (mode === "mask") {
-      const hatFix = form.get("hat_fix") === "true";
-      submit = () => submitMask(video, hatFix);
+      const { hatFix, margin } = parseMask(form);
+      submit = () => submitMask(video, hatFix, margin);
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
       submit = () => submitSimple(video, picture, settings);

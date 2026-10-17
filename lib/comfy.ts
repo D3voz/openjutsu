@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Comfy, resolveBaseUrl, resolveCredentials, type Job } from "@comfyorg/sdk";
 import { ComfyLow } from "@comfyorg/sdk/low";
-import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type SimpleSettings } from "./simple.ts";
+import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type Margin, type SimpleSettings } from "./simple.ts";
 
 export type PublicJob = {
   id: string;
@@ -69,9 +69,9 @@ export async function submitSimple(video: File, picture: File, settings: SimpleS
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitMask(video: File, hatFix: boolean) {
+export async function submitMask(video: File, hatFix: boolean, margin: Margin) {
   const comfy = client();
-  const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix));
+  const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix, margin));
   workflow.setInput(MASK_NODES.video, "video", await upload(comfy, video));
   return publicJob(await comfy.submit(workflow));
 }
