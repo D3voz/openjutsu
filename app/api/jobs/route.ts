@@ -1,26 +1,20 @@
 import { NextResponse } from "next/server";
-import { submitSimple } from "../../../lib/comfy.ts";
-import { CLIP_SECONDS, MAX_PICTURES, MAX_SEED, RESOLUTIONS, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
+import { submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { CLIP_SECONDS, MAX_SEED, RESOLUTIONS, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
 
-function parse(form: FormData) {
-  if (form.get("mode") !== "simple") throw new Error("Only Simple motion transfer is available so far.");
-
+function parseVideo(form: FormData) {
   const video = form.get("video");
   if (!(video instanceof File) || video.size === 0) throw new Error("Drop a source video.");
   if (!video.type.startsWith("video/") && !/\.(mp4|mov|mkv|webm|avi)$/i.test(video.name)) throw new Error("The source must be a video file.");
+  return video;
+}
 
-  const pictures: File[] = [];
-  const roles: string[] = [];
-  for (let i = 1; i <= MAX_PICTURES; i++) {
-    const picture = form.get(`picture_${i}`);
-    if (!(picture instanceof File) || picture.size === 0) break;
-    if (!picture.type.startsWith("image/")) throw new Error(`Character ${i} must be an image.`);
-    pictures.push(picture);
-    roles.push(String(form.get(`role_${i}`) ?? "").slice(0, 200));
-  }
-  if (!pictures.length) throw new Error("Add at least one character photo.");
+function parseSimple(form: FormData) {
+  const picture = form.get("picture");
+  if (!(picture instanceof File) || picture.size === 0) throw new Error("Add a character photo.");
+  if (!picture.type.startsWith("image/")) throw new Error("The character photo must be an image.");
 
   const resolution = String(form.get("resolution"));
   if (!RESOLUTIONS.includes(resolution as Resolution)) throw new Error("Choose a supported resolution.");
@@ -31,20 +25,31 @@ function parse(form: FormData) {
     throw new Error(`Clip length must be ${CLIP_SECONDS.min}-${CLIP_SECONDS.max} s.`);
   }
 
-  const settings: SimpleSettings = { roles, resolution: resolution as Resolution, hatFix: form.get("hat_fix") === "true", seed, clipSeconds };
-  return { video, pictures, settings };
+  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), resolution: resolution as Resolution, hatFix: form.get("hat_fix") === "true", seed, clipSeconds };
+  return { picture, settings };
 }
 
 export async function POST(request: Request) {
-  let input: ReturnType<typeof parse>;
+  let submit: () => ReturnType<typeof submitSimple>;
   try {
-    input = parse(await request.formData());
+    const form = await request.formData();
+    const mode = form.get("mode");
+    const video = parseVideo(form);
+    if (mode === "mask") {
+      const hatFix = form.get("hat_fix") === "true";
+      submit = () => submitMask(video, hatFix);
+    } else if (mode === "simple") {
+      const { picture, settings } = parseSimple(form);
+      submit = () => submitSimple(video, picture, settings);
+    } else {
+      throw new Error("Only Simple motion transfer is available so far.");
+    }
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });
   }
 
   try {
-    return NextResponse.json(await submitSimple(input.video, input.pictures, input.settings), { status: 202 });
+    return NextResponse.json(await submit(), { status: 202 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to submit the job." }, { status: 502 });
   }

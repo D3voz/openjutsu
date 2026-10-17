@@ -1,0 +1,22 @@
+{
+  "1": {"class_type": "VHS_LoadVideo", "_meta": {"title": "Source video"}, "inputs": {"video": "", "force_rate": 24, "custom_width": 0, "custom_height": 0, "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1, "format": "None"}},
+  "2": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "SAM 3.1"}, "inputs": {"ckpt_name": "sam3.1_multiplex_fp16.safetensors"}},
+  "3": {"class_type": "CLIPTextEncode", "_meta": {"title": "SAM: what to replace"}, "inputs": {"text": "person", "clip": ["2", 1]}},
+  "4": {"class_type": "ImageScaleToMaxDimension", "_meta": {"title": "Motion reference video (~512 px)"}, "inputs": {"upscale_method": "area", "largest_size": 512, "image": ["1", 0]}},
+  "5": {"class_type": "ImageScaleToMaxDimension", "_meta": {"title": "SAM video (1008 px)"}, "inputs": {"upscale_method": "area", "largest_size": 1008, "image": ["1", 0]}},
+  "6": {"class_type": "SAM3_VideoTrack", "_meta": {"title": "SAM 3.1 track every person"}, "inputs": {"detection_threshold": 0.35, "max_objects": 0, "detect_interval": 1, "images": ["5", 0], "model": ["2", 0], "conditioning": ["3", 0]}},
+  "7": {"class_type": "H3PeopleMask", "_meta": {"title": "Main person (+ headroom)"}, "inputs": {"headroom": 0.1, "hold_frames": 2, "max_people": 1, "track_data": ["6", 0]}},
+  "8": {"class_type": "H3PeopleMask", "_meta": {"title": "Main person, no headroom (for the mannequin)"}, "inputs": {"headroom": 0, "hold_frames": 1, "max_people": 1, "track_data": ["6", 0]}},
+  "9": {"class_type": "GrowMaskWithBlur", "_meta": {"title": "Grow mask (~4% of the frame)"}, "inputs": {"expand": 40, "incremental_expandrate": 0, "tapered_corners": true, "flip_input": false, "blur_radius": 0, "lerp_alpha": 1, "decay_factor": 1, "fill_holes": true, "mask": ["13", 0]}},
+  "10": {"class_type": "CLIPTextEncode", "_meta": {"title": "SAM: hats"}, "inputs": {"text": "hat", "clip": ["2", 1]}},
+  "11": {"class_type": "SAM3_VideoTrack", "_meta": {"title": "SAM 3.1 track hats"}, "inputs": {"detection_threshold": 0.35, "max_objects": 0, "detect_interval": 1, "images": ["5", 0], "model": ["2", 0], "conditioning": ["10", 0]}},
+  "12": {"class_type": "SAM3_TrackToMask", "_meta": {"title": "All hats"}, "inputs": {"object_indices": "", "track_data": ["11", 0]}},
+  "13": {"class_type": "MaskComposite", "_meta": {"title": "People + hats"}, "inputs": {"x": 0, "y": 0, "operation": "add", "destination": ["7", 0], "source": ["20", 0]}},
+  "14": {"class_type": "H3GreyMannequins", "_meta": {"title": "Grey mannequin (what H3 follows)"}, "inputs": {"blur": 0.01, "images": ["4", 0], "mask": ["8", 0], "size": ["8", 1]}},
+  "15": {"class_type": "ImageAndMaskPreview", "_meta": {"title": "Regenerated area (cyan)"}, "inputs": {"mask_opacity": 0.45, "mask_color": "0, 200, 255", "pass_through": true, "image": ["4", 0], "mask": ["9", 0]}},
+  "16": {"class_type": "ImageAndMaskPreview", "_meta": {"title": "Tracked person (orange)"}, "inputs": {"mask_opacity": 0.35, "mask_color": "255, 140, 0", "pass_through": true, "image": ["15", 0], "mask": ["8", 0]}},
+  "17": {"class_type": "ImageStitch", "_meta": {"title": "Mask | mannequin"}, "inputs": {"direction": "right", "match_image_size": true, "spacing_width": 0, "spacing_color": "white", "image1": ["16", 0], "image2": ["14", 0]}},
+  "18": {"class_type": "VHS_VideoCombine", "_meta": {"title": "Mask preview video"}, "inputs": {"frame_rate": 24, "loop_count": 0, "filename_prefix": "openjutsu_mask/mask", "format": "video/h264-mp4", "pix_fmt": "yuv420p", "crf": 19, "save_metadata": false, "trim_to_audio": false, "pingpong": false, "save_output": false, "images": ["17", 0]}},
+  "19": {"class_type": "GrowMaskWithBlur", "_meta": {"title": "Hat search area (person + 60 px)"}, "inputs": {"expand": 60, "incremental_expandrate": 0, "tapered_corners": true, "flip_input": false, "blur_radius": 0, "lerp_alpha": 1, "decay_factor": 1, "fill_holes": true, "mask": ["7", 0]}},
+  "20": {"class_type": "MaskComposite", "_meta": {"title": "Only the main person's hat"}, "inputs": {"x": 0, "y": 0, "operation": "multiply", "destination": ["12", 0], "source": ["19", 0]}}
+}

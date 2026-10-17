@@ -5,17 +5,28 @@ const OVERLAP = 39;
 const gridFloor = (frames: number) => Math.floor((frames - 5) / 17) * 17 + 5;
 const gridCeil = (frames: number) => Math.ceil((frames - 5) / 17) * 17 + 5;
 
-export function clipCount(durationSeconds: number, clipSeconds: number) {
+function clipLengths(durationSeconds: number, clipSeconds: number) {
   const total = Math.floor(durationSeconds * FPS);
   const clipFrames = Math.floor(clipSeconds * FPS);
-  let rem = total - Math.min(gridFloor(clipFrames), gridFloor(total));
+  const lengths = [Math.min(gridFloor(clipFrames), gridFloor(total))];
+  let rem = total - lengths[0];
   const count = rem >= 17 ? Math.ceil(rem / (gridFloor(clipFrames) - OVERLAP)) : 0;
-  let clips = 1;
   for (let j = 0; j < count; j++) {
     const length = Math.min(gridCeil(Math.ceil(rem / (count - j)) + OVERLAP), gridFloor(rem + OVERLAP));
     if (length - OVERLAP < 17) break;
-    clips++;
+    lengths.push(length);
     rem -= length - OVERLAP;
   }
-  return clips;
+  return lengths;
+}
+
+export function clipCount(durationSeconds: number, clipSeconds: number) {
+  return clipLengths(durationSeconds, clipSeconds).length;
+}
+
+// First source frame of each clip (clips after the first start OVERLAP frames early).
+export function clipStarts(durationSeconds: number, clipSeconds: number) {
+  const starts = [0];
+  for (const length of clipLengths(durationSeconds, clipSeconds).slice(0, -1)) starts.push(starts.at(-1)! + length - OVERLAP);
+  return starts;
 }

@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
-import { clipCount } from "../lib/clips.ts";
-import { CLIP_SECONDS, MAX_PICTURES, MAX_SEED, RESOLUTIONS, type Resolution } from "../lib/simple.ts";
+import { clipCount, clipStarts } from "../lib/clips.ts";
+import { CLIP_SECONDS, MAX_SEED, RESOLUTIONS, type Resolution } from "../lib/simple.ts";
 
 type Character = { file: File; url: string; role: string };
-type Run = { id: string; clips: number; startedAt: number };
+type Kind = "simple" | "mask";
+type Run = { id: string; kind: Kind; clips: number; clipSeconds: number; startedAt: number };
 type Progress = NodeInfo & { step: number | null; steps: number | null };
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
 const RUN_KEY = "openjutsu.run";
 
 const MODES = [
-  { id: "simple", title: "Simple motion transfer", text: "Swap everyone in a video for your characters.", ready: true },
-  { id: "advanced", title: "Advanced motion transfer", text: "Pick who becomes who by colour-coded tracks.", ready: false },
+  { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
+  { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: false },
   { id: "object", title: "Object swap", text: "Replace a prop or product instead of a person.", ready: false },
 ];
 
@@ -71,7 +72,7 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 
 export function Openjutsu() {
   const [video, setVideo] = useState<{ file: File; url: string; duration: number } | null>(null);
-  const [characters, setCharacters] = useState<Character[]>([]);
+  const [character, setCharacter] = useState<Character | null>(null);
   const [resolution, setResolution] = useState<Resolution>("736p");
   const [hatFix, setHatFix] = useState(false);
   const [seed, setSeed] = useState(0);
@@ -90,7 +91,7 @@ export function Openjutsu() {
 
   useEffect(() => {
     if (!run) return;
-    const source = new EventSource(`/api/jobs/${run.id}/events`);
+    const source = new EventSource(`/api/jobs/${run.id}/events?kind=${run.kind ?? "simple"}`);
     source.onmessage = (message) => {
       const event = JSON.parse(message.data);
       if (event.type === "job") {
@@ -129,40 +130,40 @@ export function Openjutsu() {
     probe.src = url;
   }
 
-  function addCharacters(files: File[]) {
-    setCharacters((current) => [
-      ...current,
-      ...files.slice(0, MAX_PICTURES - current.length).map((file) => ({ file, url: URL.createObjectURL(file), role: "" })),
-    ]);
+  function chooseCharacter(files: File[]) {
+    const file = files[0];
+    if (!file) return;
+    if (character) URL.revokeObjectURL(character.url);
+    setCharacter({ file, url: URL.createObjectURL(file), role: character?.role ?? "" });
   }
 
-  function removeCharacter(index: number) {
-    URL.revokeObjectURL(characters[index].url);
-    setCharacters(characters.filter((_, i) => i !== index));
+  function removeCharacter() {
+    if (character) URL.revokeObjectURL(character.url);
+    setCharacter(null);
   }
 
   const clips = video?.duration ? clipCount(video.duration, clipSeconds) : 0;
 
-  async function generate() {
-    if (!video || !characters.length) return;
+  async function submit(kind: Kind) {
+    if (!video || (kind === "simple" && !character)) return;
     setSubmitting(true);
     setFormError("");
     const form = new FormData();
-    form.set("mode", "simple");
+    form.set("mode", kind);
     form.set("video", video.file);
-    characters.forEach((character, i) => {
-      form.set(`picture_${i + 1}`, character.file);
-      form.set(`role_${i + 1}`, character.role);
-    });
-    form.set("resolution", resolution);
     form.set("hat_fix", String(hatFix));
-    form.set("seed", String(seed));
-    form.set("clip_seconds", String(clipSeconds));
+    if (kind === "simple" && character) {
+      form.set("picture", character.file);
+      form.set("role", character.role);
+      form.set("resolution", resolution);
+      form.set("seed", String(seed));
+      form.set("clip_seconds", String(clipSeconds));
+    }
     try {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
-      const next = { id: body.id, clips: Math.max(clips, 1), startedAt: Date.now() };
+      const next: Run = { id: body.id, kind, clips: Math.max(clips, 1), clipSeconds, startedAt: Date.now() };
       writeRun(next);
       setJob(body);
       setProgress(null);
@@ -198,7 +199,7 @@ export function Openjutsu() {
           <span className="mark" aria-hidden>忍</span>
           <div>
             <h1>Openjutsu</h1>
-            <p>Swap the people in any video for your own characters. Open weights, on your own GPU.</p>
+            <p>Swap the person in any video for your own character. Open weights, on your own GPU.</p>
           </div>
         </div>
       </header>
@@ -216,7 +217,7 @@ export function Openjutsu() {
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
-          onCancel={cancel} onReset={reset}
+          onCancel={cancel} onReset={reset} onGenerate={video && character && !submitting ? () => submit("simple") : null}
         />
       ) : (
         <>
@@ -240,33 +241,32 @@ export function Openjutsu() {
             </div>
 
             <div className="panel">
-              <h2><span>2</span> Characters <small>{characters.length}/{MAX_PICTURES}</small></h2>
+              <h2><span>2</span> Character</h2>
               <div className="characters">
-                {characters.map((character, i) => (
-                  <div className="character" key={character.url}>
-                    <img src={character.url} alt={`Character ${i + 1}`} />
-                    <button className="remove" onClick={() => removeCharacter(i)} aria-label={`Remove character ${i + 1}`}>×</button>
+                {character ? (
+                  <div className="character">
+                    <img src={character.url} alt="Character" />
+                    <button className="remove" onClick={removeCharacter} aria-label="Remove the character">×</button>
                     <label>
-                      <span>Replaces who?</span>
+                      <span>Who do they replace? (optional)</span>
                       <input
                         value={character.role}
                         maxLength={200}
-                        placeholder={i === 0 ? "e.g. the singer" : "e.g. the drummer"}
-                        onChange={(event) => setCharacters(characters.map((c, j) => (j === i ? { ...c, role: event.target.value } : c)))}
+                        placeholder="e.g. the singer"
+                        onChange={(event) => setCharacter({ ...character, role: event.target.value })}
                       />
                     </label>
                   </div>
-                ))}
-                {characters.length < MAX_PICTURES && (
-                  <DropZone accept="image/*" multiple onFiles={addCharacters} className="add">
+                ) : (
+                  <DropZone accept="image/*" onFiles={chooseCharacter} className="add">
                     <strong>+</strong>
-                    <span>{characters.length ? "Add another" : "Drop 1-4 photos"}</span>
+                    <span>Drop a photo</span>
                   </DropZone>
                 )}
               </div>
               <p className="hint">
-                One photo per person in the video. Leave &ldquo;replaces who?&rdquo; blank to match by screen time. Name a role or position
-                (&ldquo;the drummer&rdquo;, &ldquo;the person on the left&rdquo;), not clothes.
+                The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
+                To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes.
               </p>
             </div>
           </section>
@@ -304,10 +304,13 @@ export function Openjutsu() {
 
           <div className="go">
             {formError && <p className="error">{formError}</p>}
-            <button className="primary" disabled={!video || !characters.length || submitting} onClick={generate}>
-              {submitting ? "Uploading…" : "Generate"}
-            </button>
-            <small>{clips ? `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}` : "Add a video and at least one character."}</small>
+            <div className="row">
+              <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>
+              <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("simple")}>
+                {submitting ? "Uploading…" : "Generate"}
+              </button>
+            </div>
+            <small>{clips ? `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}` : "Add a video and a character photo."}</small>
           </div>
         </>
       )}
@@ -315,12 +318,17 @@ export function Openjutsu() {
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset }: {
+function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onGenerate }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
-  onCancel: () => void; onReset: () => void;
+  onCancel: () => void; onReset: () => void; onGenerate: (() => void) | null;
 }) {
   const status = job?.status ?? "queued";
   const clips = Math.max(run.clips, progress?.clip ?? 1);
+  const mask = run.kind === "mask";
+
+  if (mask && status === "succeeded" && job?.video) {
+    return <MaskCheck url={job.video.url} clipSeconds={run.clipSeconds} onGenerate={onGenerate} onBack={onReset} />;
+  }
 
   if (status === "succeeded" && job?.video) {
     return (
@@ -346,13 +354,14 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
   }
 
   let fraction = 0;
-  if (progress?.classType === "MiniMaxH3ChainAssemble") fraction = 0.99;
+  if (mask) fraction = progress?.classType === "SAM3_VideoTrack" && progress.steps ? (progress.step ?? 0) / progress.steps : 0;
+  else if (progress?.classType === "MiniMaxH3ChainAssemble") fraction = 0.99;
   else if (progress?.clip) fraction = (progress.clip - 1 + clipShare(progress)) / clips;
 
   return (
     <section className="panel progress">
       <div className="row">
-        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
+        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : mask ? "Checking the mask" : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
       </div>
       <div className="bar"><div style={{ width: `${Math.round(fraction * 100)}%` }} /></div>
@@ -362,8 +371,67 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       </p>
       {preview && <img className="preview" src={preview} alt="Mask preview: white areas are regenerated" />}
       {streamError && <p className="error">{streamError}</p>}
-      <p className="hint">Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped. You can close this page and come back.</p>
+      <p className="hint">{mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
       <button className="secondary" onClick={onCancel}>Cancel</button>
+    </section>
+  );
+}
+
+function MaskCheck({ url, clipSeconds, onGenerate, onBack }: {
+  url: string; clipSeconds: number; onGenerate: (() => void) | null; onBack: () => void;
+}) {
+  const player = useRef<HTMLVideoElement>(null);
+  const [frames, setFrames] = useState(0);
+  const [frame, setFrame] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const starts = frames ? clipStarts(frames / 24, clipSeconds) : [0];
+
+  function seek(target: number) {
+    const v = player.current;
+    if (!v || !frames) return;
+    v.pause();
+    setPlaying(false);
+    const next = Math.max(0, Math.min(frames - 1, target));
+    setFrame(next);
+    v.currentTime = (next + 0.5) / 24;
+  }
+
+  function toggle() {
+    const v = player.current;
+    if (!v) return;
+    if (playing) v.pause();
+    else v.play();
+    setPlaying(!playing);
+  }
+
+  return (
+    <section className="panel mask-check">
+      <h2>Check the mask</h2>
+      <video
+        ref={player} src={url} muted playsInline preload="auto"
+        onLoadedMetadata={(event) => setFrames(Math.round(event.currentTarget.duration * 24))}
+        onTimeUpdate={(event) => playing && setFrame(Math.min(frames - 1, Math.floor(event.currentTarget.currentTime * 24)))}
+        onEnded={() => setPlaying(false)}
+      />
+      <input className="scrub" type="range" min={0} max={Math.max(frames - 1, 0)} value={frame} aria-label="Frame" onChange={(event) => seek(Number(event.target.value))} />
+      <div className="row">
+        <div className="steps">
+          <button className="secondary" onClick={() => seek(frame - 1)} aria-label="Previous frame">◀</button>
+          <button className="secondary" onClick={toggle}>{playing ? "Pause" : "Play"}</button>
+          <button className="secondary" onClick={() => seek(frame + 1)} aria-label="Next frame">▶</button>
+        </div>
+        <small>Frame {frame + 1} / {frames} · {(frame / 24).toFixed(2)} s · clip {starts.filter((start) => start <= frame).length} of {starts.length}</small>
+      </div>
+      <p className="hint legend">
+        <i className="swatch cyan" /> regenerated <i className="swatch orange" /> tracked person · right: the grey mannequin H3 copies the motion from.
+        Anything outside the cyan area stays as it is, so the new character should fit inside it.
+      </p>
+      <p className="hint">The check tracks the whole video at once and the render tracks each clip, so they can differ slightly.</p>
+      <div className="row">
+        <button className="primary" disabled={!onGenerate} onClick={() => onGenerate?.()}>Looks good, generate</button>
+        <button className="secondary" onClick={onBack}>Back to settings</button>
+      </div>
+      {!onGenerate && <p className="hint">Add a character photo in the settings to generate.</p>}
     </section>
   );
 }

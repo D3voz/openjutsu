@@ -1,13 +1,13 @@
 # Openjutsu
 
-An open-source, Genjutsu-style character swap for video. Drop a video and 1–4 character photos, press **Generate**, and every person in the video is replaced by your characters. The camera, cuts, motion and soundtrack stay. Everything runs on open weights on your own GPU: MiniMax H3 for the video, SAM 3.1 to track people, and Qwen3-VL 8B to describe the pictures and shots.
+An open-source, Genjutsu-style character swap for video. Drop a video and a character photo, press **Generate**, and the main person in the video is replaced by your character. The camera, cuts, motion and soundtrack stay. Everything runs on open weights on your own GPU: MiniMax H3 for the video, SAM 3.1 to track people, and Qwen3-VL 8B to describe the pictures and shots.
 
 The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyorg/sdk`](https://www.npmjs.com/package/@comfyorg/sdk), following Comfy's [comfy-reshoot](https://github.com/Comfy-Org/comfy-reshoot) reference app.
 
 ## Modes
 
-- **Simple motion transfer**: available. Runs `workflows/simple.api.json`.
-- **Advanced motion transfer** (pick who becomes who with role-coloured tracks) and **Object swap**: coming soon, as separate workflow files.
+- **Simple motion transfer**: available. One character replaces the main person (the one who fills the most of the frame). Runs `workflows/simple.api.json`, exported from `H3 One-Click Single Swap (DMAD 6 step).json`.
+- **Advanced motion transfer** (several people, pick who becomes who) and **Object swap**: coming soon, as separate workflow files.
 
 ## Requirements
 
@@ -68,22 +68,26 @@ A 6 s clip at 480p takes about 6–13 minutes on a 4060 Ti, most of it in H3 sam
 
 ## Tips
 
-- One photo per person in the video. Every person SAM finds is regenerated.
-- **Replaces who?** names a role or position (`the singer`, `the drummer`, `the person on the left`), never clothes: clothing words leak into the result. Leave all of them blank to match pictures to people by screen time.
-- **Hat fix** also masks hats, so they are replaced too (about 45 s more per clip).
+- Only the main person is regenerated; anyone else in the video stays as they are.
+- **Who do they replace?** names the person for the prompt by role (`the singer`), never by clothes: clothing words leak into the result. Leave it blank and the describer names them.
+- **Hat fix** also masks the hat, so it is replaced too (about 45 s more per clip).
+- **Check mask** runs only SAM and the mask (about a minute per 3 s of video) and shows a preview you can scrub frame by frame: cyan is the area H3 regenerates, orange the tracked person, and on the right the grey mannequin H3 copies the motion from. Anything outside the cyan area stays as it is.
 - Change the **seed** (under Advanced) for a new take. Running the same inputs again resumes from the last finished clip.
 
 ## How it works
 
-`workflows/simple.api.json` is one API export of the ComfyUI workflow with all four picture branches and the hat fix enabled. For each request, `lib/simple.ts`:
+Each clip, SAM 3.1 tracks everyone at 1008 px (its own working size), and H3 People Mask keeps the largest person. The edit mask adds 10% headroom above the head, holds each pose for 2 frames and grows by 40 px, so a differently built character has room; it does not affect the motion. The motion reference H3 follows is the source clip with that person turned into a sharp grey mannequin of their exact silhouette, so the pose, arms and fingers stay readable.
 
-- removes the picture branches (Load Image → Shrink → Describe) for unused pictures, and their links into the Swap Plan (`picture_k`, `picture_k_text`) and Reference Conditioning (`ref_images.ref_image_k`);
+`workflows/simple.api.json` is one API export of that workflow with the hat fix enabled. For each request, `lib/simple.ts`:
+
 - without the hat fix, removes the hat nodes and connects Grow Mask to the People Mask output;
-- sets the Swap Plan's resolution, seed, clip length and roles (one line per picture).
+- sets the Swap Plan's resolution, seed, clip length and role.
 
-`lib/comfy.ts` binds the uploaded video to `VHS_LoadVideo` and the photos to the `LoadImage` nodes, then submits with the SDK. `/api/jobs/[id]/events` streams `job.events()` to the page as server-sent events. Node ids are turned into node titles and clip numbers there: each clip after the first is a graph expansion whose node ids carry a prefix per clip (`64`, `70.0.0.64`, `70.0.0.Recurse.0.0.64`). The final MP4 is the output of the Final Video node (`MiniMaxH3ChainAssemble`, node `71`).
+`lib/comfy.ts` binds the uploaded video to `VHS_LoadVideo` and the photo to the `LoadImage` node, then submits with the SDK. `/api/jobs/[id]/events` streams `job.events()` to the page as server-sent events. Node ids are turned into node titles and clip numbers there: each clip after the first is a graph expansion whose node ids carry a prefix per clip (`58`, `64.0.0.58`, `64.0.0.Recurse.0.0.58`). The final MP4 is the output of the Final Video node (`MiniMaxH3ChainAssemble`, node `65`).
 
-To change the workflow, open it in ComfyUI, enable every picture group and the hat-fix group, export **Workflow (API)**, and replace `workflows/simple.api.json`. If node ids change, update `NODES` in `lib/simple.ts`. `npm test` checks the pruning against the export.
+`workflows/mask.api.json` is the mask check: the same SAM, People Mask and grow settings over the whole video, with the mask tinted over the frames next to the mannequin, saved as an MP4.
+
+To change the workflow, edit `user/default/oneclick_single_build.js` in ComfyUI (or the workflow itself), enable the hat-fix group, export **Workflow (API)**, and replace `workflows/simple.api.json`. If node ids change, update `NODES` in `lib/simple.ts`. `npm test` checks the pruning against the export.
 
 ## Deploy on the Comfy Developer Platform
 

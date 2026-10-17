@@ -132,3 +132,13 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
   .modes, .inputs { grid-template-columns: 1fr; }
   .drop.big { min-height: 180px; }
 }
+
+.go .row { justify-content: center; }
+.mask-check video { max-height: 60vh; }
+.scrub { width: 100%; accent-color: var(--accent); }
+.steps { display: flex; gap: 6px; }
+.steps .secondary { padding: 6px 12px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
+.swatch.cyan { background: rgb(0, 200, 255); }
+.swatch.orange { background: rgb(255, 140, 0); }

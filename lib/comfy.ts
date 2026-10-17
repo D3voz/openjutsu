@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Comfy, resolveBaseUrl, resolveCredentials, type Job } from "@comfyorg/sdk";
 import { ComfyLow } from "@comfyorg/sdk/low";
-import { NODES, pruneSimple, type ApiGraph, type SimpleSettings } from "./simple.ts";
+import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type SimpleSettings } from "./simple.ts";
 
 export type PublicJob = {
   id: string;
@@ -26,8 +26,10 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return new ComfyLow(resolveBaseUrl(), resolveCredentials(), { clientInfo: "openjutsu" }).getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export async function loadSimpleGraph(): Promise<ApiGraph> {
-  return JSON.parse(await readFile(join(process.cwd(), "workflows", "simple.api.json"), "utf8"));
+export type JobKind = "simple" | "mask";
+
+export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
+  return JSON.parse(await readFile(join(process.cwd(), "workflows", `${kind}.api.json`), "utf8"));
 }
 
 function jobErrorMessage(error: unknown) {
@@ -40,7 +42,7 @@ function jobErrorMessage(error: unknown) {
 }
 
 export function publicJob(job: Job): PublicJob {
-  const video = job.outputs.find((output) => output.nodeId === NODES.final && output.contentType.startsWith("video/"));
+  const video = job.outputs.find((output) => output.contentType.startsWith("video/"));
   return {
     id: job.id,
     status: job.status,
@@ -59,11 +61,18 @@ function upload(comfy: Comfy, file: File) {
   );
 }
 
-export async function submitSimple(video: File, pictures: File[], settings: SimpleSettings) {
+export async function submitSimple(video: File, picture: File, settings: SimpleSettings) {
   const comfy = client();
-  const workflow = comfy.workflows.fromJson(pruneSimple(await loadSimpleGraph(), settings));
+  const workflow = comfy.workflows.fromJson(pruneSimple(await loadGraph("simple"), settings));
   workflow.setInput(NODES.video, "video", await upload(comfy, video));
-  for (const [i, picture] of pictures.entries()) workflow.setInput(NODES.pictures[i].load, "image", await upload(comfy, picture));
+  workflow.setInput(NODES.picture, "image", await upload(comfy, picture));
+  return publicJob(await comfy.submit(workflow));
+}
+
+export async function submitMask(video: File, hatFix: boolean) {
+  const comfy = client();
+  const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix));
+  workflow.setInput(MASK_NODES.video, "video", await upload(comfy, video));
   return publicJob(await comfy.submit(workflow));
 }
 
