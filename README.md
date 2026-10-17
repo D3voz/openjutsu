@@ -42,6 +42,8 @@ Restart ComfyUI after installing them.
 
 ## Run it locally
 
+On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or started while it waits). The first run installs `comfy-api-proxy` into `.venv-proxy` and the node packages; then it opens the proxy and the app in two windows and the page in your browser. Close those two windows to stop Openjutsu. The manual steps:
+
 1. Start ComfyUI on `127.0.0.1:8188`. On Windows, set `AIOHTTP_NOSENDFILE=1` first (PowerShell: `$env:AIOHTTP_NOSENDFILE = "1"`). Without it, the first partial-file request (the video player sends one when you seek) can stall ComfyUI's `/view`, and every later file download hangs until ComfyUI restarts.
 2. Install and start the proxy, which serves the Comfy API v2 on `127.0.0.1:8189`. Raise the upload cap for longer videos (the default is 100 MB):
 
