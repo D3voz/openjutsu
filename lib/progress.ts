@@ -1,4 +1,4 @@
-import { NODES, isLink, type ApiGraph } from "./simple.ts";
+import { isLink, type ApiGraph } from "./simple.ts";
 
 export type NodeInfo = { title: string; classType: string; clip: number | null };
 
@@ -6,6 +6,8 @@ export type NodeInfo = { title: string; classType: string; clip: number | null }
 // node ids with "<parent>.<call>.<graph>." and renames Loop End to "Recurse":
 // "64" (clip 1), "70.0.0.64" (clip 2), "70.0.0.Recurse.0.0.64" (clip 3).
 export function nodeDescriber(graph: ApiGraph) {
+  const loopStart = Object.keys(graph).find((id) => graph[id].class_type === "MiniMaxH3ChainLoopStart");
+  const loopEnd = Object.keys(graph).find((id) => graph[id].class_type === "MiniMaxH3ChainLoopEnd");
   const children = new Map<string, string[]>();
   for (const [id, node] of Object.entries(graph)) {
     for (const value of Object.values(node.inputs)) {
@@ -18,14 +20,14 @@ export function nodeDescriber(graph: ApiGraph) {
     while (stack.length) for (const child of children.get(stack.pop()!) ?? []) if (!seen.has(child)) seen.add(child), stack.push(child);
     return seen;
   };
-  const afterLoop = downstream(NODES.loopEnd);
-  afterLoop.delete(NODES.loopEnd);
-  const inLoop = new Set([...downstream(NODES.loopStart)].filter((id) => !afterLoop.has(id)));
+  const afterLoop = loopEnd ? downstream(loopEnd) : new Set<string>();
+  if (loopEnd) afterLoop.delete(loopEnd);
+  const inLoop = new Set(loopStart ? [...downstream(loopStart)].filter((id) => !afterLoop.has(id)) : []);
 
   return (nodeId: string | null): NodeInfo | null => {
     if (!nodeId) return null;
     const parts = nodeId.split(".");
-    const base = parts.at(-1) === "Recurse" ? NODES.loopEnd : parts.at(-1)!;
+    const base = parts.at(-1) === "Recurse" && loopEnd ? loopEnd : parts.at(-1)!;
     const node = graph[base];
     if (!node) return null;
     return {

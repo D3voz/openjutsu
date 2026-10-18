@@ -5,9 +5,11 @@ import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
+import { MAX_CHARACTERS } from "../lib/advanced.ts";
 
 type Character = { file: File; url: string; role: string };
-type Kind = "simple" | "mask";
+type Mode = "simple" | "advanced";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq";
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number };
 type Progress = NodeInfo & { step: number | null; steps: number | null };
 
@@ -16,9 +18,9 @@ const RUN_KEY = "openjutsu.run";
 
 const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
-  { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: false },
+  { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: true },
   { id: "object", title: "Object swap", text: "Replace a prop or product instead of a person.", ready: false },
-];
+] as const;
 
 function readRun(): Run | null {
   try {
@@ -47,7 +49,11 @@ function elapsed(ms: number) {
 
 // Rough share of a clip done at each node: the sampler is most of the time.
 function clipShare(progress: Progress) {
-  if (progress.classType === "SamplerCustomAdvanced") return 0.15 + 0.75 * (progress.steps ? (progress.step ?? 0) / progress.steps : 0);
+  const steps = progress.steps ? (progress.step ?? 0) / progress.steps : 0;
+  // one pass per person samples twice per clip
+  if (progress.classType === "SamplerCustomAdvanced" && progress.title.startsWith("Pass 1:")) return 0.1 + 0.4 * steps;
+  if (progress.classType === "SamplerCustomAdvanced" && progress.title.startsWith("Pass 2:")) return 0.5 + 0.4 * steps;
+  if (progress.classType === "SamplerCustomAdvanced") return 0.15 + 0.75 * steps;
   if (["VAEDecode", "VAEDecodeAudio", "MiniMaxH3LoopTrim", "MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainReview"].includes(progress.classType)) return 0.95;
   return 0.05;
 }
@@ -81,8 +87,10 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 }
 
 export function Openjutsu() {
+  const [mode, setMode] = useState<Mode>("simple");
   const [video, setVideo] = useState<{ file: File; url: string; duration: number } | null>(null);
-  const [character, setCharacter] = useState<Character | null>(null);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [maxQuality, setMaxQuality] = useState(false);
   const [resolution, setResolution] = useState<Resolution>("736p");
   const [hatFix, setHatFix] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
@@ -141,22 +149,36 @@ export function Openjutsu() {
     probe.src = url;
   }
 
-  function chooseCharacter(files: File[]) {
-    const file = files[0];
-    if (!file) return;
-    if (character) URL.revokeObjectURL(character.url);
-    setCharacter({ file, url: URL.createObjectURL(file), role: character?.role ?? "" });
+  // Simple mode uses only the first character; the others are kept for switching back.
+  const limit = mode === "simple" ? 1 : MAX_CHARACTERS;
+  const shown = characters.slice(0, limit);
+  const character = characters[0] ?? null;
+  const onePassEach = mode === "advanced" && maxQuality && shown.length === 2;
+
+  function addCharacters(files: File[]) {
+    if (!files.length) return;
+    if (mode === "simple" && character) {
+      URL.revokeObjectURL(character.url);
+      setCharacters([{ file: files[0], url: URL.createObjectURL(files[0]), role: character.role }, ...characters.slice(1)]);
+      return;
+    }
+    const added = files.slice(0, limit - characters.length).map((file) => ({ file, url: URL.createObjectURL(file), role: "" }));
+    setCharacters([...characters, ...added]);
   }
 
-  function removeCharacter() {
-    if (character) URL.revokeObjectURL(character.url);
-    setCharacter(null);
+  function removeCharacter(index: number) {
+    URL.revokeObjectURL(characters[index].url);
+    setCharacters(characters.filter((_, i) => i !== index));
+  }
+
+  function setRole(index: number, role: string) {
+    setCharacters(characters.map((c, i) => (i === index ? { ...c, role } : c)));
   }
 
   const clips = video?.duration ? clipCount(video.duration, clipSeconds) : 0;
 
   async function submit(kind: Kind) {
-    if (!video || (kind === "simple" && !character)) return;
+    if (!video || (kind !== "mask" && !character)) return;
     setSubmitting(true);
     setFormError("");
     const form = new FormData();
@@ -167,6 +189,17 @@ export function Openjutsu() {
     if (kind === "simple" && character) {
       form.set("picture", character.file);
       form.set("role", character.role);
+      form.set("resolution", resolution);
+      form.set("seed", String(seed));
+      form.set("clip_seconds", String(clipSeconds));
+    }
+    if (kind === "advanced" || kind === "advanced_maxq") {
+      form.set("mode", "advanced");
+      for (const c of shown) {
+        form.append("picture", c.file);
+        form.append("role", c.role);
+      }
+      form.set("max_quality", String(kind === "advanced_maxq"));
       form.set("resolution", resolution);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -217,11 +250,14 @@ export function Openjutsu() {
       </header>
 
       <nav className="modes" aria-label="Mode">
-        {MODES.map((mode) => (
-          <button key={mode.id} className={`mode ${mode.ready ? "active" : ""}`} disabled={!mode.ready} aria-pressed={mode.ready}>
-            <strong>{mode.title}</strong>
-            <span>{mode.text}</span>
-            {!mode.ready && <em>Coming soon</em>}
+        {MODES.map((m) => (
+          <button
+            key={m.id} className={`mode ${m.id === mode ? "active" : ""}`} disabled={!m.ready || !!run} aria-pressed={m.id === mode}
+            onClick={() => m.id !== "object" && setMode(m.id)}
+          >
+            <strong>{m.title}</strong>
+            <span>{m.text}</span>
+            {!m.ready && <em>Coming soon</em>}
           </button>
         ))}
       </nav>
@@ -229,7 +265,7 @@ export function Openjutsu() {
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
-          onCancel={cancel} onReset={reset} onGenerate={video && character && !submitting ? () => submit("simple") : null}
+          onCancel={cancel} onReset={reset} onGenerate={video && character && !submitting && mode === "simple" ? () => submit("simple") : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
         />
       ) : (
@@ -254,33 +290,43 @@ export function Openjutsu() {
             </div>
 
             <div className="panel">
-              <h2><span>2</span> Character</h2>
+              <h2><span>2</span> {mode === "simple" ? "Character" : "Characters"}</h2>
               <div className="characters">
-                {character ? (
-                  <div className="character">
-                    <img src={character.url} alt="Character" />
-                    <button className="remove" onClick={removeCharacter} aria-label="Remove the character">×</button>
+                {shown.map((c, i) => (
+                  <div className="character" key={c.url}>
+                    <img src={c.url} alt={`Character ${i + 1}`} />
+                    <button className="remove" onClick={() => removeCharacter(i)} aria-label={`Remove character ${i + 1}`}>×</button>
                     <label>
                       <span>Who do they replace? (optional)</span>
                       <input
-                        value={character.role}
+                        value={c.role}
                         maxLength={200}
-                        placeholder="e.g. the singer"
-                        onChange={(event) => setCharacter({ ...character, role: event.target.value })}
+                        placeholder={i === 0 ? "e.g. the singer" : "e.g. the drummer"}
+                        onChange={(event) => setRole(i, event.target.value)}
                       />
                     </label>
                   </div>
-                ) : (
-                  <DropZone accept="image/*" onFiles={chooseCharacter} className="add">
+                ))}
+                {shown.length < limit && (
+                  <DropZone accept="image/*" onFiles={addCharacters} multiple={mode === "advanced"} className="add">
                     <strong>+</strong>
                     <span>Drop a photo</span>
                   </DropZone>
                 )}
               </div>
-              <p className="hint">
-                The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
-                To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes.
-              </p>
+              {mode === "simple" ? (
+                <p className="hint">
+                  The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
+                  To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes.
+                </p>
+              ) : (
+                <p className="hint">
+                  Up to {MAX_CHARACTERS} characters. In every clip each tracked person is matched to a role; people without a
+                  character (extras, passers-by) stay as they are. Name roles (&ldquo;the drummer&rdquo;), not clothes, and add how they look
+                  after &ldquo; - &rdquo; to help the matching (&ldquo;the drummer - man in a cap&rdquo;). Blank roles go to the people with the
+                  most screen time.
+                </p>
+              )}
             </div>
           </section>
 
@@ -295,12 +341,19 @@ export function Openjutsu() {
               </div>
             </div>
             <label className="setting toggle">
-              <span>Hat fix <small>Also replaces hats (about 45 s more per clip).</small></span>
+              <span>Hat fix <small>Also replaces hats{mode === "advanced" ? " worn by the people being replaced" : ""} (about 45 s more per clip).</small></span>
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>
+            {mode === "advanced" && (
+              <label className="setting toggle">
+                <span>One pass per person <small>{shown.length === 2 ? "Each character gets their own H3 pass with only their photo. About twice the time." : "Needs exactly two characters."}</small></span>
+                <input type="checkbox" checked={onePassEach} disabled={shown.length !== 2} onChange={(event) => setMaxQuality(event.target.checked)} />
+                <i aria-hidden />
+              </label>
+            )}
             <div className="setting">
-              <span>Mask margin <small>Room around the person for a differently built character. Check mask shows it.</small></span>
+              <span>Mask margin <small>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</small></span>
               <MarginPicker value={margin} onChange={setMargin} />
             </div>
             <details>
@@ -322,12 +375,12 @@ export function Openjutsu() {
           <div className="go">
             {formError && <p className="error">{formError}</p>}
             <div className="row">
-              <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>
-              <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("simple")}>
+              {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
+              <button className="primary" disabled={!video || !character || submitting} onClick={() => submit(mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
                 {submitting ? "Uploading…" : "Generate"}
               </button>
             </div>
-            <small>{clips ? `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}` : "Add a video and a character photo."}</small>
+            <small>{clips ? `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}` : `Add a video and ${mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>
       )}

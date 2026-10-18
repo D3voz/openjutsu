@@ -1,0 +1,1765 @@
+{
+ "2": {
+  "inputs": {
+   "image": "apt_vest_reference.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Picture 1"
+  }
+ },
+ "3": {
+  "inputs": {
+   "upscale_method": "area",
+   "largest_size": 768,
+   "image": [
+    "2",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToMaxDimension",
+  "_meta": {
+   "title": "Shrink for the describer"
+  }
+ },
+ "4": {
+  "inputs": {
+   "prompt": "Describe the person in this picture for a casting sheet, in one sentence of about 40 words: apparent age and gender, hair, facial hair, skin tone, build, and their complete outfit including footwear. No preamble, no background.",
+   "max_length": 120,
+   "sampling_mode": "off",
+   "thinking": false,
+   "use_default_template": true,
+   "mtp": "auto",
+   "clip": [
+    "16",
+    0
+   ],
+   "image": [
+    "3",
+    0
+   ]
+  },
+  "class_type": "TextGenerate",
+  "_meta": {
+   "title": "Describe picture 1"
+  }
+ },
+ "5": {
+  "inputs": {
+   "image": "apt_kurta_reference.png"
+  },
+  "class_type": "LoadImage",
+  "_meta": {
+   "title": "Picture 2"
+  }
+ },
+ "6": {
+  "inputs": {
+   "upscale_method": "area",
+   "largest_size": 768,
+   "image": [
+    "5",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToMaxDimension",
+  "_meta": {
+   "title": "Shrink for the describer"
+  }
+ },
+ "7": {
+  "inputs": {
+   "prompt": "Describe the person in this picture for a casting sheet, in one sentence of about 40 words: apparent age and gender, hair, facial hair, skin tone, build, and their complete outfit including footwear. No preamble, no background.",
+   "max_length": 120,
+   "sampling_mode": "off",
+   "thinking": false,
+   "use_default_template": true,
+   "mtp": "auto",
+   "clip": [
+    "16",
+    0
+   ],
+   "image": [
+    "6",
+    0
+   ]
+  },
+  "class_type": "TextGenerate",
+  "_meta": {
+   "title": "Describe picture 2"
+  }
+ },
+ "8": {
+  "inputs": {
+   "video": "apt_rose_16s.mkv",
+   "force_rate": 24,
+   "custom_width": 0,
+   "custom_height": 0,
+   "frame_load_cap": 0,
+   "skip_first_frames": 0,
+   "select_every_nth": 1,
+   "format": "None"
+  },
+  "class_type": "VHS_LoadVideo",
+  "_meta": {
+   "title": "Source video (people get replaced)"
+  }
+ },
+ "9": {
+  "inputs": {
+   "start_index": 0,
+   "duration": 2048,
+   "audio": [
+    "8",
+    2
+   ]
+  },
+  "class_type": "TrimAudioDuration",
+  "_meta": {
+   "title": "Soundtrack (whole video)"
+  }
+ },
+ "10": {
+  "inputs": {
+   "select_every_nth": 48,
+   "skip_first_images": 24,
+   "images": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "VHS_SelectEveryNthImage",
+  "_meta": {
+   "title": "One frame every 2 s"
+  }
+ },
+ "11": {
+  "inputs": {
+   "batch_index": 0,
+   "length": 20,
+   "image": [
+    "10",
+    0
+   ]
+  },
+  "class_type": "ImageFromBatch",
+  "_meta": {
+   "title": "At most 20 frames"
+  }
+ },
+ "12": {
+  "inputs": {
+   "upscale_method": "area",
+   "largest_size": 640,
+   "image": [
+    "11",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToMaxDimension",
+  "_meta": {
+   "title": "Shrink for the describer"
+  }
+ },
+ "13": {
+  "inputs": {
+   "prompt": "These are frames from one video, in time order. List the people who appear most, up to four, the person with the most screen time first. Write one numbered line per person: first their role in the video in two to four words, without gender, that stays true in every shot, then \" - \" and how they look, like \"1. the guitarist - tall man with a grey beard in a denim jacket\". Each person appears once. Output only the list.",
+   "max_length": 160,
+   "sampling_mode": "off",
+   "thinking": false,
+   "use_default_template": true,
+   "mtp": "auto",
+   "clip": [
+    "16",
+    0
+   ],
+   "image": [
+    "12",
+    0
+   ]
+  },
+  "class_type": "TextGenerate",
+  "_meta": {
+   "title": "Who is in the video"
+  }
+ },
+ "14": {
+  "inputs": {
+   "clip_seconds": 6,
+   "overlap_frames": 39,
+   "resolution": "736p",
+   "steps": 6,
+   "seed": 0,
+   "roles": "",
+   "source_frames": [
+    "8",
+    0
+   ],
+   "picture_1": [
+    "2",
+    0
+   ],
+   "picture_2": [
+    "5",
+    0
+   ],
+   "picture_1_text": [
+    "4",
+    0
+   ],
+   "picture_2_text": [
+    "7",
+    0
+   ],
+   "video_people": [
+    "13",
+    0
+   ]
+  },
+  "class_type": "H3AdvancedSwapPlan",
+  "_meta": {
+   "title": "Swap Plan (roles, seed, size)"
+  }
+ },
+ "16": {
+  "inputs": {
+   "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+   "type": "stable_diffusion",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "Describer: Qwen3-VL 8B"
+  }
+ },
+ "18": {
+  "inputs": {
+   "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+   "weight_dtype": "default"
+  },
+  "class_type": "UNETLoader",
+  "_meta": {
+   "title": "H3 Diffusion Model"
+  }
+ },
+ "19": {
+  "inputs": {
+   "lora_name": "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
+   "strength_model": 1,
+   "model": [
+    "18",
+    0
+   ]
+  },
+  "class_type": "LoraLoaderModelOnly",
+  "_meta": {
+   "title": "DMAD LoRA"
+  }
+ },
+ "20": {
+  "inputs": {
+   "attention": "comfy kitchen attention",
+   "model": [
+    "19",
+    0
+   ]
+  },
+  "class_type": "ModelAttentionBackend",
+  "_meta": {
+   "title": "Comfy Kitchen Attention"
+  }
+ },
+ "21": {
+  "inputs": {
+   "shift_video": 12,
+   "shift_audio": 2,
+   "model": [
+    "20",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3SigmaShift",
+  "_meta": {
+   "title": "Sigma Shift"
+  }
+ },
+ "22": {
+  "inputs": {
+   "clip_name": "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+   "type": "minimax",
+   "device": "default"
+  },
+  "class_type": "CLIPLoader",
+  "_meta": {
+   "title": "H3 Text Encoder"
+  }
+ },
+ "23": {
+  "inputs": {
+   "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Video VAE"
+  }
+ },
+ "24": {
+  "inputs": {
+   "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+  },
+  "class_type": "VAELoader",
+  "_meta": {
+   "title": "Audio VAE"
+  }
+ },
+ "25": {
+  "inputs": {
+   "sampler_name": "euler"
+  },
+  "class_type": "KSamplerSelect",
+  "_meta": {
+   "title": "Sampler"
+  }
+ },
+ "26": {
+  "inputs": {
+   "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+  },
+  "class_type": "CheckpointLoaderSimple",
+  "_meta": {
+   "title": "SAM 3.1"
+  }
+ },
+ "27": {
+  "inputs": {
+   "text": "person",
+   "clip": [
+    "26",
+    1
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "SAM: what to replace"
+  }
+ },
+ "28": {
+  "inputs": {
+   "scene_continuity": "Hard picture + protected audio",
+   "audio_profile": "Generate audio"
+  },
+  "class_type": "MiniMaxH3GenerationProfile",
+  "_meta": {
+   "title": "Generation Profile"
+  }
+ },
+ "29": {
+  "inputs": {
+   "plan_json": "{\n  \"shots\": [\n    {\n      \"id\": \"intro\",\n      \"prompt\": \"Describe the opening shot.\"\n    },\n    {\n      \"id\": \"continuation\",\n      \"prompt\": \"Continue the same take.\"\n    }\n  ]\n}",
+   "run_name": [
+    "14",
+    3
+   ],
+   "generation_fingerprint": "",
+   "width": [
+    "14",
+    1
+   ],
+   "height": [
+    "14",
+    2
+   ],
+   "encode_mode": "video",
+   "crop": "center",
+   "default_duration_seconds": 15,
+   "default_steps": 6,
+   "base_seed": 0,
+   "segment_crf": 16,
+   "video_blend_frames": 0,
+   "chain_policy": [
+    "28",
+    0
+   ],
+   "plan_json_input": [
+    "14",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ChainPlanModern",
+  "_meta": {
+   "title": "Production Plan (filled by Swap Plan)"
+  }
+ },
+ "30": {
+  "inputs": {
+   "video_path": "",
+   "audio_path": "",
+   "embedded_audio": "auto",
+   "skip_first_frames": 0,
+   "source_audio": [
+    "9",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3SourceTimeline",
+  "_meta": {
+   "title": "Source soundtrack"
+  }
+ },
+ "31": {
+  "inputs": {
+   "start_clip": 1,
+   "scene_range": "",
+   "verify_resume_history": true,
+   "plan": [
+    "29",
+    0
+   ],
+   "source_timeline": [
+    "30",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ChainLoopStart",
+  "_meta": {
+   "title": "Loop Start"
+  }
+ },
+ "32": {
+  "inputs": {
+   "align_audio_reference": false,
+   "state": [
+    "31",
+    1
+   ]
+  },
+  "class_type": "MiniMaxH3ChainCurrent",
+  "_meta": {
+   "title": "Current Clip"
+  }
+ },
+ "33": {
+  "inputs": {
+   "expression": "round(a * 24)",
+   "values.a": [
+    "32",
+    10
+   ]
+  },
+  "class_type": "ComfyMathExpression",
+  "_meta": {
+   "title": "Clip start frame"
+  }
+ },
+ "34": {
+  "inputs": {
+   "upscale_method": "area",
+   "largest_size": 512,
+   "image": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToMaxDimension",
+  "_meta": {
+   "title": "Motion reference video (~512 px)"
+  }
+ },
+ "35": {
+  "inputs": {
+   "batch_index": [
+    "33",
+    1
+   ],
+   "length": [
+    "32",
+    6
+   ],
+   "image": [
+    "34",
+    0
+   ]
+  },
+  "class_type": "ImageFromBatch",
+  "_meta": {
+   "title": "Motion reference for this clip"
+  }
+ },
+ "36": {
+  "inputs": {
+   "upscale_method": "area",
+   "largest_size": 1008,
+   "image": [
+    "8",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToMaxDimension",
+  "_meta": {
+   "title": "SAM video (1008 px, SAM's own size)"
+  }
+ },
+ "37": {
+  "inputs": {
+   "batch_index": [
+    "33",
+    1
+   ],
+   "length": [
+    "32",
+    6
+   ],
+   "image": [
+    "36",
+    0
+   ]
+  },
+  "class_type": "ImageFromBatch",
+  "_meta": {
+   "title": "SAM frames for this clip"
+  }
+ },
+ "38": {
+  "inputs": {
+   "detection_threshold": 0.35,
+   "max_objects": 0,
+   "detect_interval": 1,
+   "images": [
+    "37",
+    0
+   ],
+   "model": [
+    "26",
+    0
+   ],
+   "conditioning": [
+    "27",
+    0
+   ]
+  },
+  "class_type": "SAM3_VideoTrack",
+  "_meta": {
+   "title": "SAM 3.1 track every person"
+  }
+ },
+ "39": {
+  "inputs": {
+   "cut_threshold": 40,
+   "track_data": [
+    "38",
+    0
+   ],
+   "images": [
+    "37",
+    0
+   ],
+   "people": [
+    "14",
+    5
+   ]
+  },
+  "class_type": "H3TrackCrops",
+  "_meta": {
+   "title": "Show each track per shot"
+  }
+ },
+ "40": {
+  "inputs": {
+   "prompt": [
+    "39",
+    1
+   ],
+   "max_length": 400,
+   "sampling_mode": "off",
+   "thinking": false,
+   "use_default_template": true,
+   "mtp": "auto",
+   "clip": [
+    "16",
+    0
+   ],
+   "image": [
+    "39",
+    0
+   ]
+  },
+  "class_type": "TextGenerate",
+  "_meta": {
+   "title": "Who is each track (Qwen3-VL)"
+  }
+ },
+ "41": {
+  "inputs": {
+   "segments": [
+    "39",
+    2
+   ],
+   "answer": [
+    "40",
+    0
+   ]
+  },
+  "class_type": "H3TrackRoles",
+  "_meta": {
+   "title": "Read the track labels"
+  }
+ },
+ "42": {
+  "inputs": {
+   "source": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "PreviewAny",
+  "_meta": {
+   "title": "Track labels"
+  }
+ },
+ "43": {
+  "inputs": {
+   "images": [
+    "39",
+    0
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Who is each track (what Qwen saw)"
+  }
+ },
+ "44": {
+  "inputs": {
+   "headroom": 0,
+   "hold_frames": 0,
+   "subject": 0,
+   "track_data": [
+    "38",
+    0
+   ],
+   "labels": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "H3RoleMask",
+  "_meta": {
+   "title": "Labelled people (outlined for the shot list)"
+  }
+ },
+ "45": {
+  "inputs": {
+   "cut_threshold": 40,
+   "images": [
+    "35",
+    0
+   ],
+   "shot_prompt": [
+    "14",
+    4
+   ],
+   "role_map": [
+    "44",
+    2
+   ]
+  },
+  "class_type": "H3ClipShots",
+  "_meta": {
+   "title": "Find this clip's cuts"
+  }
+ },
+ "46": {
+  "inputs": {
+   "prompt": [
+    "45",
+    1
+   ],
+   "max_length": 500,
+   "sampling_mode": "off",
+   "thinking": false,
+   "use_default_template": true,
+   "mtp": "auto",
+   "clip": [
+    "16",
+    0
+   ],
+   "image": [
+    "45",
+    0
+   ]
+  },
+  "class_type": "TextGenerate",
+  "_meta": {
+   "title": "Write this clip's shot list (Qwen3-VL)"
+  }
+ },
+ "47": {
+  "inputs": {
+   "text": "hat",
+   "clip": [
+    "26",
+    1
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "SAM: hats"
+  }
+ },
+ "48": {
+  "inputs": {
+   "detection_threshold": 0.35,
+   "max_objects": 0,
+   "detect_interval": 1,
+   "images": [
+    "37",
+    0
+   ],
+   "model": [
+    "26",
+    0
+   ],
+   "conditioning": [
+    "47",
+    0
+   ]
+  },
+  "class_type": "SAM3_VideoTrack",
+  "_meta": {
+   "title": "SAM 3.1 track hats"
+  }
+ },
+ "49": {
+  "inputs": {
+   "object_indices": "",
+   "track_data": [
+    "48",
+    0
+   ]
+  },
+  "class_type": "SAM3_TrackToMask",
+  "_meta": {
+   "title": "All hats"
+  }
+ },
+ "50": {
+  "inputs": {
+   "source_fps": 24,
+   "crop": "center",
+   "state": [
+    "32",
+    0
+   ],
+   "latent": [
+    "59",
+    1
+   ],
+   "vae": [
+    "23",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ],
+   "source_frames": [
+    "8",
+    0
+   ],
+   "source_audio": [
+    "9",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ContexLoopSourceAVTarget",
+  "_meta": {
+   "title": "Source clip (frames + audio)"
+  }
+ },
+ "51": {
+  "inputs": {
+   "noise_seed": [
+    "32",
+    5
+   ]
+  },
+  "class_type": "RandomNoise",
+  "_meta": {
+   "title": "Clip Seed"
+  }
+ },
+ "52": {
+  "inputs": {
+   "headroom": 0.1,
+   "hold_frames": 2,
+   "subject": 1,
+   "track_data": [
+    "38",
+    0
+   ],
+   "labels": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "H3RoleMask",
+  "_meta": {
+   "title": "Pass 1: labelled people (+ headroom)"
+  }
+ },
+ "53": {
+  "inputs": {
+   "headroom": 0,
+   "hold_frames": 1,
+   "subject": 1,
+   "track_data": [
+    "38",
+    0
+   ],
+   "labels": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "H3RoleMask",
+  "_meta": {
+   "title": "Pass 1: labelled people, no headroom (mannequin)"
+  }
+ },
+ "54": {
+  "inputs": {
+   "expand": 40,
+   "incremental_expandrate": 0,
+   "tapered_corners": true,
+   "flip_input": false,
+   "blur_radius": 0,
+   "lerp_alpha": 1,
+   "decay_factor": 1,
+   "fill_holes": true,
+   "mask": [
+    "58",
+    0
+   ]
+  },
+  "class_type": "GrowMaskWithBlur",
+  "_meta": {
+   "title": "Pass 1: grow mask (~4% of the frame)"
+  }
+ },
+ "55": {
+  "inputs": {
+   "blur": 0.01,
+   "images": [
+    "35",
+    0
+   ],
+   "mask": [
+    "53",
+    0
+   ],
+   "size": [
+    "53",
+    1
+   ]
+  },
+  "class_type": "H3GreyMannequins",
+  "_meta": {
+   "title": "Pass 1: hide them (grey mannequins)"
+  }
+ },
+ "56": {
+  "inputs": {
+   "expand": 60,
+   "incremental_expandrate": 0,
+   "tapered_corners": true,
+   "flip_input": false,
+   "blur_radius": 0,
+   "lerp_alpha": 1,
+   "decay_factor": 1,
+   "fill_holes": true,
+   "mask": [
+    "52",
+    0
+   ]
+  },
+  "class_type": "GrowMaskWithBlur",
+  "_meta": {
+   "title": "Pass 1: hat search area (person + 60 px)"
+  }
+ },
+ "57": {
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "multiply",
+   "destination": [
+    "49",
+    0
+   ],
+   "source": [
+    "56",
+    0
+   ]
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Pass 1: only their hats"
+  }
+ },
+ "58": {
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "add",
+   "destination": [
+    "52",
+    0
+   ],
+   "source": [
+    "57",
+    0
+   ]
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Pass 1: people + hats"
+  }
+ },
+ "59": {
+  "inputs": {
+   "prompt": [
+    "60",
+    0
+   ],
+   "width": [
+    "32",
+    8
+   ],
+   "height": [
+    "32",
+    9
+   ],
+   "length": [
+    "32",
+    6
+   ],
+   "ref_image_size": "match",
+   "clip": [
+    "22",
+    0
+   ],
+   "vae": [
+    "23",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ],
+   "ref_images.ref_image_0": [
+    "2",
+    0
+   ],
+   "ref_videos.ref_video_0": [
+    "55",
+    0
+   ],
+   "ref_video_audios.ref_video_audio_0": [
+    "32",
+    12
+   ]
+  },
+  "class_type": "MiniMaxH3ReferenceToVideo",
+  "_meta": {
+   "title": "Pass 1: reference conditioning"
+  }
+ },
+ "60": {
+  "inputs": {
+   "prompt": [
+    "62",
+    0
+   ],
+   "shots": [
+    "46",
+    0
+   ]
+  },
+  "class_type": "H3FillShots",
+  "_meta": {
+   "title": "Pass 1: insert shot list into prompt"
+  }
+ },
+ "61": {
+  "inputs": {
+   "source": [
+    "60",
+    0
+   ]
+  },
+  "class_type": "PreviewAny",
+  "_meta": {
+   "title": "Pass 1: clip prompt (what H3 gets)"
+  }
+ },
+ "62": {
+  "inputs": {
+   "subject": 1,
+   "subject_prompts": [
+    "14",
+    6
+   ],
+   "clip_index": [
+    "32",
+    1
+   ]
+  },
+  "class_type": "H3SubjectPrompt",
+  "_meta": {
+   "title": "Pass 1: prompt for Subject 1 only"
+  }
+ },
+ "63": {
+  "inputs": {
+   "grow": 0,
+   "keep_audio": true,
+   "megapixels": 0,
+   "vae": [
+    "23",
+    0
+   ],
+   "images": [
+    "50",
+    1
+   ],
+   "mask": [
+    "54",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ],
+   "audio": [
+    "50",
+    2
+   ]
+  },
+  "class_type": "MiniMaxH3FantasticVideoEditLatent",
+  "_meta": {
+   "title": "Pass 1: edit latent (source + mask + audio)"
+  }
+ },
+ "64": {
+  "inputs": {
+   "mask_meaning": "white = generate",
+   "audio_mode": "preserve source audio",
+   "mask_conversion": "H3 exact (causal/token max)",
+   "target_latent": [
+    "63",
+    0
+   ],
+   "mask": [
+    "54",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ContexMaskedTarget",
+  "_meta": {
+   "title": "Pass 1: masked target"
+  }
+ },
+ "65": {
+  "inputs": {
+   "state": [
+    "32",
+    0
+   ],
+   "conditioning": [
+    "59",
+    0
+   ],
+   "vae": [
+    "23",
+    0
+   ],
+   "latent": [
+    "64",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ChainContext",
+  "_meta": {
+   "title": "Pass 1: apply clip context"
+  }
+ },
+ "66": {
+  "inputs": {
+   "model": [
+    "21",
+    0
+   ],
+   "conditioning": [
+    "65",
+    0
+   ]
+  },
+  "class_type": "BasicGuider",
+  "_meta": {
+   "title": "Pass 1: guider"
+  }
+ },
+ "67": {
+  "inputs": {
+   "scheduler": "simple",
+   "steps": [
+    "32",
+    7
+   ],
+   "denoise": 1,
+   "model": [
+    "21",
+    0
+   ]
+  },
+  "class_type": "BasicScheduler",
+  "_meta": {
+   "title": "Pass 1: schedule"
+  }
+ },
+ "68": {
+  "inputs": {
+   "noise": [
+    "51",
+    0
+   ],
+   "guider": [
+    "66",
+    0
+   ],
+   "sampler": [
+    "25",
+    0
+   ],
+   "sigmas": [
+    "67",
+    0
+   ],
+   "latent_image": [
+    "65",
+    3
+   ]
+  },
+  "class_type": "SamplerCustomAdvanced",
+  "_meta": {
+   "title": "Pass 1: sample video + audio"
+  }
+ },
+ "69": {
+  "inputs": {
+   "samples": [
+    "68",
+    0
+   ],
+   "vae": [
+    "23",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "Pass 1: decode video"
+  }
+ },
+ "70": {
+  "inputs": {
+   "upscale_method": "area",
+   "largest_size": 512,
+   "image": [
+    "69",
+    0
+   ]
+  },
+  "class_type": "ImageScaleToMaxDimension",
+  "_meta": {
+   "title": "Pass 2: motion reference from pass 1 (~512 px)"
+  }
+ },
+ "71": {
+  "inputs": {
+   "headroom": 0.1,
+   "hold_frames": 2,
+   "subject": 2,
+   "track_data": [
+    "38",
+    0
+   ],
+   "labels": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "H3RoleMask",
+  "_meta": {
+   "title": "Pass 2: labelled people (+ headroom)"
+  }
+ },
+ "72": {
+  "inputs": {
+   "headroom": 0,
+   "hold_frames": 1,
+   "subject": 2,
+   "track_data": [
+    "38",
+    0
+   ],
+   "labels": [
+    "41",
+    0
+   ]
+  },
+  "class_type": "H3RoleMask",
+  "_meta": {
+   "title": "Pass 2: labelled people, no headroom (mannequin)"
+  }
+ },
+ "73": {
+  "inputs": {
+   "expand": 40,
+   "incremental_expandrate": 0,
+   "tapered_corners": true,
+   "flip_input": false,
+   "blur_radius": 0,
+   "lerp_alpha": 1,
+   "decay_factor": 1,
+   "fill_holes": true,
+   "mask": [
+    "77",
+    0
+   ]
+  },
+  "class_type": "GrowMaskWithBlur",
+  "_meta": {
+   "title": "Pass 2: grow mask (~4% of the frame)"
+  }
+ },
+ "74": {
+  "inputs": {
+   "blur": 0.01,
+   "images": [
+    "70",
+    0
+   ],
+   "mask": [
+    "72",
+    0
+   ],
+   "size": [
+    "72",
+    1
+   ]
+  },
+  "class_type": "H3GreyMannequins",
+  "_meta": {
+   "title": "Pass 2: hide them (grey mannequins)"
+  }
+ },
+ "75": {
+  "inputs": {
+   "expand": 60,
+   "incremental_expandrate": 0,
+   "tapered_corners": true,
+   "flip_input": false,
+   "blur_radius": 0,
+   "lerp_alpha": 1,
+   "decay_factor": 1,
+   "fill_holes": true,
+   "mask": [
+    "71",
+    0
+   ]
+  },
+  "class_type": "GrowMaskWithBlur",
+  "_meta": {
+   "title": "Pass 2: hat search area (person + 60 px)"
+  }
+ },
+ "76": {
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "multiply",
+   "destination": [
+    "49",
+    0
+   ],
+   "source": [
+    "75",
+    0
+   ]
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Pass 2: only their hats"
+  }
+ },
+ "77": {
+  "inputs": {
+   "x": 0,
+   "y": 0,
+   "operation": "add",
+   "destination": [
+    "71",
+    0
+   ],
+   "source": [
+    "76",
+    0
+   ]
+  },
+  "class_type": "MaskComposite",
+  "_meta": {
+   "title": "Pass 2: people + hats"
+  }
+ },
+ "78": {
+  "inputs": {
+   "prompt": [
+    "79",
+    0
+   ],
+   "width": [
+    "32",
+    8
+   ],
+   "height": [
+    "32",
+    9
+   ],
+   "length": [
+    "32",
+    6
+   ],
+   "ref_image_size": "match",
+   "clip": [
+    "22",
+    0
+   ],
+   "vae": [
+    "23",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ],
+   "ref_images.ref_image_0": [
+    "5",
+    0
+   ],
+   "ref_videos.ref_video_0": [
+    "74",
+    0
+   ],
+   "ref_video_audios.ref_video_audio_0": [
+    "32",
+    12
+   ]
+  },
+  "class_type": "MiniMaxH3ReferenceToVideo",
+  "_meta": {
+   "title": "Pass 2: reference conditioning"
+  }
+ },
+ "79": {
+  "inputs": {
+   "prompt": [
+    "81",
+    0
+   ],
+   "shots": [
+    "46",
+    0
+   ]
+  },
+  "class_type": "H3FillShots",
+  "_meta": {
+   "title": "Pass 2: insert shot list into prompt"
+  }
+ },
+ "80": {
+  "inputs": {
+   "source": [
+    "79",
+    0
+   ]
+  },
+  "class_type": "PreviewAny",
+  "_meta": {
+   "title": "Pass 2: clip prompt (what H3 gets)"
+  }
+ },
+ "81": {
+  "inputs": {
+   "subject": 2,
+   "subject_prompts": [
+    "14",
+    6
+   ],
+   "clip_index": [
+    "32",
+    1
+   ]
+  },
+  "class_type": "H3SubjectPrompt",
+  "_meta": {
+   "title": "Pass 2: prompt for Subject 2 only"
+  }
+ },
+ "82": {
+  "inputs": {
+   "grow": 0,
+   "keep_audio": true,
+   "megapixels": 0,
+   "vae": [
+    "23",
+    0
+   ],
+   "images": [
+    "69",
+    0
+   ],
+   "mask": [
+    "73",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ],
+   "audio": [
+    "50",
+    2
+   ]
+  },
+  "class_type": "MiniMaxH3FantasticVideoEditLatent",
+  "_meta": {
+   "title": "Pass 2: edit latent (source + mask + audio)"
+  }
+ },
+ "83": {
+  "inputs": {
+   "mask_meaning": "white = generate",
+   "audio_mode": "preserve source audio",
+   "mask_conversion": "H3 exact (causal/token max)",
+   "target_latent": [
+    "82",
+    0
+   ],
+   "mask": [
+    "73",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ContexMaskedTarget",
+  "_meta": {
+   "title": "Pass 2: masked target"
+  }
+ },
+ "84": {
+  "inputs": {
+   "state": [
+    "32",
+    0
+   ],
+   "conditioning": [
+    "78",
+    0
+   ],
+   "vae": [
+    "23",
+    0
+   ],
+   "latent": [
+    "83",
+    0
+   ],
+   "audio_vae": [
+    "24",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ChainContext",
+  "_meta": {
+   "title": "Pass 2: apply clip context"
+  }
+ },
+ "85": {
+  "inputs": {
+   "model": [
+    "21",
+    0
+   ],
+   "conditioning": [
+    "84",
+    0
+   ]
+  },
+  "class_type": "BasicGuider",
+  "_meta": {
+   "title": "Pass 2: guider"
+  }
+ },
+ "86": {
+  "inputs": {
+   "scheduler": "simple",
+   "steps": [
+    "32",
+    7
+   ],
+   "denoise": 1,
+   "model": [
+    "21",
+    0
+   ]
+  },
+  "class_type": "BasicScheduler",
+  "_meta": {
+   "title": "Pass 2: schedule"
+  }
+ },
+ "87": {
+  "inputs": {
+   "noise": [
+    "51",
+    0
+   ],
+   "guider": [
+    "85",
+    0
+   ],
+   "sampler": [
+    "25",
+    0
+   ],
+   "sigmas": [
+    "86",
+    0
+   ],
+   "latent_image": [
+    "84",
+    3
+   ]
+  },
+  "class_type": "SamplerCustomAdvanced",
+  "_meta": {
+   "title": "Pass 2: sample video + audio"
+  }
+ },
+ "88": {
+  "inputs": {
+   "samples": [
+    "87",
+    0
+   ],
+   "vae": [
+    "23",
+    0
+   ]
+  },
+  "class_type": "VAEDecode",
+  "_meta": {
+   "title": "Pass 2: decode video"
+  }
+ },
+ "89": {
+  "inputs": {
+   "cell_selection": "runtime exact (latent max)",
+   "cell_adjust": 0,
+   "preview_frame": 0,
+   "overlay_opacity": 0.38,
+   "show_grid": true,
+   "show_source_outline": true,
+   "mask_meaning": "white = generate",
+   "image": [
+    "50",
+    1
+   ],
+   "mask": [
+    "54",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ContexMaskGridPreview",
+  "_meta": {
+   "title": "Mask preview"
+  }
+ },
+ "90": {
+  "inputs": {
+   "images": [
+    "89",
+    1
+   ]
+  },
+  "class_type": "PreviewImage",
+  "_meta": {
+   "title": "Mask preview (white = regenerated)"
+  }
+ },
+ "91": {
+  "inputs": {
+   "samples": [
+    "87",
+    0
+   ],
+   "vae": [
+    "24",
+    0
+   ]
+  },
+  "class_type": "VAEDecodeAudio",
+  "_meta": {
+   "title": "Decode Audio"
+  }
+ },
+ "92": {
+  "inputs": {
+   "trim_frames": [
+    "84",
+    1
+   ],
+   "fps": 24,
+   "match_tail": true,
+   "audio_trim_mode": "sync_with_video",
+   "images": [
+    "88",
+    0
+   ],
+   "audio": [
+    "91",
+    0
+   ],
+   "state": [
+    "32",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3LoopTrim",
+  "_meta": {
+   "title": "Trim Overlap"
+  }
+ },
+ "93": {
+  "inputs": {
+   "state": [
+    "32",
+    0
+   ],
+   "images": [
+    "92",
+    0
+   ],
+   "sampled_latent": [
+    "87",
+    0
+   ],
+   "audio": [
+    "92",
+    1
+   ],
+   "images_with_overlap": [
+    "92",
+    2
+   ]
+  },
+  "class_type": "MiniMaxH3ChainSegmentSave",
+  "_meta": {
+   "title": "Save Clip + Checkpoint"
+  }
+ },
+ "94": {
+  "inputs": {
+   "enabled": false,
+   "play_notification_sound": false,
+   "auto_continue_timeout_minutes": 0,
+   "unload_models_while_waiting": false,
+   "assemble_partial_on_stop": true,
+   "partial_audio_source": "checkpointed",
+   "candidate_count": 1,
+   "review_each_candidate": false,
+   "state": [
+    "32",
+    0
+   ],
+   "segment": [
+    "93",
+    0
+   ],
+   "audio": [
+    "92",
+    1
+   ]
+  },
+  "class_type": "MiniMaxH3ChainReview",
+  "_meta": {
+   "title": "Review (off = no pause)"
+  }
+ },
+ "95": {
+  "inputs": {
+   "between_scene_cleanup": "off",
+   "execution_mode": "recursive",
+   "flow": [
+    "31",
+    0
+   ],
+   "state": [
+    "32",
+    0
+   ],
+   "images": [
+    "92",
+    0
+   ],
+   "sampled_latent": [
+    "87",
+    0
+   ],
+   "segment": [
+    "94",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ChainLoopEnd",
+  "_meta": {
+   "title": "Loop End"
+  }
+ },
+ "96": {
+  "inputs": {
+   "audio_source": "source",
+   "filename": "advanced_swap_%date:yyyy-MM-dd%",
+   "audio_bitrate": 256,
+   "copy_to_output": true,
+   "output_subfolder": "h3_oneclick_swap",
+   "blend_schedule": "plan",
+   "boundary_tone_match": "off",
+   "color_stabilization": "off",
+   "delete_checkpoints_after_assembly": false,
+   "generated_audio_join": "av_overlap",
+   "manifest": [
+    "95",
+    0
+   ]
+  },
+  "class_type": "MiniMaxH3ChainAssemble",
+  "_meta": {
+   "title": "Final Video"
+  }
+ }
+}

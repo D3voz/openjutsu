@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { submitAdvanced, submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
@@ -17,11 +18,13 @@ function parseMask(form: FormData) {
   return { hatFix: form.get("hat_fix") === "true", margin: margin as Margin };
 }
 
-function parseSimple(form: FormData) {
-  const picture = form.get("picture");
+function parsePicture(picture: FormDataEntryValue | null) {
   if (!(picture instanceof File) || picture.size === 0) throw new Error("Add a character photo.");
   if (!picture.type.startsWith("image/")) throw new Error("The character photo must be an image.");
+  return picture;
+}
 
+function parseRun(form: FormData) {
   const resolution = String(form.get("resolution"));
   if (!RESOLUTIONS.includes(resolution as Resolution)) throw new Error("Choose a supported resolution.");
   const seed = Number(form.get("seed"));
@@ -31,8 +34,22 @@ function parseSimple(form: FormData) {
     throw new Error(`Clip length must be ${CLIP_SECONDS.min}-${CLIP_SECONDS.max} s.`);
   }
 
-  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), resolution: resolution as Resolution, ...parseMask(form), seed, clipSeconds };
+  return { resolution: resolution as Resolution, ...parseMask(form), seed, clipSeconds };
+}
+
+function parseSimple(form: FormData) {
+  const picture = parsePicture(form.get("picture"));
+  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), ...parseRun(form) };
   return { picture, settings };
+}
+
+function parseAdvanced(form: FormData) {
+  const pictures = form.getAll("picture").map(parsePicture);
+  if (pictures.length < 1 || pictures.length > MAX_CHARACTERS) throw new Error(`Add 1-${MAX_CHARACTERS} character photos.`);
+  const maxQuality = form.get("max_quality") === "true";
+  if (maxQuality && pictures.length !== 2) throw new Error("One pass per person needs exactly two characters.");
+  const roles = form.getAll("role").map((role) => String(role).slice(0, 200));
+  return { pictures, maxQuality, settings: { roles, ...parseRun(form) } };
 }
 
 export async function POST(request: Request) {
@@ -47,8 +64,11 @@ export async function POST(request: Request) {
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
       submit = () => submitSimple(video, picture, settings);
+    } else if (mode === "advanced") {
+      const { pictures, maxQuality, settings } = parseAdvanced(form);
+      submit = () => submitAdvanced(video, pictures, settings, maxQuality);
     } else {
-      throw new Error("Only Simple motion transfer is available so far.");
+      throw new Error("Unknown mode.");
     }
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });

@@ -7,7 +7,8 @@ The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyor
 ## Modes
 
 - **Simple motion transfer**: available. One character replaces the main person (the one who fills the most of the frame). Runs `workflows/simple.api.json`, exported from `H3 One-Click Single Swap (DMAD 6 step).json`.
-- **Advanced motion transfer** (several people, pick who becomes who) and **Object swap**: coming soon, as separate workflow files.
+- **Advanced motion transfer**: available. 1–4 characters, each with an optional role; every tracked person is matched to a role per shot, and people without a character stay untouched. Runs `workflows/advanced.api.json`, exported from `H3 One-Click Advanced Swap (DMAD 6 step).json`; **One pass per person** (two characters) runs `workflows/advanced_maxq.api.json`.
+- **Object swap**: coming soon.
 
 ## Requirements
 
@@ -25,7 +26,7 @@ Install these into `ComfyUI/custom_nodes` (ComfyUI Manager finds the first three
 | [ComfyUI-Fantastic-MiniMaxH3-PromptBuilder](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder) | masked video-edit latent |
 | [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Grow Mask With Blur |
 | [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | video loading |
-| `comfyui-h3-oneclick-swap` | swap plan, people mask, grey mannequins, cut finder, shot list (TODO: link the published pack) |
+| `comfyui-h3-oneclick-swap` | swap plan, people and role masks, grey mannequins, track labelling, cut finder, shot list (TODO: link the published pack) |
 
 Restart ComfyUI after installing them.
 
@@ -75,6 +76,7 @@ A 6 s clip at 480p takes about 6–13 minutes on a 4060 Ti, most of it in H3 sam
 - **Hat fix** also masks the hat, so it is replaced too (about 45 s more per clip).
 - **Check mask** runs only SAM and the mask (about a minute per 3 s of video) and shows a preview you can scrub frame by frame: cyan is the area H3 regenerates, orange the tracked person, and on the right the grey mannequin H3 copies the motion from. Anything outside the cyan area stays as it is. If the character is cut off or too much background changes, set **Mask margin** (Tight, Normal, Loose) and check again; a re-check takes seconds.
 - Change the **seed** (under Advanced) for a new take. Running the same inputs again resumes from the last finished clip.
+- **Advanced mode:** give roles as `the drummer`, optionally with how they look after ` - ` (`the drummer - man in a cap`); the look only helps match people and never reaches H3. **One pass per person** gives each of two characters their own H3 pass with only their photo (about twice the time). Check mask is Simple-only for now.
 
 ## How it works
 
@@ -88,6 +90,8 @@ Each clip, SAM 3.1 tracks everyone at 1008 px (its own working size), and H3 Peo
 `lib/comfy.ts` binds the uploaded video to `VHS_LoadVideo` and the photo to the `LoadImage` node, then submits with the SDK. `/api/jobs/[id]/events` streams `job.events()` to the page as server-sent events. Node ids are turned into node titles and clip numbers there: each clip after the first is a graph expansion whose node ids carry a prefix per clip (`58`, `64.0.0.58`, `64.0.0.Recurse.0.0.58`). The final MP4 is the output of the Final Video node (`MiniMaxH3ChainAssemble`, node `65`).
 
 `workflows/mask.api.json` is the mask check: the same SAM, People Mask and grow settings over the whole video, with the mask tinted over the frames next to the mannequin, saved as an MP4.
+
+Advanced mode labels the people before it masks them. Per clip, H3 Track Crops shows each SAM track once per shot (the person alone, and the frame with them boxed) to Qwen3-VL 8B, which names the subject or "other"; H3 Track Roles reads that answer and settles a subject named twice in one shot by colour. H3 Role Mask builds the edit mask from the labelled tracks only, and the shot-list describer sees each labelled person outlined in their subject's colour, so the prompt names the same people the masks do. `lib/advanced.ts` finds nodes by title, drops unused picture branches and, without the hat fix, the hat nodes; the exports are made from `user/default/oneclick_advanced_build.js` with every optional group on.
 
 To change the workflow, edit `user/default/oneclick_single_build.js` in ComfyUI (or the workflow itself), enable the hat-fix group, export **Workflow (API)**, and replace `workflows/simple.api.json`. If node ids change, update `NODES` in `lib/simple.ts`. `npm test` checks the pruning against the export.
 

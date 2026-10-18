@@ -1,4 +1,4 @@
-import { getJob, loadGraph, publicJob, rawJobEvents, TERMINAL } from "../../../../../lib/comfy.ts";
+import { getJob, JOB_KINDS, loadGraph, publicJob, rawJobEvents, TERMINAL, type JobKind } from "../../../../../lib/comfy.ts";
 import { nodeDescriber } from "../../../../../lib/progress.ts";
 
 export const runtime = "nodejs";
@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 // numbers. One upstream connection per request; the page's EventSource reconnects.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const describe = nodeDescriber(await loadGraph(new URL(request.url).searchParams.get("kind") === "mask" ? "mask" : "simple"));
+  const kind = new URL(request.url).searchParams.get("kind") ?? "simple";
+  const describe = nodeDescriber(await loadGraph(JOB_KINDS.includes(kind as JobKind) ? (kind as JobKind) : "simple"));
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
