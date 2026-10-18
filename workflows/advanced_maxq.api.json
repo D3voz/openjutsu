@@ -754,10 +754,6 @@
     "59",
     1
    ],
-   "vae": [
-    "23",
-    0
-   ],
    "audio_vae": [
     "24",
     0
@@ -771,7 +767,7 @@
     0
    ]
   },
-  "class_type": "MiniMaxH3ContexLoopSourceAVTarget",
+  "class_type": "MiniMaxH3ContexLoopSourceSlice",
   "_meta": {
    "title": "Source clip (frames + audio)"
   }
@@ -1030,7 +1026,7 @@
    ],
    "images": [
     "50",
-    1
+    0
    ],
    "mask": [
     "54",
@@ -1042,7 +1038,7 @@
    ],
    "audio": [
     "50",
-    2
+    1
    ]
   },
   "class_type": "MiniMaxH3FantasticVideoEditLatent",
@@ -1443,7 +1439,7 @@
    ],
    "audio": [
     "50",
-    2
+    1
    ]
   },
   "class_type": "MiniMaxH3FantasticVideoEditLatent",
@@ -1587,7 +1583,7 @@
    "mask_meaning": "white = generate",
    "image": [
     "50",
-    1
+    0
    ],
    "mask": [
     "54",
