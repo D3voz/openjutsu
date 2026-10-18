@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
-import { submitAdvanced, submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { listModels, submitAdvanced, submitMask, submitSimple } from "../../../lib/comfy.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
+import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
 import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
@@ -37,6 +38,22 @@ function parseRun(form: FormData) {
   return { resolution: resolution as Resolution, ...parseMask(form), seed, clipSeconds };
 }
 
+function parseModel(form: FormData, available: { models: string[]; loras: string[] } | null): ModelSettings {
+  const steps = Number(form.get("steps"));
+  if (!Number.isInteger(steps) || steps < STEPS.min || steps > STEPS.max) throw new Error(`Steps must be a whole number from ${STEPS.min} to ${STEPS.max}.`);
+  const model = String(form.get("model") ?? "").trim();
+  if (!model || (available && !available.models.includes(model))) throw new Error("Choose a base model ComfyUI has.");
+  const names = form.getAll("lora").map((name) => String(name).trim());
+  const strengths = form.getAll("lora_strength").map(Number);
+  if (names.length > MAX_LORAS || strengths.length !== names.length) throw new Error(`Use at most ${MAX_LORAS} LoRAs, each with a strength.`);
+  const loras = names.map((name, i) => {
+    if (!name || (available && !available.loras.includes(name))) throw new Error("Choose LoRAs ComfyUI has.");
+    if (!(strengths[i] >= STRENGTH.min && strengths[i] <= STRENGTH.max)) throw new Error(`LoRA strength must be ${STRENGTH.min} to ${STRENGTH.max}.`);
+    return { name, strength: strengths[i] };
+  });
+  return { steps, model, loras };
+}
+
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
   const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), ...parseRun(form) };
@@ -63,10 +80,12 @@ export async function POST(request: Request) {
       submit = () => submitMask(video, hatFix, margin);
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
-      submit = () => submitSimple(video, picture, settings);
+      const model = parseModel(form, await listModels());
+      submit = () => submitSimple(video, picture, settings, model);
     } else if (mode === "advanced") {
       const { pictures, maxQuality, settings } = parseAdvanced(form);
-      submit = () => submitAdvanced(video, pictures, settings, maxQuality);
+      const model = parseModel(form, await listModels());
+      submit = () => submitAdvanced(video, pictures, settings, maxQuality, model);
     } else {
       throw new Error("Unknown mode.");
     }

@@ -4,6 +4,7 @@ import { Comfy, resolveBaseUrl, resolveCredentials, type Job } from "@comfyorg/s
 import { ComfyLow } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type Margin, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
+import { applyModel, type ModelSettings } from "./model.ts";
 
 export type PublicJob = {
   id: string;
@@ -63,17 +64,20 @@ function upload(comfy: Comfy, file: File) {
   );
 }
 
-export async function submitSimple(video: File, picture: File, settings: SimpleSettings) {
+export async function submitSimple(video: File, picture: File, settings: SimpleSettings, model: ModelSettings) {
   const comfy = client();
-  const workflow = comfy.workflows.fromJson(pruneSimple(await loadGraph("simple"), settings));
+  const graph = pruneSimple(await loadGraph("simple"), settings);
+  applyModel(graph, model);
+  const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(NODES.video, "video", await upload(comfy, video));
   workflow.setInput(NODES.picture, "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitAdvanced(video: File, pictures: File[], settings: AdvancedSettings, maxQuality: boolean) {
+export async function submitAdvanced(video: File, pictures: File[], settings: AdvancedSettings, maxQuality: boolean, model: ModelSettings) {
   const comfy = client();
   const graph = pruneAdvanced(await loadGraph(maxQuality ? "advanced_maxq" : "advanced"), pictures.length, settings);
+  applyModel(graph, model);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, VIDEO), "video", await upload(comfy, video));
   for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", await upload(comfy, picture));
@@ -85,6 +89,22 @@ export async function submitMask(video: File, hatFix: boolean, margin: Margin) {
   const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix, margin));
   workflow.setInput(MASK_NODES.video, "video", await upload(comfy, video));
   return publicJob(await comfy.submit(workflow));
+}
+
+// The proxy has no model listing, so the pickers read ComfyUI's own node info. COMFYUI_URL points at ComfyUI itself
+// (not the proxy); without it, or when it does not answer, the page falls back to typed file names.
+export async function listModels(): Promise<{ models: string[]; loras: string[] } | null> {
+  const base = process.env.COMFYUI_URL || "http://127.0.0.1:8188";
+  const options = async (node: string, input: string) => {
+    const info = await (await fetch(`${base}/object_info/${node}`, { signal: AbortSignal.timeout(5000) })).json();
+    return info[node].input.required[input][0] as string[];
+  };
+  try {
+    const [models, loras] = await Promise.all([options("UNETLoader", "unet_name"), options("LoraLoaderModelOnly", "lora_name")]);
+    return { models, loras };
+  } catch {
+    return null;
+  }
 }
 
 export function getJob(id: string) {

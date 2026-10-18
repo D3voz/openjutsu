@@ -21,7 +21,7 @@ export const VIDEO = "Source video (people get replaced)";
 
 export function nodeByTitle(graph: ApiGraph, title: string) {
   const ids = Object.keys(graph).filter((id) => graph[id]._meta?.title === title);
-  if (ids.length !== 1) throw new Error(`Expected one "${title}" node in the advanced workflow, found ${ids.length}.`);
+  if (ids.length !== 1) throw new Error(`Expected one "${title}" node in the workflow, found ${ids.length}.`);
   return ids[0];
 }
 

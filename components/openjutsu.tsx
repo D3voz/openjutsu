@@ -6,6 +6,7 @@ import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
+import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 
 type Character = { file: File; url: string; role: string };
 type Mode = "simple" | "advanced";
@@ -58,6 +59,16 @@ function clipShare(progress: Progress) {
   return 0.05;
 }
 
+// A picker over ComfyUI's files, or a text field when the list could not be read.
+function FilePicker({ value, options, onChange, label }: { value: string; options: string[]; onChange: (value: string) => void; label: string }) {
+  if (!options.length) return <input className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />;
+  return (
+    <select className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+      {(options.includes(value) ? options : [value, ...options]).map((name) => <option key={name} value={name}>{name}</option>)}
+    </select>
+  );
+}
+
 function MarginPicker({ value, onChange }: { value: Margin; onChange: (margin: Margin) => void }) {
   return (
     <div className="segmented">
@@ -96,6 +107,10 @@ export function Openjutsu() {
   const [margin, setMargin] = useState<Margin>("normal");
   const [seed, setSeed] = useState(0);
   const [clipSeconds, setClipSeconds] = useState(CLIP_SECONDS.default);
+  const [steps, setSteps] = useState(DEFAULT_MODEL.steps);
+  const [model, setModel] = useState(DEFAULT_MODEL.model);
+  const [loras, setLoras] = useState<Lora[]>(DEFAULT_MODEL.loras);
+  const [files, setFiles] = useState<{ models: string[]; loras: string[] }>({ models: [], loras: [] });
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -107,6 +122,10 @@ export function Openjutsu() {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => setRun(readRun()), []);
+
+  useEffect(() => {
+    fetch("/api/models").then((response) => response.json()).then(setFiles, () => {});
+  }, []);
 
   useEffect(() => {
     if (!run) return;
@@ -203,6 +222,14 @@ export function Openjutsu() {
       form.set("resolution", resolution);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
+    }
+    if (kind !== "mask") {
+      form.set("steps", String(steps));
+      form.set("model", model);
+      for (const l of loras) {
+        form.append("lora", l.name);
+        form.append("lora_strength", String(l.strength));
+      }
     }
     try {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
@@ -368,6 +395,35 @@ export function Openjutsu() {
               <div className="setting">
                 <span>Clip length <small>{clipSeconds.toFixed(1)} s per H3 generation</small></span>
                 <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
+              </div>
+              <div className="setting">
+                <span>Steps <small>6 with the DMAD speed LoRA; without a speed LoRA, 20 or more.</small></span>
+                <input
+                  className="steps-input" type="number" min={STEPS.min} max={STEPS.max} value={steps}
+                  onChange={(event) => setSteps(Math.min(STEPS.max, Math.max(STEPS.min, Math.floor(Number(event.target.value) || STEPS.min))))}
+                />
+              </div>
+              <div className="setting">
+                <span>Base model <small>The H3 diffusion model in ComfyUI&apos;s models/diffusion_models.</small></span>
+                <FilePicker label="Base model" value={model} options={files.models} onChange={setModel} />
+              </div>
+              <div className="setting loras">
+                <span>LoRAs <small>Applied in order to the base model. Remove the DMAD LoRA only together with more steps.</small></span>
+                <div className="lora-list">
+                  {loras.map((l, i) => (
+                    <div className="lora" key={i}>
+                      <FilePicker label={`LoRA ${i + 1}`} value={l.name} options={files.loras} onChange={(name) => setLoras(loras.map((x, j) => (j === i ? { ...x, name } : x)))} />
+                      <input
+                        type="number" aria-label={`LoRA ${i + 1} strength`} min={STRENGTH.min} max={STRENGTH.max} step={0.05} value={l.strength}
+                        onChange={(event) => setLoras(loras.map((x, j) => (j === i ? { ...x, strength: Math.min(STRENGTH.max, Math.max(STRENGTH.min, Number(event.target.value) || 0)) } : x)))}
+                      />
+                      <button className="secondary" onClick={() => setLoras(loras.filter((_, j) => j !== i))} aria-label={`Remove LoRA ${i + 1}`}>×</button>
+                    </div>
+                  ))}
+                  {loras.length < MAX_LORAS && (
+                    <button className="secondary" onClick={() => setLoras([...loras, { name: files.loras[0] ?? "", strength: 1 }])}>Add LoRA</button>
+                  )}
+                </div>
               </div>
             </details>
           </section>
