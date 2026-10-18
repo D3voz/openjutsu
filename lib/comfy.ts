@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Comfy, resolveBaseUrl, resolveCredentials, type Job } from "@comfyorg/sdk";
+import { Comfy, COMFY_CLOUD_BASE_URL, resolveCredentials, type Job } from "@comfyorg/sdk";
 import { ComfyLow } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type Margin, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
@@ -21,11 +21,16 @@ export function client() {
   return new Comfy({ clientInfo: "openjutsu" });
 }
 
+// The same deployment as client(); the SDK's resolveBaseUrl() is the Comfy Router's, not COMFY_BASE_URL.
+function low() {
+  return new ComfyLow(process.env.COMFY_BASE_URL?.trim().replace(/\/+$/, "") || COMFY_CLOUD_BASE_URL, resolveCredentials(), { clientInfo: "openjutsu" });
+}
+
 // job.events() drops progress frames whose value is lower than the last one, but the proxy
 // reports each node's own step fraction, so the next node's progress would be hidden. The raw
 // stream has every frame; the browser's EventSource reconnects when it ends.
 export function rawJobEvents(job: Job, signal: AbortSignal) {
-  return new ComfyLow(resolveBaseUrl(), resolveCredentials(), { clientInfo: "openjutsu" }).getJobEvents(job.urls.events || job.id, { signal });
+  return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
 export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq"] as const;
@@ -114,7 +119,7 @@ export function getJob(id: string) {
 export async function getOutput(jobId: string, outputId: string, range: string | null) {
   const job = await getJob(jobId);
   const output = job.outputs.find((candidate) => candidate.id === outputId);
-  if (!output) throw new Error("Output not found on this job.");
-  const { url } = await output.getDownloadUrl();
-  return { name: output.name, response: await fetch(url, { headers: range ? { Range: range } : {} }) };
+  // A running job lists no outputs yet; its mask previews arrive as live output events, fetched by asset id.
+  const { url } = output ? await output.getDownloadUrl() : await low().getAssetContentUrl(outputId);
+  return { name: output?.name ?? outputId, response: await fetch(url, { headers: range ? { Range: range } : {} }) };
 }
