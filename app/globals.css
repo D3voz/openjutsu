@@ -78,10 +78,10 @@ video { width: 100%; border-radius: 12px; background: #000; max-height: 420px; }
 .character { position: relative; background: var(--panel-2); border-radius: 14px; overflow: hidden; display: grid; }
 .character img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; }
 .character label { display: grid; gap: 4px; padding: 10px; font-size: 0.82em; color: var(--muted); }
-.character input, .seed input, .file-name, .steps-input, .lora input {
+.character input, .seed input, .file-name, .steps-input, .target-input, .lora input {
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%;
 }
-.character input:focus, .seed input:focus, .file-name:focus, .steps-input:focus, .lora input:focus { outline: none; border-color: var(--accent); }
+.character input:focus, .seed input:focus, .file-name:focus, .steps-input:focus, .target-input:focus, .lora input:focus { outline: none; border-color: var(--accent); }
 .remove {
   position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; border: 0;
   background: #000a; font-size: 18px; line-height: 1;
@@ -145,6 +145,7 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 
 .file-name { min-width: 0; width: min(100%, 420px); }
 .steps-input { width: 6rem; }
+.target-input { width: 12rem; }
 .setting.loras { align-items: flex-start; }
 .lora-list { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 1 1 100%; }
 .lora { display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem auto; gap: 8px; width: 100%; }

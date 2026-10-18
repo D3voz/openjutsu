@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { listModels, submitAdvanced, submitMask, submitSimple } from "../../../lib/comfy.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
-import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,8 @@ function parseVideo(form: FormData) {
 function parseMask(form: FormData) {
   const margin = String(form.get("margin") ?? "normal");
   if (!Object.hasOwn(MARGINS, margin)) throw new Error("Choose a supported mask margin.");
-  return { hatFix: form.get("hat_fix") === "true", margin: margin as Margin };
+  const target = String(form.get("target") ?? "").replace(/\s+/g, " ").trim().slice(0, 100) || DEFAULT_TARGET;
+  return { hatFix: form.get("hat_fix") === "true", margin: margin as Margin, target };
 }
 
 function parsePicture(picture: FormDataEntryValue | null) {
@@ -76,8 +77,8 @@ export async function POST(request: Request) {
     const mode = form.get("mode");
     const video = parseVideo(form);
     if (mode === "mask") {
-      const { hatFix, margin } = parseMask(form);
-      submit = () => submitMask(video, hatFix, margin);
+      const { hatFix, margin, target } = parseMask(form);
+      submit = () => submitMask(video, hatFix, margin, target);
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
       const model = parseModel(form, await listModels());

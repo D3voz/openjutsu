@@ -89,9 +89,9 @@ export async function submitAdvanced(video: File, pictures: File[], settings: Ad
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitMask(video: File, hatFix: boolean, margin: Margin) {
+export async function submitMask(video: File, hatFix: boolean, margin: Margin, target: string) {
   const comfy = client();
-  const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix, margin));
+  const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix, margin, target));
   workflow.setInput(MASK_NODES.video, "video", await upload(comfy, video));
   return publicJob(await comfy.submit(workflow));
 }

@@ -73,6 +73,7 @@ A 6 s clip at 480p takes about 6–13 minutes on a 4060 Ti, most of it in H3 sam
 
 - Only the main person is regenerated; anyone else in the video stays as they are.
 - **Who do they replace?** names the person for the prompt by role (`the singer`), never by clothes: clothing words leak into the result. Leave it blank and the describer names them.
+- **What to replace** (Simple mode and Check mask) is the text SAM tracks: `person` by default, an animal such as `cat`, or a short description (`black and white cat`) when the biggest match is the wrong one. The biggest match in the frame is replaced.
 - **Hat fix** also masks the hat, so it is replaced too (about 45 s more per clip).
 - **Check mask** runs only SAM and the mask (about a minute per 3 s of video) and shows a preview you can scrub frame by frame: cyan is the area H3 regenerates, orange the tracked person, and on the right the grey mannequin H3 copies the motion from. Anything outside the cyan area stays as it is. If the character is cut off or too much background changes, set **Mask margin** (Tight, Normal, Loose) and check again; a re-check takes seconds.
 - Change the **seed** (under Advanced) for a new take. Running the same inputs again resumes from the last finished clip.

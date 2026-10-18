@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "rea
 import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
-import { CLIP_SECONDS, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 
@@ -105,6 +105,7 @@ export function Openjutsu() {
   const [resolution, setResolution] = useState<Resolution>("736p");
   const [hatFix, setHatFix] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
+  const [target, setTarget] = useState(DEFAULT_TARGET);
   const [seed, setSeed] = useState(0);
   const [clipSeconds, setClipSeconds] = useState(CLIP_SECONDS.default);
   const [steps, setSteps] = useState(DEFAULT_MODEL.steps);
@@ -205,6 +206,7 @@ export function Openjutsu() {
     form.set("video", video.file);
     form.set("hat_fix", String(hatFix));
     form.set("margin", margin);
+    form.set("target", target);
     if (kind === "simple" && character) {
       form.set("picture", character.file);
       form.set("role", character.role);
@@ -367,6 +369,12 @@ export function Openjutsu() {
                 ))}
               </div>
             </div>
+            {mode === "simple" && (
+              <div className="setting">
+                <span>What to replace <small>What SAM tracks, in English: person, cat, dog, or a short description such as “black and white cat”. The biggest match is replaced.</small></span>
+                <input className="target-input" aria-label="What to replace" placeholder={DEFAULT_TARGET} value={target} onChange={(event) => setTarget(event.target.value)} />
+              </div>
+            )}
             <label className="setting toggle">
               <span>Hat fix <small>Also replaces hats{mode === "advanced" ? " worn by the people being replaced" : ""} (about 45 s more per clip).</small></span>
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
