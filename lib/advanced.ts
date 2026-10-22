@@ -1,15 +1,17 @@
 // Advanced motion transfer: 1-4 characters, SAM tracks labelled by role, only the labelled people regenerated.
 // workflows/advanced.api.json (one pass) and advanced_maxq.api.json (one pass per person, 2 characters) are exported
-// with every picture and the hat fix enabled; each request prunes what it does not use. Nodes are found by title, as
+// with every picture, the hat fix and No lip-sync enabled; each request prunes what it does not use. Nodes are found by title, as
 // the builder (ComfyUI user/default/oneclick_advanced_build.js) names them.
-import { MARGINS, isLink, type ApiGraph, type Margin, type Resolution } from "./simple.ts";
+import { MARGINS, dropNoLipSync, isLink, setMotionSize, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
 
 export const MAX_CHARACTERS = 4;
 
 export type AdvancedSettings = {
   roles: string[]; // one per picture, "" to let the describer name them
   resolution: Resolution;
+  motion: MotionSize;
   hatFix: boolean;
+  noLipSync: boolean;
   margin: Margin;
   seed: number;
   clipSeconds: number;
@@ -65,6 +67,8 @@ export function pruneAdvanced(source: ApiGraph, pictures: number, settings: Adva
       else throw new Error(`Node ${id}.${name} still links to removed node ${value[0]}.`);
     }
   }
+  if (!settings.noLipSync) dropNoLipSync(graph);
+  setMotionSize(graph, settings.motion);
 
   for (const node of Object.values(graph)) {
     if (node.class_type === "GrowMaskWithBlur" && / grow mask /.test(node._meta?.title ?? "")) node.inputs.expand = MARGINS[settings.margin];

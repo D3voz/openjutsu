@@ -8,7 +8,7 @@ import { isLink, type ApiGraph } from "../lib/simple.ts";
 const load = (name: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/${name}.api.json`, import.meta.url), "utf8"));
 const graph = load("advanced");
 const maxq = load("advanced_maxq");
-const settings = (hatFix: boolean, roles: string[] = []): AdvancedSettings => ({ roles, resolution: "480p", hatFix, margin: "tight", seed: 3, clipSeconds: 6 });
+const settings = (hatFix: boolean, roles: string[] = [], noLipSync = true): AdvancedSettings => ({ roles, resolution: "480p", motion: 512, hatFix, noLipSync, margin: "tight", seed: 3, clipSeconds: 6 });
 const titles = (g: ApiGraph) => Object.values(g).map((node) => node._meta?.title ?? "");
 const dangling = (g: ApiGraph) => Object.entries(g).flatMap(([id, node]) =>
   Object.entries(node.inputs).filter(([, v]) => isLink(v) && !g[v[0]]).map(([name]) => `${id}.${name}`));
@@ -49,6 +49,31 @@ test("without hat fix the grow masks read the role masks", () => {
   }
 });
 
+test("without No lip-sync every pass hears the soundtrack and sees no faces", () => {
+  for (const [g, n] of [[graph, 4], [maxq, 2]] as const) {
+    const pruned = pruneAdvanced(g, n, settings(true, [], false));
+    assert.deepEqual(dangling(pruned), []);
+    assert.equal(Object.keys(pruned).length, Object.keys(g).length - 6);
+    for (const node of Object.values(pruned)) {
+      if (node.class_type === "MiniMaxH3ReferenceToVideo") assert.equal(pruned[(node.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].class_type, "MiniMaxH3ChainCurrent");
+      if (node.class_type === "MiniMaxH3ContexLoopSourceSlice") assert.equal(pruned[(node.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");
+      if (node.class_type === "H3GreyMannequins") assert.ok(!("faces" in node.inputs));
+    }
+    assert.ok(!("no_lip_sync" in pruned[nodeByTitle(pruned, "Swap Plan (roles, seed, size)")].inputs));
+  }
+});
+
+test("with No lip-sync every pass sees the faces and hears silence", () => {
+  const pruned = pruneAdvanced(maxq, 2, settings(false, [], true));
+  assert.deepEqual(dangling(pruned), []);
+  const mannequins = Object.values(pruned).filter((node) => node.class_type === "H3GreyMannequins");
+  assert.equal(mannequins.length, 2);
+  for (const m of mannequins) assert.ok(isLink(m.inputs.faces));
+  for (const node of Object.values(pruned)) {
+    if (node.class_type === "MiniMaxH3ReferenceToVideo") assert.equal(pruned[(node.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].inputs.volume, -100);
+  }
+});
+
 test("roles fill in for blank ones only when some are given", () => {
   const plan = (roles: string[]) => {
     const pruned = pruneAdvanced(graph, 3, settings(false, roles));
@@ -59,6 +84,14 @@ test("roles fill in for blank ones only when some are given", () => {
     "the singer\nthe person with the second most screen time\nthe drummer - man in a cap");
   const inputs = plan([]);
   assert.deepEqual([inputs.resolution, inputs.seed, inputs.clip_seconds], ["480p", 3, 6]);
+});
+
+test("the motion reference size reaches both passes", () => {
+  const sizes = (g: typeof graph) => Object.values(g)
+    .filter((node) => node.class_type === "ImageScaleToMaxDimension" && /motion reference/i.test(node._meta?.title ?? ""))
+    .map((node) => node.inputs.largest_size);
+  assert.deepEqual(sizes(pruneAdvanced(graph, 2, { ...settings(false), motion: 1376 })), [1376]);
+  assert.deepEqual(sizes(pruneAdvanced(maxq, 2, { ...settings(false), motion: 1376 })), [1376, 1376]);
 });
 
 test("picture counts outside the export are refused", () => {

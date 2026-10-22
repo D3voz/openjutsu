@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "rea
 import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
-import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, type Margin, type MotionSize, type Resolution, type Section } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
@@ -49,6 +49,17 @@ function writeRun(run: Run | null) {
 function droppedFiles(event: DragEvent, kind: "video" | "image") {
   event.preventDefault();
   return [...event.dataTransfer.files].filter((file) => file.type.startsWith(`${kind}/`) || (kind === "video" && /\.(mkv|mov|avi)$/i.test(file.name)));
+}
+
+const PLACES = ["Whole", "Start", "Middle", "End"] as const;
+
+// Where a part of the given length sits for each place button.
+function placeStart(place: (typeof PLACES)[number], duration: number, length: number) {
+  return place === "Middle" ? (duration - length) / 2 : place === "End" ? duration - length : 0;
+}
+
+function timecode(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 }
 
 function elapsed(ms: number) {
@@ -108,16 +119,20 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 export function Openjutsu() {
   const [mode, setMode] = useState<Mode>("simple");
   const [video, setVideo] = useState<{ file: File; url: string; duration: number } | null>(null);
+  const [part, setPart] = useState<Section>({ start: 0, length: 0 });
+  const player = useRef<HTMLVideoElement>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [maxQuality, setMaxQuality] = useState(false);
   const [resolution, setResolution] = useState<Resolution>("736p");
   const [hatFix, setHatFix] = useState(false);
+  const [noLipSync, setNoLipSync] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
   const [target, setTarget] = useState(DEFAULT_TARGET);
   const [faceStyle, setFaceStyle] = useState<FaceStyle>("photo");
   const [chunkSeconds, setChunkSeconds] = useState(CHUNK_SECONDS.default);
   const [seed, setSeed] = useState(0);
   const [clipSeconds, setClipSeconds] = useState(CLIP_SECONDS.default);
+  const [motion, setMotion] = useState<MotionSize>(MOTION_SIZES[0]);
   const [steps, setSteps] = useState(DEFAULT_MODEL.steps);
   const [model, setModel] = useState(DEFAULT_MODEL.model);
   const [loras, setLoras] = useState<Lora[]>(DEFAULT_MODEL.loras);
@@ -176,11 +191,25 @@ export function Openjutsu() {
     if (video) URL.revokeObjectURL(video.url);
     const url = URL.createObjectURL(file);
     setVideo({ file, url, duration: 0 });
+    setPart({ start: 0, length: 0 });
     const probe = document.createElement("video");
     probe.preload = "metadata";
-    probe.onloadedmetadata = () => setVideo((current) => (current?.url === url ? { ...current, duration: probe.duration } : current));
+    probe.onloadedmetadata = () => {
+      setVideo((current) => (current?.url === url ? { ...current, duration: probe.duration } : current));
+      setPart({ start: 0, length: probe.duration });
+    };
     probe.src = url;
   }
+
+  function choosePart(start: number, length: number) {
+    const duration = video?.duration ?? 0;
+    const next = { start: Math.min(Math.max(0, start), duration - length), length };
+    setPart(next);
+    if (player.current) player.current.currentTime = next.start;
+  }
+
+  const whole = !video?.duration || (part.start === 0 && part.length >= video.duration);
+  const place = whole ? "Whole" : PLACES.slice(1).find((p) => Math.abs(placeStart(p, video!.duration, part.length) - part.start) < 0.05);
 
   // Simple mode and Fix faces use only the first character; the others are kept for switching back.
   const single = mode === "simple" || mode === "face";
@@ -209,7 +238,7 @@ export function Openjutsu() {
     setCharacters(characters.map((c, i) => (i === index ? { ...c, role } : c)));
   }
 
-  const clips = !video?.duration ? 0 : mode === "face" ? faceChunkCount(video.duration, chunkSeconds) : clipCount(video.duration, clipSeconds);
+  const clips = !video?.duration ? 0 : mode === "face" ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
 
   async function submit(kind: Kind) {
     if (!video || (kind !== "mask" && !character)) return;
@@ -218,7 +247,12 @@ export function Openjutsu() {
     const form = new FormData();
     form.set("mode", kind);
     form.set("video", video.file);
+    if (!whole) {
+      form.set("start", part.start.toFixed(2));
+      form.set("length", part.length.toFixed(2));
+    }
     form.set("hat_fix", String(hatFix));
+    form.set("no_lip_sync", String(noLipSync));
     form.set("margin", margin);
     form.set("target", target);
     if (kind === "simple" && character) {
@@ -246,6 +280,7 @@ export function Openjutsu() {
       form.set("clip_seconds", String(chunkSeconds));
     }
     if (kind !== "mask") {
+      form.set("motion", String(motion));
       form.set("steps", String(steps));
       form.set("model", model);
       for (const l of loras) {
@@ -324,11 +359,34 @@ export function Openjutsu() {
               <h2><span>1</span> Source video</h2>
               {video ? (
                 <div className="video-pick">
-                  <video src={video.url} controls muted playsInline />
+                  <video
+                    ref={player} src={video.url} controls muted playsInline
+                    onTimeUpdate={(event) => { if (!whole && event.currentTarget.currentTime >= part.start + part.length) event.currentTarget.currentTime = part.start; }}
+                  />
                   <div className="row">
                     <small>{video.file.name}{video.duration ? ` · ${video.duration.toFixed(1)} s` : ""}</small>
                     <DropZone accept="video/*,.mkv" onFiles={chooseVideo} className="link">Replace</DropZone>
                   </div>
+                  {video.duration > MIN_SECTION_SECONDS && (
+                    <>
+                      <div className="setting">
+                        <span>Part to use <small>{timecode(part.start)}–{timecode(part.start + part.length)} ({part.length.toFixed(1)} s). Only this part is swapped.</small></span>
+                        <div className="segmented">
+                          {PLACES.map((p) => (
+                            <button key={p} className={p === place ? "on" : ""} onClick={() => p === "Whole" ? choosePart(0, video.duration) : choosePart(placeStart(p, video.duration, part.length), part.length)}>{p}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <label className="setting">
+                        <span>Length <small>{part.length.toFixed(1)} s</small></span>
+                        <input type="range" min={MIN_SECTION_SECONDS} max={video.duration} step={0.5} value={part.length} onChange={(event) => choosePart(part.start, Number(event.target.value))} />
+                      </label>
+                      <label className="setting">
+                        <span>Starts at <small>{timecode(part.start)}</small></span>
+                        <input type="range" min={0} max={video.duration - part.length} step={0.1} value={part.start} disabled={whole} onChange={(event) => choosePart(Number(event.target.value), part.length)} />
+                      </label>
+                    </>
+                  )}
                 </div>
               ) : (
                 <DropZone accept="video/*,.mkv" onFiles={chooseVideo} className="big">
@@ -376,12 +434,13 @@ export function Openjutsu() {
               </>) : mode === "simple" ? (
                 <p className="hint">
                   The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
+                  Mirrors and reflections do not work yet.
                   To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes.
                 </p>
               ) : (
                 <p className="hint">
                   Up to {MAX_CHARACTERS} characters. In every clip each tracked person is matched to a role; people without a
-                  character (extras, passers-by) stay as they are. Name roles (&ldquo;the drummer&rdquo;), not clothes, and add how they look
+                  character (extras, passers-by) stay as they are. Mirrors and reflections do not work yet. Name roles (&ldquo;the drummer&rdquo;), not clothes, and add how they look
                   after &ldquo; - &rdquo; to help the matching (&ldquo;the drummer - man in a cap&rdquo;). Blank roles go to the people with the
                   most screen time.
                 </p>
@@ -410,9 +469,14 @@ export function Openjutsu() {
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>}
+            {mode !== "face" && <label className="setting toggle">
+              <span>No lip-sync <small>For songs the people in the video do not sing or talk along to, so the new {mode === "advanced" ? "people" : "person"} do{mode === "advanced" ? "" : "es"} not lip-sync them (about 30 s more per clip).</small></span>
+              <input type="checkbox" checked={noLipSync} onChange={(event) => setNoLipSync(event.target.checked)} />
+              <i aria-hidden />
+            </label>}
             {mode === "advanced" && (
               <label className="setting toggle">
-                <span>One pass per person <small>{shown.length === 2 ? "Each character gets their own H3 pass with only their photo. About twice the time." : "Needs exactly two characters."}</small></span>
+                <span>One pass per person <small>Each character gets their own H3 pass with only their photo, so about twice the generation time.{shown.length === 2 ? "" : " Needs exactly two characters."}</small></span>
                 <input type="checkbox" checked={onePassEach} disabled={shown.length !== 2} onChange={(event) => setMaxQuality(event.target.checked)} />
                 <i aria-hidden />
               </label>
@@ -441,6 +505,14 @@ export function Openjutsu() {
                   <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
                 </div>
               )}
+              {mode !== "face" && <div className="setting">
+                <span>Motion reference <small>Size of the grey figures H3 copies the motion from. Bigger follows the source poses a bit more closely; sampling takes about a third longer at 768 px and about 2.4× as long at 1376 px.</small></span>
+                <div className="segmented">
+                  {MOTION_SIZES.map((m) => (
+                    <button key={m} className={m === motion ? "on" : ""} onClick={() => setMotion(m)}>{m} px</button>
+                  ))}
+                </div>
+              </div>}
               <div className="setting">
                 <span>Steps <small>6 with the DMAD speed LoRA; without a speed LoRA, 20 or more.</small></span>
                 <input

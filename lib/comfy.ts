@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Comfy, COMFY_CLOUD_BASE_URL, resolveCredentials, type Job } from "@comfyorg/sdk";
 import { ComfyLow } from "@comfyorg/sdk/low";
-import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type Margin, type SimpleSettings } from "./simple.ts";
+import { MASK_NODES, NODES, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
@@ -70,39 +70,44 @@ function upload(comfy: Comfy, file: File) {
   );
 }
 
-export async function submitSimple(video: File, picture: File, settings: SimpleSettings, model: ModelSettings) {
+export async function submitSimple(video: File, section: Section, picture: File, settings: SimpleSettings, model: ModelSettings) {
   const comfy = client();
   const graph = pruneSimple(await loadGraph("simple"), settings);
   applyModel(graph, model);
+  setSection(graph, NODES.video, section);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(NODES.video, "video", await upload(comfy, video));
   workflow.setInput(NODES.picture, "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitAdvanced(video: File, pictures: File[], settings: AdvancedSettings, maxQuality: boolean, model: ModelSettings) {
+export async function submitAdvanced(video: File, section: Section, pictures: File[], settings: AdvancedSettings, maxQuality: boolean, model: ModelSettings) {
   const comfy = client();
   const graph = pruneAdvanced(await loadGraph(maxQuality ? "advanced_maxq" : "advanced"), pictures.length, settings);
   applyModel(graph, model);
+  setSection(graph, nodeByTitle(graph, VIDEO), section);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, VIDEO), "video", await upload(comfy, video));
   for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitFace(video: File, picture: File, settings: FaceSettings, model: ModelSettings) {
+export async function submitFace(video: File, section: Section, picture: File, settings: FaceSettings, model: ModelSettings) {
   const comfy = client();
   const graph = pruneFace(await loadGraph("face"), settings);
   applyModel(graph, model);
+  setSection(graph, nodeByTitle(graph, FACE_VIDEO), section);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, FACE_VIDEO), "video", await upload(comfy, video));
   workflow.setInput(nodeByTitle(graph, FACE_PICTURE), "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitMask(video: File, hatFix: boolean, margin: Margin, target: string) {
+export async function submitMask(video: File, section: Section, hatFix: boolean, margin: Margin, target: string) {
   const comfy = client();
-  const workflow = comfy.workflows.fromJson(pruneMask(await loadGraph("mask"), hatFix, margin, target));
+  const graph = pruneMask(await loadGraph("mask"), hatFix, margin, target);
+  setSection(graph, MASK_NODES.video, section);
+  const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(MASK_NODES.video, "video", await upload(comfy, video));
   return publicJob(await comfy.submit(workflow));
 }

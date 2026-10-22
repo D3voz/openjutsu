@@ -12,7 +12,7 @@
   "11": {"class_type": "SAM3_VideoTrack", "_meta": {"title": "SAM 3.1 track hats"}, "inputs": {"detection_threshold": 0.35, "max_objects": 0, "detect_interval": 1, "images": ["5", 0], "model": ["2", 0], "conditioning": ["10", 0]}},
   "12": {"class_type": "SAM3_TrackToMask", "_meta": {"title": "All hats"}, "inputs": {"object_indices": "", "track_data": ["11", 0]}},
   "13": {"class_type": "MaskComposite", "_meta": {"title": "People + hats"}, "inputs": {"x": 0, "y": 0, "operation": "add", "destination": ["7", 0], "source": ["20", 0]}},
-  "14": {"class_type": "H3GreyMannequins", "_meta": {"title": "Grey mannequin (what H3 follows)"}, "inputs": {"blur": 0.01, "images": ["4", 0], "mask": ["8", 0], "size": ["8", 1]}},
+  "14": {"class_type": "H3GreyMannequins", "_meta": {"title": "Grey mannequin (what H3 follows)"}, "inputs": {"blur": 0.04, "images": ["4", 0], "mask": ["8", 0], "size": ["8", 1]}},
   "15": {"class_type": "ImageAndMaskPreview", "_meta": {"title": "Regenerated area (cyan)"}, "inputs": {"mask_opacity": 0.45, "mask_color": "0, 200, 255", "pass_through": true, "image": ["4", 0], "mask": ["9", 0]}},
   "16": {"class_type": "ImageAndMaskPreview", "_meta": {"title": "Tracked person (orange)"}, "inputs": {"mask_opacity": 0.35, "mask_color": "255, 140, 0", "pass_through": true, "image": ["15", 0], "mask": ["8", 0]}},
   "17": {"class_type": "ImageStitch", "_meta": {"title": "Mask | mannequin"}, "inputs": {"direction": "right", "match_image_size": true, "spacing_width": 0, "spacing_color": "white", "image1": ["16", 0], "image2": ["14", 0]}},

@@ -3,13 +3,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { nodeDescriber } from "../lib/progress.ts";
-import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type SimpleSettings } from "../lib/simple.ts";
+import { MASK_NODES, NODES, pruneMask, pruneSimple, setSection, type ApiGraph, type SimpleSettings } from "../lib/simple.ts";
 
+const isLinkTo = (g: ApiGraph, value: unknown, type: string) => Array.isArray(value) && g[value[0] as string]?.class_type === type;
 const load = (name: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/${name}.api.json`, import.meta.url), "utf8"));
 const graph = load("simple");
 const mask = load("mask");
 const HAT_TYPES = ["CLIPTextEncode", "SAM3_VideoTrack", "SAM3_TrackToMask", "GrowMaskWithBlur", "MaskComposite", "MaskComposite"];
-const settings = (hatFix: boolean): SimpleSettings => ({ role: " the  singer ", resolution: "480p", hatFix, margin: "loose", target: "cat", seed: 7, clipSeconds: 6 });
+const settings = (hatFix: boolean, noLipSync = true): SimpleSettings => ({ role: " the  singer ", resolution: "480p", motion: 512, hatFix, noLipSync, margin: "loose", target: "cat", seed: 7, clipSeconds: 6 });
+const byClass = (g: ApiGraph, type: string) => Object.values(g).filter((node) => node.class_type === type);
 
 test("the node ids match the export", () => {
   const types = { picture: "LoadImage", video: "VHS_LoadVideo", plan: "H3OneClickSwapPlan", loopStart: "MiniMaxH3ChainLoopStart", peopleMask: "H3PeopleMask",
@@ -32,10 +34,53 @@ test("without hat fix the hat nodes go and the grow mask reads the people mask",
   assert.ok(graph[NODES.hat[0]], "the source graph is not modified");
 });
 
+test("a part of the video becomes VHS's skip and frame cap; the whole video keeps 0", () => {
+  const pruned = pruneSimple(graph, settings(false));
+  setSection(pruned, NODES.video, { start: 3.5, length: 4 });
+  assert.deepEqual([pruned[NODES.video].inputs.skip_first_frames, pruned[NODES.video].inputs.frame_load_cap], [84, 96]);
+  setSection(pruned, NODES.video, { start: 0, length: 0 });
+  assert.deepEqual([pruned[NODES.video].inputs.skip_first_frames, pruned[NODES.video].inputs.frame_load_cap], [0, 0]);
+});
+
+test("a bigger motion reference gets its own run name, 512 keeps the plan's", () => {
+  const pruned = pruneSimple(graph, { ...settings(false), motion: 768 });
+  assert.deepEqual(byClass(pruned, "ImageScaleToMaxDimension").filter((n) => /motion reference/i.test(n._meta?.title ?? "")).map((n) => n.inputs.largest_size), [768]);
+  const production = byClass(pruned, "MiniMaxH3ChainPlanModern")[0].inputs.run_name as [string, number];
+  assert.deepEqual(pruned[production[0]].inputs, { string_a: [NODES.plan, 3], string_b: "_motion768", delimiter: "" });
+  const plain = pruneSimple(graph, settings(false));
+  assert.deepEqual(byClass(plain, "MiniMaxH3ChainPlanModern")[0].inputs.run_name, [NODES.plan, 3]);
+});
+
 test("with hat fix the full graph is kept", () => {
   const pruned = pruneSimple(graph, settings(true));
   assert.equal(Object.keys(pruned).length, Object.keys(graph).length);
   assert.deepEqual(pruned[NODES.growMask].inputs.mask, [NODES.hat[5], 0]);
+});
+
+test("without No lip-sync H3 hears the soundtrack and the mannequin gets no faces", () => {
+  const pruned = pruneSimple(graph, settings(true, false));
+  assert.equal(Object.keys(pruned).length, Object.keys(graph).length - 6);
+  assert.deepEqual(byClass(pruned, "AudioAdjustVolume"), []);
+  assert.ok(!Object.values(pruned).some((node) => /faces/.test(node._meta?.title ?? "")));
+  const [ref] = byClass(pruned, "MiniMaxH3ReferenceToVideo");
+  const [src] = byClass(pruned, "MiniMaxH3ContexLoopSourceSlice");
+  const [mannequin] = byClass(pruned, "H3GreyMannequins");
+  assert.equal(pruned[(ref.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].class_type, "MiniMaxH3ChainCurrent");
+  assert.equal(pruned[(src.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");
+  assert.ok(!("faces" in mannequin.inputs) && !("face_size" in mannequin.inputs));
+  assert.ok(!("no_lip_sync" in pruned[NODES.plan].inputs));
+});
+
+test("with No lip-sync H3 hears silence and the plan drops the lip-sync line", () => {
+  const pruned = pruneSimple(graph, settings(false, true));
+  const [ref] = byClass(pruned, "MiniMaxH3ReferenceToVideo");
+  const [src] = byClass(pruned, "MiniMaxH3ContexLoopSourceSlice");
+  for (const link of [ref.inputs["ref_video_audios.ref_video_audio_0"], src.inputs.source_audio]) {
+    assert.deepEqual(pruned[(link as [string, number])[0]].inputs.volume, -100);
+  }
+  const flag = pruned[(pruned[NODES.plan].inputs.no_lip_sync as [string, number])[0]];
+  assert.deepEqual([flag.class_type, flag.inputs.value], ["PrimitiveBoolean", true]);
+  assert.ok(isLinkTo(pruned, byClass(pruned, "H3GreyMannequins")[0].inputs.faces, "H3PeopleMask"));
 });
 
 test("node ids map to titles and clip numbers", () => {

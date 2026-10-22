@@ -281,6 +281,10 @@
    "steps": 6,
    "seed": 0,
    "roles": "",
+   "no_lip_sync": [
+    "83",
+    0
+   ],
    "source_frames": [
     "14",
     0
@@ -869,7 +873,7 @@
     0
    ],
    "source_audio": [
-    "15",
+    "87",
     0
    ]
   },
@@ -950,7 +954,8 @@
  },
  "61": {
   "inputs": {
-   "blur": 0.01,
+   "blur": 0.04,
+   "face_blur": 0.05,
    "images": [
     "41",
     0
@@ -961,6 +966,14 @@
    ],
    "size": [
     "59",
+    1
+   ],
+   "faces": [
+    "86",
+    0
+   ],
+   "face_size": [
+    "86",
     1
    ]
   },
@@ -1079,8 +1092,8 @@
     0
    ],
    "ref_video_audios.ref_video_audio_0": [
-    "38",
-    12
+    "88",
+    0
    ]
   },
   "class_type": "MiniMaxH3ReferenceToVideo",
@@ -1097,6 +1110,10 @@
    "shots": [
     "52",
     0
+   ],
+   "role_map": [
+    "50",
+    2
    ]
   },
   "class_type": "H3FillShots",
@@ -1456,6 +1473,92 @@
   "class_type": "MiniMaxH3ChainAssemble",
   "_meta": {
    "title": "Final Video"
+  }
+ },
+ "83": {
+  "inputs": {
+   "value": true
+  },
+  "class_type": "PrimitiveBoolean",
+  "_meta": {
+   "title": "No lip-sync in the prompt"
+  }
+ },
+ "84": {
+  "inputs": {
+   "text": "face",
+   "clip": [
+    "32",
+    1
+   ]
+  },
+  "class_type": "CLIPTextEncode",
+  "_meta": {
+   "title": "SAM: faces"
+  }
+ },
+ "85": {
+  "inputs": {
+   "detection_threshold": 0.2,
+   "max_objects": 0,
+   "detect_interval": 1,
+   "images": [
+    "43",
+    0
+   ],
+   "model": [
+    "32",
+    0
+   ],
+   "conditioning": [
+    "84",
+    0
+   ]
+  },
+  "class_type": "SAM3_VideoTrack",
+  "_meta": {
+   "title": "SAM 3.1 track faces"
+  }
+ },
+ "86": {
+  "inputs": {
+   "headroom": 0,
+   "hold_frames": 0,
+   "max_people": 0,
+   "track_data": [
+    "85",
+    0
+   ]
+  },
+  "class_type": "H3PeopleMask",
+  "_meta": {
+   "title": "Faces (shown on the mannequins)"
+  }
+ },
+ "87": {
+  "inputs": {
+   "volume": -100,
+   "audio": [
+    "15",
+    0
+   ]
+  },
+  "class_type": "AudioAdjustVolume",
+  "_meta": {
+   "title": "Mute the clip audio H3 hears"
+  }
+ },
+ "88": {
+  "inputs": {
+   "volume": -100,
+   "audio": [
+    "38",
+    12
+   ]
+  },
+  "class_type": "AudioAdjustVolume",
+  "_meta": {
+   "title": "Mute the reference audio H3 hears"
   }
  }
 }

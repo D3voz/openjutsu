@@ -1,6 +1,6 @@
 // Simple motion transfer: one character replaces the main person in the video.
 // workflows/simple.api.json (the swap) and workflows/mask.api.json (the mask check) are exported
-// with the hat fix enabled; each request prunes what it does not use.
+// with the hat fix (and the swap with No lip-sync) enabled; each request prunes what it does not use.
 
 export type ApiNode = { class_type: string; inputs: Record<string, unknown>; _meta?: { title?: string } };
 export type ApiGraph = Record<string, ApiNode>;
@@ -15,12 +15,28 @@ export const MAX_SEED = 0xffffffff;
 export const MARGINS = { tight: 20, normal: 40, loose: 60 } as const;
 export type Margin = keyof typeof MARGINS;
 
+// Long edge of the grey-mannequin motion reference H3 follows. H3 itself caps reference videos at 768x1344.
+export const MOTION_SIZES = [512, 768, 1376] as const;
+export type MotionSize = (typeof MOTION_SIZES)[number];
+
+// Part of the source video to use, in seconds; length 0 runs to the end. VHS cuts the soundtrack to the same part.
+export type Section = { start: number; length: number };
+export const MIN_SECTION_SECONDS = 2;
+
+export function setSection(graph: ApiGraph, video: string, section: Section) {
+  // every export loads the video at force_rate 24
+  graph[video].inputs.skip_first_frames = Math.round(section.start * 24);
+  graph[video].inputs.frame_load_cap = Math.round(section.length * 24);
+}
+
 export const DEFAULT_TARGET = "person";
 
 export type SimpleSettings = {
   role: string; // who the character replaces, "" to let the describer name the main person
   resolution: Resolution;
+  motion: MotionSize;
   hatFix: boolean;
+  noLipSync: boolean; // the people do not sing along: H3 hears silence, sees their faces and is told nobody sings
   margin: Margin;
   target: string; // what SAM tracks; the biggest one is replaced ("person", "cat", ...)
   seed: number;
@@ -72,8 +88,46 @@ function maskSettings(source: ApiGraph, hatFix: boolean, margin: Margin, target:
   return graph;
 }
 
+// The No lip-sync nodes, titled the same in every swap export (ComfyUI user/default/oneclick_*_build.js).
+const MUTE = /^Mute the (clip|reference) audio H3 hears$/;
+const NO_LIP_SYNC = /^(No lip-sync in the prompt|SAM: faces|SAM 3\.1 track faces|Faces \(shown on the mannequins?\))$/;
+
+// No lip-sync off: the nodes go, H3 hears the soundtrack again and the mannequins get no faces.
+export function dropNoLipSync(graph: ApiGraph) {
+  const through = new Map<string, unknown>();
+  for (const [id, node] of Object.entries(graph)) {
+    const title = node._meta?.title ?? "";
+    if (MUTE.test(title)) through.set(id, node.inputs.audio);
+    else if (NO_LIP_SYNC.test(title)) through.set(id, undefined);
+  }
+  for (const id of through.keys()) delete graph[id];
+  for (const [id, node] of Object.entries(graph)) {
+    for (const [name, value] of Object.entries(node.inputs)) {
+      if (!isLink(value) || !through.has(value[0])) continue;
+      if (through.get(value[0])) node.inputs[name] = through.get(value[0]);
+      else if (["no_lip_sync", "faces", "face_size"].includes(name)) delete node.inputs[name];
+      else throw new Error(`Node ${id}.${name} still links to removed node ${value[0]}.`);
+    }
+  }
+}
+
+// Every motion reference resize in a swap export, including One pass per person's pass 2. The Swap Plan's run name
+// (which picks the saved clips a rerun resumes from) does not know the size, so other sizes get their own run.
+export function setMotionSize(graph: ApiGraph, size: MotionSize) {
+  const nodes = Object.values(graph).filter((node) => node.class_type === "ImageScaleToMaxDimension" && /motion reference/i.test(node._meta?.title ?? ""));
+  if (!nodes.length) throw new Error("Expected a motion reference resize in the workflow.");
+  for (const node of nodes) node.inputs.largest_size = size;
+  if (size === MOTION_SIZES[0]) return;
+  const plans = Object.values(graph).filter((node) => node.class_type === "MiniMaxH3ChainPlanModern");
+  if (plans.length !== 1) throw new Error(`Expected one Production Plan node in the workflow, found ${plans.length}.`);
+  graph.motion_run_name = { class_type: "StringConcatenate", inputs: { string_a: plans[0].inputs.run_name, string_b: `_motion${size}`, delimiter: "" }, _meta: { title: "Run name for this motion reference size" } };
+  plans[0].inputs.run_name = ["motion_run_name", 0];
+}
+
 export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGraph {
   const graph = maskSettings(source, settings.hatFix, settings.margin, settings.target, NODES);
+  if (!settings.noLipSync) dropNoLipSync(graph);
+  setMotionSize(graph, settings.motion);
   const plan = graph[NODES.plan].inputs;
   plan.resolution = settings.resolution;
   plan.seed = settings.seed;

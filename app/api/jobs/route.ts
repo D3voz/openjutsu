@@ -3,7 +3,7 @@ import { listModels, submitAdvanced, submitFace, submitMask, submitSimple } from
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
-import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, type Margin, type MotionSize, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
 
@@ -12,6 +12,15 @@ function parseVideo(form: FormData) {
   if (!(video instanceof File) || video.size === 0) throw new Error("Drop a source video.");
   if (!video.type.startsWith("video/") && !/\.(mp4|mov|mkv|webm|avi)$/i.test(video.name)) throw new Error("The source must be a video file.");
   return video;
+}
+
+// Without start and length the whole video is used.
+function parseSection(form: FormData): Section {
+  const start = Number(form.get("start") ?? 0);
+  const length = Number(form.get("length") ?? 0);
+  if (!(start >= 0)) throw new Error("The start of the part to use must be 0 s or later.");
+  if (!(length === 0 || length >= MIN_SECTION_SECONDS)) throw new Error(`The part to use must be at least ${MIN_SECTION_SECONDS} s long.`);
+  return { start, length };
 }
 
 function parseMask(form: FormData) {
@@ -30,6 +39,8 @@ function parsePicture(picture: FormDataEntryValue | null) {
 function parseRun(form: FormData) {
   const resolution = String(form.get("resolution"));
   if (!RESOLUTIONS.includes(resolution as Resolution)) throw new Error("Choose a supported resolution.");
+  const motion = Number(form.get("motion"));
+  if (!MOTION_SIZES.includes(motion as MotionSize)) throw new Error("Choose a supported motion reference size.");
   const seed = Number(form.get("seed"));
   if (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED) throw new Error(`Seed must be a whole number from 0 to ${MAX_SEED}.`);
   const clipSeconds = Number(form.get("clip_seconds"));
@@ -37,7 +48,7 @@ function parseRun(form: FormData) {
     throw new Error(`Clip length must be ${CLIP_SECONDS.min}-${CLIP_SECONDS.max} s.`);
   }
 
-  return { resolution: resolution as Resolution, ...parseMask(form), seed, clipSeconds };
+  return { resolution: resolution as Resolution, motion: motion as MotionSize, ...parseMask(form), seed, clipSeconds };
 }
 
 function parseModel(form: FormData, available: { models: string[]; loras: string[] } | null): ModelSettings {
@@ -70,7 +81,7 @@ function parseFace(form: FormData) {
 
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
-  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), ...parseRun(form) };
+  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form) };
   return { picture, settings };
 }
 
@@ -80,7 +91,7 @@ function parseAdvanced(form: FormData) {
   const maxQuality = form.get("max_quality") === "true";
   if (maxQuality && pictures.length !== 2) throw new Error("One pass per person needs exactly two characters.");
   const roles = form.getAll("role").map((role) => String(role).slice(0, 200));
-  return { pictures, maxQuality, settings: { roles, ...parseRun(form) } };
+  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form) } };
 }
 
 export async function POST(request: Request) {
@@ -89,21 +100,22 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const mode = form.get("mode");
     const video = parseVideo(form);
+    const section = parseSection(form);
     if (mode === "mask") {
       const { hatFix, margin, target } = parseMask(form);
-      submit = () => submitMask(video, hatFix, margin, target);
+      submit = () => submitMask(video, section, hatFix, margin, target);
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
       const model = parseModel(form, await listModels());
-      submit = () => submitSimple(video, picture, settings, model);
+      submit = () => submitSimple(video, section, picture, settings, model);
     } else if (mode === "advanced") {
       const { pictures, maxQuality, settings } = parseAdvanced(form);
       const model = parseModel(form, await listModels());
-      submit = () => submitAdvanced(video, pictures, settings, maxQuality, model);
+      submit = () => submitAdvanced(video, section, pictures, settings, maxQuality, model);
     } else if (mode === "face") {
       const { picture, settings } = parseFace(form);
       const model = parseModel(form, await listModels());
-      submit = () => submitFace(video, picture, settings, model);
+      submit = () => submitFace(video, section, picture, settings, model);
     } else {
       throw new Error("Unknown mode.");
     }
