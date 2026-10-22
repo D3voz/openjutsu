@@ -7,12 +7,14 @@ import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
+import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 
 type Character = { file: File; url: string; role: string };
-type Mode = "simple" | "advanced";
-type Kind = "simple" | "mask" | "advanced" | "advanced_maxq";
+type Mode = "simple" | "advanced" | "face";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "face";
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number };
-type Progress = NodeInfo & { step: number | null; steps: number | null };
+// pass counts the sampler runs started so far: Fix faces samples its chunks one after another in the same node.
+type Progress = NodeInfo & { step: number | null; steps: number | null; pass: number };
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
 const RUN_KEY = "openjutsu.run";
@@ -21,7 +23,13 @@ const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
   { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: true },
   { id: "object", title: "Object swap", text: "Replace a prop or product instead of a person.", ready: false },
+  { id: "face", title: "Fix faces", text: "Post-processing: redraw a person's face in a finished video from their photo.", ready: true },
 ] as const;
+
+const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
+  photo: { label: "Match the photo", hint: "The face is redrawn from the photo: the closest likeness, but H3 makes up its own expressions and mouth movements." },
+  mouth: { label: "Follow the mouth", hint: "The face follows the video's expressions and mouth movements; a little less like the photo." },
+};
 
 function readRun(): Run | null {
   try {
@@ -106,6 +114,8 @@ export function Openjutsu() {
   const [hatFix, setHatFix] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
   const [target, setTarget] = useState(DEFAULT_TARGET);
+  const [faceStyle, setFaceStyle] = useState<FaceStyle>("photo");
+  const [chunkSeconds, setChunkSeconds] = useState(CHUNK_SECONDS.default);
   const [seed, setSeed] = useState(0);
   const [clipSeconds, setClipSeconds] = useState(CLIP_SECONDS.default);
   const [steps, setSteps] = useState(DEFAULT_MODEL.steps);
@@ -140,7 +150,10 @@ export function Openjutsu() {
       } else if (event.type === "status") {
         setJob((current) => current && { ...current, status: event.status, queuePosition: event.queuePosition });
       } else if (event.type === "progress" && event.node) {
-        setProgress({ ...event.node, step: event.step, steps: event.steps });
+        setProgress((last) => {
+          const again = event.node.classType === "SamplerCustomAdvanced" && (last?.classType !== "SamplerCustomAdvanced" || (event.step ?? 0) < (last.step ?? 0));
+          return { ...event.node, step: event.step, steps: event.steps, pass: (last?.pass ?? 0) + (again ? 1 : 0) };
+        });
       } else if (event.type === "preview") {
         setPreview(event.url);
       } else if (event.type === "error") {
@@ -169,15 +182,16 @@ export function Openjutsu() {
     probe.src = url;
   }
 
-  // Simple mode uses only the first character; the others are kept for switching back.
-  const limit = mode === "simple" ? 1 : MAX_CHARACTERS;
+  // Simple mode and Fix faces use only the first character; the others are kept for switching back.
+  const single = mode === "simple" || mode === "face";
+  const limit = single ? 1 : MAX_CHARACTERS;
   const shown = characters.slice(0, limit);
   const character = characters[0] ?? null;
   const onePassEach = mode === "advanced" && maxQuality && shown.length === 2;
 
   function addCharacters(files: File[]) {
     if (!files.length) return;
-    if (mode === "simple" && character) {
+    if (single && character) {
       URL.revokeObjectURL(character.url);
       setCharacters([{ file: files[0], url: URL.createObjectURL(files[0]), role: character.role }, ...characters.slice(1)]);
       return;
@@ -195,7 +209,7 @@ export function Openjutsu() {
     setCharacters(characters.map((c, i) => (i === index ? { ...c, role } : c)));
   }
 
-  const clips = video?.duration ? clipCount(video.duration, clipSeconds) : 0;
+  const clips = !video?.duration ? 0 : mode === "face" ? faceChunkCount(video.duration, chunkSeconds) : clipCount(video.duration, clipSeconds);
 
   async function submit(kind: Kind) {
     if (!video || (kind !== "mask" && !character)) return;
@@ -225,6 +239,12 @@ export function Openjutsu() {
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
+    if (kind === "face" && character) {
+      form.set("picture", character.file);
+      form.set("style", faceStyle);
+      form.set("seed", String(seed));
+      form.set("clip_seconds", String(chunkSeconds));
+    }
     if (kind !== "mask") {
       form.set("steps", String(steps));
       form.set("model", model);
@@ -237,7 +257,7 @@ export function Openjutsu() {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
-      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds, startedAt: Date.now() };
+      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now() };
       writeRun(next);
       setJob(body);
       setProgress(null);
@@ -319,13 +339,13 @@ export function Openjutsu() {
             </div>
 
             <div className="panel">
-              <h2><span>2</span> {mode === "simple" ? "Character" : "Characters"}</h2>
+              <h2><span>2</span> {mode === "face" ? "Whose face" : mode === "simple" ? "Character" : "Characters"}</h2>
               <div className="characters">
                 {shown.map((c, i) => (
                   <div className="character" key={c.url}>
                     <img src={c.url} alt={`Character ${i + 1}`} />
                     <button className="remove" onClick={() => removeCharacter(i)} aria-label={`Remove character ${i + 1}`}>×</button>
-                    <label>
+                    {mode !== "face" && <label>
                       <span>Who do they replace? (optional)</span>
                       <input
                         value={c.role}
@@ -333,7 +353,7 @@ export function Openjutsu() {
                         placeholder={i === 0 ? "e.g. the singer" : "e.g. the drummer"}
                         onChange={(event) => setRole(i, event.target.value)}
                       />
-                    </label>
+                    </label>}
                   </div>
                 ))}
                 {shown.length < limit && (
@@ -343,7 +363,17 @@ export function Openjutsu() {
                   </DropZone>
                 )}
               </div>
-              {mode === "simple" ? (
+              {mode === "face" ? (<>
+                <div className="segmented">
+                  {(Object.keys(FACE_STYLE_TEXT) as FaceStyle[]).map((f) => (
+                    <button key={f} className={f === faceStyle ? "on" : ""} onClick={() => setFaceStyle(f)}>{FACE_STYLE_TEXT[f].label}</button>
+                  ))}
+                </div>
+                <p className="hint">
+                  {FACE_STYLE_TEXT[faceStyle].hint} Use the photo the video was made with. Only that person&apos;s face changes; faces
+                  taller than a fifth of the frame are already sharp and are left alone.
+                </p>
+              </>) : mode === "simple" ? (
                 <p className="hint">
                   The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
                   To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes.
@@ -361,25 +391,25 @@ export function Openjutsu() {
 
           <section className="panel settings">
             <h2><span>3</span> Settings</h2>
-            <div className="setting">
+            {mode !== "face" && <div className="setting">
               <span>Resolution</span>
               <div className="segmented">
                 {RESOLUTIONS.map((r) => (
                   <button key={r} className={r === resolution ? "on" : ""} onClick={() => setResolution(r)}>{r}</button>
                 ))}
               </div>
-            </div>
+            </div>}
             {mode === "simple" && (
               <div className="setting">
                 <span>What to replace <small>What SAM tracks, in English: person, cat, dog, or a short description such as “black and white cat”. The biggest match is replaced.</small></span>
                 <input className="target-input" aria-label="What to replace" placeholder={DEFAULT_TARGET} value={target} onChange={(event) => setTarget(event.target.value)} />
               </div>
             )}
-            <label className="setting toggle">
+            {mode !== "face" && <label className="setting toggle">
               <span>Hat fix <small>Also replaces hats{mode === "advanced" ? " worn by the people being replaced" : ""} (about 45 s more per clip).</small></span>
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
-            </label>
+            </label>}
             {mode === "advanced" && (
               <label className="setting toggle">
                 <span>One pass per person <small>{shown.length === 2 ? "Each character gets their own H3 pass with only their photo. About twice the time." : "Needs exactly two characters."}</small></span>
@@ -387,10 +417,10 @@ export function Openjutsu() {
                 <i aria-hidden />
               </label>
             )}
-            <div className="setting">
+            {mode !== "face" && <div className="setting">
               <span>Mask margin <small>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</small></span>
               <MarginPicker value={margin} onChange={setMargin} />
-            </div>
+            </div>}
             <details>
               <summary>Advanced</summary>
               <div className="setting">
@@ -400,10 +430,17 @@ export function Openjutsu() {
                   <button onClick={() => setSeed(Math.floor(Math.random() * MAX_SEED))} aria-label="Random seed">🎲</button>
                 </div>
               </div>
-              <div className="setting">
-                <span>Clip length <small>{clipSeconds.toFixed(1)} s per H3 generation</small></span>
-                <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
-              </div>
+              {mode === "face" ? (
+                <div className="setting">
+                  <span>Chunk length <small>{chunkSeconds.toFixed(1)} s of face per H3 generation; chunks overlap by 1 s and are crossfaded.</small></span>
+                  <input type="range" min={CHUNK_SECONDS.min} max={CHUNK_SECONDS.max} step={0.5} value={chunkSeconds} onChange={(event) => setChunkSeconds(Number(event.target.value))} />
+                </div>
+              ) : (
+                <div className="setting">
+                  <span>Clip length <small>{clipSeconds.toFixed(1)} s per H3 generation</small></span>
+                  <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
+                </div>
+              )}
               <div className="setting">
                 <span>Steps <small>6 with the DMAD speed LoRA; without a speed LoRA, 20 or more.</small></span>
                 <input
@@ -440,11 +477,13 @@ export function Openjutsu() {
             {formError && <p className="error">{formError}</p>}
             <div className="row">
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
-              <button className="primary" disabled={!video || !character || submitting} onClick={() => submit(mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
+              <button className="primary" disabled={!video || !character || submitting} onClick={() => submit(mode === "face" ? "face" : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
                 {submitting ? "Uploading…" : "Generate"}
               </button>
             </div>
-            <small>{clips ? `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}` : `Add a video and ${mode === "simple" ? "a character photo" : "character photos"}.`}</small>
+            <small>{clips
+              ? mode === "face" ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}`
+              : `Add a video and ${mode === "face" ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>
       )}
@@ -476,7 +515,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
         <video src={job.video.url} controls autoPlay playsInline />
         <div className="row">
           <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
-          <button className="secondary" onClick={onReset}>New swap</button>
+          <button className="secondary" onClick={onReset}>{run.kind === "face" ? "Fix another" : "New swap"}</button>
         </div>
       </section>
     );
@@ -487,21 +526,27 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       <section className="panel">
         <h2>{status === "canceled" ? "Canceled" : status === "succeeded" ? "Finished without a video" : status === "expired" ? "Job no longer available" : "Something went wrong"}</h2>
         {job?.error && <p className="error">{job.error}</p>}
-        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/h3_oneclick_swap folder.</p>}
+        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "face" ? "openjutsu_face" : "h3_oneclick_swap"} folder.</p>}
         <button className="secondary" onClick={onReset}>Back</button>
       </section>
     );
   }
 
+  const face = run.kind === "face";
+  const sampling = progress?.classType === "SamplerCustomAdvanced";
+  const chunk = Math.min(progress?.pass ?? 0, run.clips);
   let fraction = 0;
-  if (mask) fraction = progress?.classType === "SAM3_VideoTrack" && progress.steps ? (progress.step ?? 0) / progress.steps : 0;
+  if (face) fraction = sampling ? 0.1 + 0.85 * (chunk - 1 + (progress!.steps ? (progress!.step ?? 0) / progress!.steps : 0)) / run.clips : chunk ? 0.97 : 0.05;
+  else if (mask) fraction = progress?.classType === "SAM3_VideoTrack" && progress.steps ? (progress.step ?? 0) / progress.steps : 0;
   else if (progress?.classType === "MiniMaxH3ChainAssemble") fraction = 0.99;
   else if (progress?.clip) fraction = (progress.clip - 1 + clipShare(progress)) / clips;
 
   return (
     <section className="panel progress">
       <div className="row">
-        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : mask ? "Checking the mask" : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
+        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : mask ? "Checking the mask"
+          : face ? (sampling ? `Chunk ${chunk} of up to ${run.clips}` : chunk ? "Pasting the face back" : "Tracking the face")
+          : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
       </div>
       <div className="bar"><div style={{ width: `${Math.round(fraction * 100)}%` }} /></div>
@@ -511,7 +556,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       </p>
       {preview && <img className="preview" src={preview} alt="Mask preview: white areas are regenerated" />}
       {streamError && <p className="error">{streamError}</p>}
-      <p className="hint">{mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
+      <p className="hint">{mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
       <button className="secondary" onClick={onCancel}>Cancel</button>
     </section>
   );

@@ -15,11 +15,12 @@ export const MAX_LORAS = 4;
 export const STEPS = { min: 1, max: 100 };
 export const STRENGTH = { min: -4, max: 4 };
 
-// Mutates graph: the Swap Plan's steps, the chosen diffusion model, then the LoRAs in order into whatever read the old LoRA node.
+// Mutates graph: the steps (on the Swap Plan, or the Schedule in Fix faces, which has no plan), the chosen diffusion model,
+// then the LoRAs in order into whatever read the old LoRA node.
 export function applyModel(graph: ApiGraph, settings: ModelSettings) {
   const plans = Object.values(graph).filter((node) => node.class_type === "H3OneClickSwapPlan" || node.class_type === "H3AdvancedSwapPlan");
-  if (plans.length !== 1) throw new Error(`Expected one Swap Plan node in the workflow, found ${plans.length}.`);
-  plans[0].inputs.steps = settings.steps;
+  if (plans.length > 1) throw new Error(`Expected one Swap Plan node in the workflow, found ${plans.length}.`);
+  (plans[0] ?? graph[nodeByTitle(graph, "Schedule")]).inputs.steps = settings.steps;
   const unet = nodeByTitle(graph, "H3 Diffusion Model");
   const lora = nodeByTitle(graph, "DMAD LoRA");
   graph[unet].inputs.unet_name = settings.model;

@@ -5,6 +5,7 @@ import { ComfyLow } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, pruneMask, pruneSimple, type ApiGraph, type Margin, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
+import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 
 export type PublicJob = {
   id: string;
@@ -33,7 +34,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "face"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -86,6 +87,16 @@ export async function submitAdvanced(video: File, pictures: File[], settings: Ad
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, VIDEO), "video", await upload(comfy, video));
   for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", await upload(comfy, picture));
+  return publicJob(await comfy.submit(workflow));
+}
+
+export async function submitFace(video: File, picture: File, settings: FaceSettings, model: ModelSettings) {
+  const comfy = client();
+  const graph = pruneFace(await loadGraph("face"), settings);
+  applyModel(graph, model);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(nodeByTitle(graph, FACE_VIDEO), "video", await upload(comfy, video));
+  workflow.setInput(nodeByTitle(graph, FACE_PICTURE), "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 

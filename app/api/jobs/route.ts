@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { listModels, submitAdvanced, submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { listModels, submitAdvanced, submitFace, submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, RESOLUTIONS, type Margin, type Resolution, type SimpleSettings } from "../../../lib/simple.ts";
@@ -55,6 +56,18 @@ function parseModel(form: FormData, available: { models: string[]; loras: string
   return { steps, model, loras };
 }
 
+function parseFace(form: FormData) {
+  const picture = parsePicture(form.get("picture"));
+  const style = String(form.get("style"));
+  if (!FACE_STYLES.includes(style as FaceStyle)) throw new Error("Choose Match the photo or Follow the mouth.");
+  const seed = Number(form.get("seed"));
+  if (!Number.isInteger(seed) || seed < 0 || seed > MAX_SEED) throw new Error(`Seed must be a whole number from 0 to ${MAX_SEED}.`);
+  const chunkSeconds = Number(form.get("clip_seconds"));
+  if (!(chunkSeconds >= CHUNK_SECONDS.min && chunkSeconds <= CHUNK_SECONDS.max)) throw new Error(`Chunk length must be ${CHUNK_SECONDS.min}-${CHUNK_SECONDS.max} s.`);
+  const settings: FaceSettings = { style: style as FaceStyle, seed, chunkSeconds };
+  return { picture, settings };
+}
+
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
   const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), ...parseRun(form) };
@@ -87,6 +100,10 @@ export async function POST(request: Request) {
       const { pictures, maxQuality, settings } = parseAdvanced(form);
       const model = parseModel(form, await listModels());
       submit = () => submitAdvanced(video, pictures, settings, maxQuality, model);
+    } else if (mode === "face") {
+      const { picture, settings } = parseFace(form);
+      const model = parseModel(form, await listModels());
+      submit = () => submitFace(video, picture, settings, model);
     } else {
       throw new Error("Unknown mode.");
     }
