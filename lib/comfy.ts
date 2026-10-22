@@ -5,6 +5,7 @@ import { ComfyLow } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
+import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 
 export type PublicJob = {
@@ -34,7 +35,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "face"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "face"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -89,6 +90,17 @@ export async function submitAdvanced(video: File, section: Section, pictures: Fi
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, VIDEO), "video", await upload(comfy, video));
   for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", await upload(comfy, picture));
+  return publicJob(await comfy.submit(workflow));
+}
+
+export async function submitObject(video: File, section: Section, picture: File | null, settings: ObjectSettings, model: ModelSettings) {
+  const comfy = client();
+  const graph = pruneObject(await loadGraph("object"), !!picture, settings);
+  applyModel(graph, model);
+  setSection(graph, nodeByTitle(graph, OBJECT_VIDEO), section);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(nodeByTitle(graph, OBJECT_VIDEO), "video", await upload(comfy, video));
+  if (picture && settings.mode !== "remove") workflow.setInput(nodeByTitle(graph, OBJECT_PICTURE), "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 

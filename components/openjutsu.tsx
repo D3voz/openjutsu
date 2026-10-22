@@ -7,11 +7,12 @@ import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, type Margin, type MotionSize, type Resolution, type Section } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
+import type { EditMode } from "../lib/object.ts";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 
 type Character = { file: File; url: string; role: string };
-type Mode = "simple" | "advanced" | "face";
-type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "face";
+type Mode = "simple" | "advanced" | "object" | "face";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "face";
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number };
 // pass counts the sampler runs started so far: Fix faces samples its chunks one after another in the same node.
 type Progress = NodeInfo & { step: number | null; steps: number | null; pass: number };
@@ -22,7 +23,7 @@ const RUN_KEY = "openjutsu.run";
 const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
   { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: true },
-  { id: "object", title: "Object swap", text: "Replace a prop or product instead of a person.", ready: false },
+  { id: "object", title: "Object swap", text: "Change hair, clothes, a prop or the background, or remove something.", ready: true },
   { id: "face", title: "Fix faces", text: "Post-processing: redraw a person's face in a finished video from their photo.", ready: true },
 ] as const;
 
@@ -30,6 +31,15 @@ const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
   photo: { label: "Match the photo", hint: "The face is redrawn from the photo: the closest likeness, but H3 makes up its own expressions and mouth movements." },
   mouth: { label: "Follow the mouth", hint: "The face follows the video's expressions and mouth movements; a little less like the photo." },
 };
+
+// "From picture" is the Simple person swap with the picture as the character.
+type EditTab = EditMode | "picture";
+const EDITS: { id: EditTab; label: string; target: string; what: string; to: string; toHint: string }[] = [
+  { id: "change", label: "Change", target: "hair, top", what: "What to change", to: "short bright pink hair and a black leather jacket", toHint: "What it becomes" },
+  { id: "remove", label: "Remove", target: "poster", what: "What to remove", to: "a plain wall", toHint: "What shows instead (optional)" },
+  { id: "background", label: "Background", target: "person", what: "What stays", to: "a snowy mountain pass at dusk", toHint: "The new place" },
+  { id: "picture", label: "From picture", target: "person", what: "Who is replaced", to: "", toHint: "" },
+];
 
 function readRun(): Run | null {
   try {
@@ -128,6 +138,11 @@ export function Openjutsu() {
   const [noLipSync, setNoLipSync] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
   const [target, setTarget] = useState(DEFAULT_TARGET);
+  const [editMode, setEditMode] = useState<EditTab>("change");
+  const [editTarget, setEditTarget] = useState("");
+  const [changeTo, setChangeTo] = useState("");
+  const [look, setLook] = useState<{ file: File; url: string } | null>(null);
+  const [biggestOnly, setBiggestOnly] = useState(false);
   const [faceStyle, setFaceStyle] = useState<FaceStyle>("photo");
   const [chunkSeconds, setChunkSeconds] = useState(CHUNK_SECONDS.default);
   const [seed, setSeed] = useState(0);
@@ -239,9 +254,20 @@ export function Openjutsu() {
   }
 
   const clips = !video?.duration ? 0 : mode === "face" ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
+  const edit = EDITS.find((e) => e.id === editMode)!;
+  const fromPicture = mode === "object" && editMode === "picture";
+  const ready = mode === "object"
+    ? editMode === "remove" || (fromPicture ? !!look : !!changeTo.trim() || !!look)
+    : !!character;
+
+  function chooseLook(files: File[]) {
+    if (!files[0]) return;
+    if (look) URL.revokeObjectURL(look.url);
+    setLook({ file: files[0], url: URL.createObjectURL(files[0]) });
+  }
 
   async function submit(kind: Kind) {
-    if (!video || (kind !== "mask" && !character)) return;
+    if (!video || (kind !== "mask" && !ready)) return;
     setSubmitting(true);
     setFormError("");
     const form = new FormData();
@@ -254,10 +280,15 @@ export function Openjutsu() {
     form.set("hat_fix", String(hatFix));
     form.set("no_lip_sync", String(noLipSync));
     form.set("margin", margin);
-    form.set("target", target);
-    if (kind === "simple" && character) {
+    form.set("target", fromPicture ? editTarget.trim() || edit.target : target);
+    if (kind === "simple" && fromPicture && look) {
+      form.set("picture", look.file);
+      form.set("role", "");
+    } else if (kind === "simple" && character) {
       form.set("picture", character.file);
       form.set("role", character.role);
+    }
+    if (kind === "simple") {
       form.set("resolution", resolution);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -278,6 +309,16 @@ export function Openjutsu() {
       form.set("style", faceStyle);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(chunkSeconds));
+    }
+    if (kind === "object") {
+      form.set("edit_mode", editMode);
+      form.set("target", editTarget.trim() || edit.target);
+      form.set("change_to", changeTo);
+      if (look && editMode !== "remove") form.set("picture", look.file);
+      form.set("biggest_only", String(biggestOnly));
+      form.set("resolution", resolution);
+      form.set("seed", String(seed));
+      form.set("clip_seconds", String(clipSeconds));
     }
     if (kind !== "mask") {
       form.set("motion", String(motion));
@@ -328,7 +369,7 @@ export function Openjutsu() {
           <span className="mark" aria-hidden>忍</span>
           <div>
             <h1>Openjutsu</h1>
-            <p>Swap the person in any video for your own character. Open weights, on your own GPU.</p>
+            <p>Swap the people or things in any video. Open weights, on your own GPU.</p>
           </div>
         </div>
       </header>
@@ -337,7 +378,7 @@ export function Openjutsu() {
         {MODES.map((m) => (
           <button
             key={m.id} className={`mode ${m.id === mode ? "active" : ""}`} disabled={!m.ready || !!run} aria-pressed={m.id === mode}
-            onClick={() => m.id !== "object" && setMode(m.id)}
+            onClick={() => setMode(m.id)}
           >
             <strong>{m.title}</strong>
             <span>{m.text}</span>
@@ -397,7 +438,41 @@ export function Openjutsu() {
             </div>
 
             <div className="panel">
-              <h2><span>2</span> {mode === "face" ? "Whose face" : mode === "simple" ? "Character" : "Characters"}</h2>
+              <h2><span>2</span> {mode === "object" ? "What to change" : mode === "face" ? "Whose face" : mode === "simple" ? "Character" : "Characters"}</h2>
+              {mode === "object" ? (
+                <div className="edit">
+                  <div className="segmented">
+                    {EDITS.map((e) => (
+                      <button key={e.id} className={e.id === editMode ? "on" : ""} onClick={() => setEditMode(e.id)}>{e.label}</button>
+                    ))}
+                  </div>
+                  <label>
+                    <span>{edit.what} <small>What SAM tracks, in English.{(editMode === "change" || editMode === "remove") && " Separate several with commas."}</small></span>
+                    <input value={editTarget} maxLength={100} placeholder={edit.target} onChange={(event) => setEditTarget(event.target.value)} />
+                  </label>
+                  {!fromPicture && <label>
+                    <span>{edit.toHint}</span>
+                    <input value={changeTo} maxLength={300} placeholder={`e.g. ${edit.to}`} onChange={(event) => setChangeTo(event.target.value)} />
+                  </label>}
+                  {editMode !== "remove" && (look ? (
+                    <div className="character look">
+                      <img src={look.url} alt="Reference picture" />
+                      <button className="remove" onClick={() => { URL.revokeObjectURL(look.url); setLook(null); }} aria-label="Remove picture">×</button>
+                    </div>
+                  ) : (
+                    <DropZone accept="image/*" onFiles={chooseLook} className="add">
+                      <strong>+</strong>
+                      <span>{fromPicture ? "The picture to copy" : editMode === "background" ? "Picture of the place (optional)" : "Picture of the new look (optional)"}</span>
+                    </DropZone>
+                  ))}
+                  <p className="hint">
+                    {editMode === "change" && "Only what SAM tracks is regenerated: hair, a top, a car. A picture of an outfit, hairstyle or product is copied onto it."}
+                    {editMode === "remove" && "What SAM tracks is erased and filled with what is around it. The camera, people and sound stay."}
+                    {editMode === "background" && "Everything except what SAM tracks becomes the new place; the camera movement stays."}
+                    {fromPicture && "The person in the video becomes the person in the picture: face, hair and outfit. The background, motion, camera and sound stay."}
+                  </p>
+                </div>
+              ) : (<>
               <div className="characters">
                 {shown.map((c, i) => (
                   <div className="character" key={c.url}>
@@ -445,6 +520,7 @@ export function Openjutsu() {
                   most screen time.
                 </p>
               )}
+              </>)}
             </div>
           </section>
 
@@ -458,18 +534,25 @@ export function Openjutsu() {
                 ))}
               </div>
             </div>}
+            {mode === "object" && editMode !== "background" && !fromPicture && (
+              <label className="setting toggle">
+                <span>Only the biggest one <small>Off: every match SAM finds changes (everyone&apos;s hair). On: only the one that fills the most of the frame.</small></span>
+                <input type="checkbox" checked={biggestOnly} onChange={(event) => setBiggestOnly(event.target.checked)} />
+                <i aria-hidden />
+              </label>
+            )}
             {mode === "simple" && (
               <div className="setting">
                 <span>What to replace <small>What SAM tracks, in English: person, cat, dog, or a short description such as “black and white cat”. The biggest match is replaced.</small></span>
                 <input className="target-input" aria-label="What to replace" placeholder={DEFAULT_TARGET} value={target} onChange={(event) => setTarget(event.target.value)} />
               </div>
             )}
-            {mode !== "face" && <label className="setting toggle">
+            {(mode === "simple" || mode === "advanced") && <label className="setting toggle">
               <span>Hat fix <small>Also replaces hats{mode === "advanced" ? " worn by the people being replaced" : ""} (about 45 s more per clip).</small></span>
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>}
-            {mode !== "face" && <label className="setting toggle">
+            {(mode === "simple" || mode === "advanced") && <label className="setting toggle">
               <span>No lip-sync <small>For songs the people in the video do not sing or talk along to, so the new {mode === "advanced" ? "people" : "person"} do{mode === "advanced" ? "" : "es"} not lip-sync them (about 30 s more per clip).</small></span>
               <input type="checkbox" checked={noLipSync} onChange={(event) => setNoLipSync(event.target.checked)} />
               <i aria-hidden />
@@ -482,7 +565,9 @@ export function Openjutsu() {
               </label>
             )}
             {mode !== "face" && <div className="setting">
-              <span>Mask margin <small>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</small></span>
+              <span>Mask margin <small>{mode === "object"
+                ? editMode === "background" ? "How far the new place reaches into the edge of what stays." : "Room around it for a bigger new shape and its shadow."
+                : <>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</>}</small></span>
               <MarginPicker value={margin} onChange={setMargin} />
             </div>}
             <details>
@@ -549,13 +634,13 @@ export function Openjutsu() {
             {formError && <p className="error">{formError}</p>}
             <div className="row">
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
-              <button className="primary" disabled={!video || !character || submitting} onClick={() => submit(mode === "face" ? "face" : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
+              <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "face" ? "face" : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
                 {submitting ? "Uploading…" : "Generate"}
               </button>
             </div>
-            <small>{clips
+            <small>{clips && ready
               ? mode === "face" ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}`
-              : `Add a video and ${mode === "face" ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
+              : `Add a video and ${mode === "object" ? "say what it becomes" : mode === "face" ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>
       )}
@@ -587,7 +672,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
         <video src={job.video.url} controls autoPlay playsInline />
         <div className="row">
           <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
-          <button className="secondary" onClick={onReset}>{run.kind === "face" ? "Fix another" : "New swap"}</button>
+          <button className="secondary" onClick={onReset}>{run.kind === "object" ? "New edit" : run.kind === "face" ? "Fix another" : "New swap"}</button>
         </div>
       </section>
     );
@@ -598,7 +683,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       <section className="panel">
         <h2>{status === "canceled" ? "Canceled" : status === "succeeded" ? "Finished without a video" : status === "expired" ? "Job no longer available" : "Something went wrong"}</h2>
         {job?.error && <p className="error">{job.error}</p>}
-        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "face" ? "openjutsu_face" : "h3_oneclick_swap"} folder.</p>}
+        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : "h3_oneclick_swap"} folder.</p>}
         <button className="secondary" onClick={onReset}>Back</button>
       </section>
     );

@@ -89,6 +89,13 @@ video { width: 100%; border-radius: 12px; background: #000; max-height: 420px; }
 .drop.add { aspect-ratio: 3 / 4; min-height: 0; }
 .drop.add strong { font-size: 32px; font-weight: 300; }
 
+.edit { display: grid; gap: 12px; }
+.edit label { display: grid; gap: 4px; font-size: 0.82em; color: var(--muted); }
+.edit label small { display: block; }
+.edit input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; font-size: 1rem; }
+.edit input:focus { outline: none; border-color: var(--accent); }
+.edit .look, .edit .drop.add { width: 50%; }
+
 .settings { gap: 12px; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .setting > span { display: grid; }

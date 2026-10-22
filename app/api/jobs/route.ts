@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { listModels, submitAdvanced, submitFace, submitMask, submitSimple } from "../../../lib/comfy.ts";
+import { listModels, submitAdvanced, submitFace, submitMask, submitObject, submitSimple } from "../../../lib/comfy.ts";
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
+import { EDIT_MODES, OBJECT_MARGINS, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, type Margin, type MotionSize, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
@@ -48,7 +49,24 @@ function parseRun(form: FormData) {
     throw new Error(`Clip length must be ${CLIP_SECONDS.min}-${CLIP_SECONDS.max} s.`);
   }
 
-  return { resolution: resolution as Resolution, motion: motion as MotionSize, ...parseMask(form), seed, clipSeconds };
+  return { resolution: resolution as Resolution, motion: motion as MotionSize, seed, clipSeconds };
+}
+
+function parseObject(form: FormData) {
+  const mode = String(form.get("edit_mode"));
+  if (!EDIT_MODES.includes(mode as EditMode)) throw new Error("Choose change, remove or background.");
+  const margin = String(form.get("margin") ?? "normal");
+  if (!Object.hasOwn(OBJECT_MARGINS, margin)) throw new Error("Choose a supported mask margin.");
+  const target = String(form.get("target") ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+  if (!target) throw new Error(mode === "background" ? "Say what stays, for example person." : "Say what to change, for example hair.");
+  const changeTo = String(form.get("change_to") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const entry = form.get("picture");
+  const picture = entry instanceof File && entry.size > 0 && mode !== "remove" ? parsePicture(entry) : null;
+  if (mode !== "remove" && !changeTo && !picture) throw new Error("Say what it becomes, or add a picture.");
+  const settings: ObjectSettings = {
+    mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", margin: margin as ObjectMargin, ...parseRun(form),
+  };
+  return { picture, settings };
 }
 
 function parseModel(form: FormData, available: { models: string[]; loras: string[] } | null): ModelSettings {
@@ -81,7 +99,7 @@ function parseFace(form: FormData) {
 
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
-  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form) };
+  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) };
   return { picture, settings };
 }
 
@@ -91,7 +109,7 @@ function parseAdvanced(form: FormData) {
   const maxQuality = form.get("max_quality") === "true";
   if (maxQuality && pictures.length !== 2) throw new Error("One pass per person needs exactly two characters.");
   const roles = form.getAll("role").map((role) => String(role).slice(0, 200));
-  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form) } };
+  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) } };
 }
 
 export async function POST(request: Request) {
@@ -112,6 +130,10 @@ export async function POST(request: Request) {
       const { pictures, maxQuality, settings } = parseAdvanced(form);
       const model = parseModel(form, await listModels());
       submit = () => submitAdvanced(video, section, pictures, settings, maxQuality, model);
+    } else if (mode === "object") {
+      const { picture, settings } = parseObject(form);
+      const model = parseModel(form, await listModels());
+      submit = () => submitObject(video, section, picture, settings, model);
     } else if (mode === "face") {
       const { picture, settings } = parseFace(form);
       const model = parseModel(form, await listModels());

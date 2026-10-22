@@ -1,4 +1,4 @@
-// Base model, LoRAs and steps, shared by every swap workflow. Each export has one "H3 Diffusion Model" UNETLoader
+// Base model, LoRAs and steps, shared by every swap and edit workflow. Each export has one "H3 Diffusion Model" UNETLoader
 // feeding one "DMAD LoRA" LoraLoaderModelOnly; the LoRA list replaces that node with a chain (or removes it).
 import { nodeByTitle } from "./advanced.ts";
 import { isLink, type ApiGraph } from "./simple.ts";
@@ -18,7 +18,7 @@ export const STRENGTH = { min: -4, max: 4 };
 // Mutates graph: the steps (on the Swap Plan, or the Schedule in Fix faces, which has no plan), the chosen diffusion model,
 // then the LoRAs in order into whatever read the old LoRA node.
 export function applyModel(graph: ApiGraph, settings: ModelSettings) {
-  const plans = Object.values(graph).filter((node) => node.class_type === "H3OneClickSwapPlan" || node.class_type === "H3AdvancedSwapPlan");
+  const plans = Object.values(graph).filter((node) => ["H3OneClickSwapPlan", "H3AdvancedSwapPlan", "H3ObjectSwapPlan"].includes(node.class_type));
   if (plans.length > 1) throw new Error(`Expected one Swap Plan node in the workflow, found ${plans.length}.`);
   (plans[0] ?? graph[nodeByTitle(graph, "Schedule")]).inputs.steps = settings.steps;
   const unet = nodeByTitle(graph, "H3 Diffusion Model");
