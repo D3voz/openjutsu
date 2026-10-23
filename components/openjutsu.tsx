@@ -147,7 +147,7 @@ export function Openjutsu() {
   const [margin, setMargin] = useState<Margin>("normal");
   const [target, setTarget] = useState(DEFAULT_TARGET);
   const [editMode, setEditMode] = useState<EditTab>("change");
-  const [editTarget, setEditTarget] = useState("");
+  const [editTarget, setEditTarget] = useState(EDITS[0].target);
   const [changeTo, setChangeTo] = useState("");
   const [look, setLook] = useState<{ file: File; url: string } | null>(null);
   const [biggestOnly, setBiggestOnly] = useState(false);
@@ -514,7 +514,12 @@ export function Openjutsu() {
                 <div className="edit">
                   <div className="segmented">
                     {EDITS.map((e) => (
-                      <button key={e.id} className={e.id === editMode ? "on" : ""} onClick={() => setEditMode(e.id)}>{e.label}</button>
+                      <button key={e.id} className={e.id === editMode ? "on" : ""} onClick={() => {
+                        // Each tab's fields mean something else: "top, pants" left over from Change made From picture swap only the top.
+                        // The default goes in as a value, not a placeholder, so an untouched box shows what SAM tracks.
+                        if (e.id !== editMode) { setEditTarget(e.target); setChangeTo(""); }
+                        setEditMode(e.id);
+                      }}>{e.label}</button>
                     ))}
                   </div>
                   <label>
