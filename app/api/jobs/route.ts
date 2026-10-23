@@ -137,7 +137,7 @@ function parseAdvanced(form: FormData) {
   const maxQuality = form.get("max_quality") === "true";
   if (maxQuality && pictures.length !== 2) throw new Error("One pass per person needs exactly two characters.");
   const roles = form.getAll("role").map((role) => String(role).slice(0, 200));
-  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) } };
+  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", montage: form.get("montage") === "true", ...parseRun(form), ...parseMask(form) } };
 }
 
 export async function POST(request: Request) {

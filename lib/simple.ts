@@ -142,10 +142,15 @@ export function setMotionSize(graph: ApiGraph, size: MotionSize) {
   if (!nodes.length) throw new Error("Expected a motion reference resize in the workflow.");
   for (const node of nodes) node.inputs.largest_size = size;
   if (size === MOTION_SIZES[0]) return;
+  suffixRunName(graph, "motion_run_name", `_motion${size}`, "Run name for this motion reference size");
+}
+
+// Settings the Swap Plan's run name does not know get their own run, so a rerun never resumes from clips made without them.
+export function suffixRunName(graph: ApiGraph, id: string, suffix: string, title: string) {
   const plans = Object.values(graph).filter((node) => node.class_type === "MiniMaxH3ChainPlanModern");
   if (plans.length !== 1) throw new Error(`Expected one Production Plan node in the workflow, found ${plans.length}.`);
-  graph.motion_run_name = { class_type: "StringConcatenate", inputs: { string_a: plans[0].inputs.run_name, string_b: `_motion${size}`, delimiter: "" }, _meta: { title: "Run name for this motion reference size" } };
-  plans[0].inputs.run_name = ["motion_run_name", 0];
+  graph[id] = { class_type: "StringConcatenate", inputs: { string_a: plans[0].inputs.run_name, string_b: suffix, delimiter: "" }, _meta: { title } };
+  plans[0].inputs.run_name = [id, 0];
 }
 
 export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGraph {

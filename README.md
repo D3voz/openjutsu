@@ -77,6 +77,8 @@ On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or star
 
 A 6 s clip at 480p takes about 6–13 minutes on a 4060 Ti, most of it in H3 sampling. 736p is the default; 1080p is about 2.5× slower than 736p and needs much more memory. Custom sets an exact width × height from 256 to 2048 px a side (rounded to 32); the video is scaled and centre-cropped to that shape first. It needs the `short_edge` input of the H3 Swap Plan nodes in comfyui-h3-oneclick-swap.
 
+Advanced motion transfer has a **Montage** tab for edited clips where different people take turns within one shot without a hard cut (whip pans, selfie handovers, travel montages). The shot list and H3 are told when each person is on screen, so nobody turns into someone else. It needs the `timing` input of the pack's Clip Shots and Fill Shots nodes. Write roles as "who - looks" ("the dancer - white polo, jeans"): only the part before " - " reaches H3, and clothes named there are drawn on the new person.
+
 ## Tips
 
 - Only the main person is regenerated; anyone else in the video stays as they are.

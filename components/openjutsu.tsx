@@ -141,6 +141,7 @@ export function Openjutsu() {
   const player = useRef<HTMLVideoElement>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [maxQuality, setMaxQuality] = useState(false);
+  const [montage, setMontage] = useState(false);
   const [resolution, setResolution] = useState<Resolution>("736p");
   const [customSize, setCustomSize] = useState<Size>({ width: 1248, height: 736 });
   const [hatFix, setHatFix] = useState(false);
@@ -347,6 +348,7 @@ export function Openjutsu() {
         form.append("role", c.role);
       }
       form.set("max_quality", String(kind === "advanced_maxq"));
+      form.set("montage", String(montage));
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -501,6 +503,19 @@ export function Openjutsu() {
                   ))}
                 </div>
               )}
+              {mode === "advanced" && (<>
+                <div className="segmented">
+                  <button className={montage ? "" : "on"} onClick={() => setMontage(false)}>Standard</button>
+                  <button className={montage ? "on" : ""} onClick={() => setMontage(true)}>Montage</button>
+                </div>
+                {montage && (
+                  <p className="hint">
+                    For edited clips where different people take turns within one shot, with no hard cut between them: whip pans,
+                    selfie handovers, travel and &ldquo;vibe&rdquo; montages. H3 is told when each person is on screen, so nobody turns
+                    into someone else. Use Standard for everything else.
+                  </p>
+                )}
+              </>)}
               {colorFix ? (<>
                 <label className="setting toggle">
                   <span>Detail contrast <small>Softens H3&apos;s crunchy fine detail and over-sharpened skin, without blurring edges.</small></span>
@@ -573,7 +588,7 @@ export function Openjutsu() {
                       <input
                         value={c.role}
                         maxLength={200}
-                        placeholder={i === 0 ? "e.g. the singer" : "e.g. the drummer"}
+                        placeholder={i === 0 ? "e.g. the singer - red dress" : "e.g. the drummer - black cap"}
                         onChange={(event) => setRole(i, event.target.value)}
                       />
                     </label>}
@@ -600,7 +615,7 @@ export function Openjutsu() {
                 <p className="hint">
                   The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
                   Mirrors and reflections do not work yet.
-                  To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes.
+                  To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes; their look can go after &ldquo; - &rdquo; (&ldquo;the singer - red dress&rdquo;).
                 </p>
               ) : (
                 <p className="hint">
