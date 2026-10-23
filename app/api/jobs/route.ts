@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { listModels, submitAdvanced, submitFace, submitMask, submitObject, submitSimple } from "../../../lib/comfy.ts";
+import { listModels, submitAdvanced, submitColor, submitFace, submitMask, submitObject, submitSimple } from "../../../lib/comfy.ts";
+import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type ToneMode, type ToneSettings, type ToneValue } from "../../../lib/color.ts";
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
@@ -97,6 +98,27 @@ function parseFace(form: FormData) {
   return { picture, settings };
 }
 
+// A step without its fields is turned off.
+function parseColor(form: FormData): ColorSettings {
+  const detailEntry = form.get("detail");
+  const detail = detailEntry === null ? null : Number(detailEntry);
+  if (detail !== null && !(detail >= DETAIL.min && detail <= DETAIL.max)) throw new Error(`Detail contrast must be ${DETAIL.min} to ${DETAIL.max}.`);
+  const mode = form.get("tone_mode");
+  let tone: ToneSettings | null = null;
+  if (mode !== null) {
+    if (!TONE_MODES.includes(mode as ToneMode)) throw new Error("Choose a supported tone mapper mode.");
+    tone = { ...DEFAULT_TONE, mode: mode as ToneMode };
+    for (const key of Object.keys(TONE_RANGES) as ToneValue[]) {
+      const range = TONE_RANGES[key];
+      const value = Number(form.get(`tone_${key}`));
+      if (!(value >= range.min && value <= range.max)) throw new Error(`${range.label} must be ${range.min} to ${range.max}.`);
+      tone[key] = value;
+    }
+  }
+  if (detail === null && tone === null) throw new Error("Turn on detail contrast, the tone mapper or both.");
+  return { detail, tone };
+}
+
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
   const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) };
@@ -138,6 +160,9 @@ export async function POST(request: Request) {
       const { picture, settings } = parseFace(form);
       const model = parseModel(form, await listModels());
       submit = () => submitFace(video, section, picture, settings, model);
+    } else if (mode === "color") {
+      const settings = parseColor(form);
+      submit = () => submitColor(video, section, settings);
     } else {
       throw new Error("Unknown mode.");
     }

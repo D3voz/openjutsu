@@ -7,6 +7,7 @@ import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./adva
 import { applyModel, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
+import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
 
 export type PublicJob = {
   id: string;
@@ -35,7 +36,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "face"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "face", "color"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -115,6 +116,15 @@ export async function submitFace(video: File, section: Section, picture: File, s
   return publicJob(await comfy.submit(workflow));
 }
 
+export async function submitColor(video: File, section: Section, settings: ColorSettings) {
+  const comfy = client();
+  const graph = pruneColor(await loadGraph("color"), settings);
+  setSection(graph, nodeByTitle(graph, COLOR_VIDEO), section);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(nodeByTitle(graph, COLOR_VIDEO), "video", await upload(comfy, video));
+  return publicJob(await comfy.submit(workflow));
+}
+
 export async function submitMask(video: File, section: Section, hatFix: boolean, margin: Margin, target: string) {
   const comfy = client();
   const graph = pruneMask(await loadGraph("mask"), hatFix, margin, target);
@@ -124,12 +134,13 @@ export async function submitMask(video: File, section: Section, hatFix: boolean,
   return publicJob(await comfy.submit(workflow));
 }
 
+const COMFYUI_URL = process.env.COMFYUI_URL || "http://127.0.0.1:8188";
+
 // The proxy has no model listing, so the pickers read ComfyUI's own node info. COMFYUI_URL points at ComfyUI itself
 // (not the proxy); without it, or when it does not answer, the page falls back to typed file names.
 export async function listModels(): Promise<{ models: string[]; loras: string[] } | null> {
-  const base = process.env.COMFYUI_URL || "http://127.0.0.1:8188";
   const options = async (node: string, input: string) => {
-    const info = await (await fetch(`${base}/object_info/${node}`, { signal: AbortSignal.timeout(5000) })).json();
+    const info = await (await fetch(`${COMFYUI_URL}/object_info/${node}`, { signal: AbortSignal.timeout(5000) })).json();
     return info[node].input.required[input][0] as string[];
   };
   try {
@@ -137,6 +148,17 @@ export async function listModels(): Promise<{ models: string[]; loras: string[] 
     return { models, loras };
   } catch {
     return null;
+  }
+}
+
+// Orion4D's saved DCTL Tone Mapper presets, read from ComfyUI like the model lists; empty when it does not answer.
+export async function listTonePresets(): Promise<{ name: string; settings: Record<string, unknown> }[]> {
+  const get = async (path: string) => (await fetch(`${COMFYUI_URL}/orion4d_fxmax/${path}`, { signal: AbortSignal.timeout(5000) })).json();
+  try {
+    const { presets } = await get("presets/color_fx_dctl_tone_mapper");
+    return await Promise.all((presets as string[]).map(async (name) => ({ name, settings: (await get(`preset/color_fx_dctl_tone_mapper/${encodeURIComponent(name)}`)).settings })));
+  } catch {
+    return [];
   }
 }
 

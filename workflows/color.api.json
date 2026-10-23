@@ -1,0 +1,75 @@
+{
+  "1": {
+    "inputs": {
+      "video": "",
+      "force_rate": 24,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    },
+    "class_type": "VHS_LoadVideo",
+    "_meta": {
+      "title": "Video to fix"
+    }
+  },
+  "2": {
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "detail_contrast": -0.2,
+      "blur_radius": 24,
+      "blur_sigma": 8.0,
+      "temporal_mode": "per_frame",
+      "chunk_size": 8
+    },
+    "class_type": "ImageDetailContrast",
+    "_meta": {
+      "title": "Detail contrast"
+    }
+  },
+  "3": {
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "preset": "Openjutsu",
+      "raw_settings": ""
+    },
+    "class_type": "Orion4D_FXMax_DCTLToneMapper",
+    "_meta": {
+      "title": "Tone mapper"
+    }
+  },
+  "4": {
+    "inputs": {
+      "images": [
+        "3",
+        0
+      ],
+      "audio": [
+        "1",
+        2
+      ],
+      "frame_rate": 24,
+      "loop_count": 0,
+      "filename_prefix": "openjutsu_color/color",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true
+    },
+    "class_type": "VHS_VideoCombine",
+    "_meta": {
+      "title": "Fixed video"
+    }
+  }
+}

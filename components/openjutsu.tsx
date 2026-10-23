@@ -9,10 +9,13 @@ import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 import type { EditMode } from "../lib/object.ts";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
+import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
 
 type Character = { file: File; url: string; role: string };
-type Mode = "simple" | "advanced" | "object" | "face";
-type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "face";
+type Mode = "simple" | "advanced" | "object" | "post";
+type Post = "face" | "color";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "face" | "color";
+type TonePreset = { name: string; settings: Record<string, unknown> };
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number };
 // pass counts the sampler runs started so far: Fix faces samples its chunks one after another in the same node.
 type Progress = NodeInfo & { step: number | null; steps: number | null; pass: number };
@@ -24,8 +27,10 @@ const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
   { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: true },
   { id: "object", title: "Object swap", text: "Change hair, clothes, a prop or the background, or remove something.", ready: true },
-  { id: "face", title: "Fix faces", text: "Post-processing: redraw a person's face in a finished video from their photo.", ready: true },
+  { id: "post", title: "Post-processing", text: "Fix the faces or the colours of a finished video.", ready: true },
 ] as const;
+
+const POSTS: { id: Post; label: string }[] = [{ id: "face", label: "Fix faces" }, { id: "color", label: "Fix colours" }];
 
 const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
   photo: { label: "Match the photo", hint: "The face is redrawn from the photo: the closest likeness, but H3 makes up its own expressions and mouth movements." },
@@ -88,6 +93,9 @@ function clipShare(progress: Progress) {
   return 0.05;
 }
 
+// Rough share of a colour fix done when each node starts; the tone mapper runs on the CPU and takes longest.
+const COLOR_SHARE: Record<string, number> = { ImageDetailContrast: 0.15, Orion4D_FXMax_DCTLToneMapper: 0.3, VHS_VideoCombine: 0.9 };
+
 // A picker over ComfyUI's files, or a text field when the list could not be read.
 function FilePicker({ value, options, onChange, label }: { value: string; options: string[]; onChange: (value: string) => void; label: string }) {
   if (!options.length) return <input className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />;
@@ -143,6 +151,14 @@ export function Openjutsu() {
   const [changeTo, setChangeTo] = useState("");
   const [look, setLook] = useState<{ file: File; url: string } | null>(null);
   const [biggestOnly, setBiggestOnly] = useState(false);
+  const [post, setPost] = useState<Post>("face");
+  const [detailOn, setDetailOn] = useState(true);
+  const [detail, setDetail] = useState(DETAIL.default);
+  const [toneOn, setToneOn] = useState(true);
+  const [tone, setTone] = useState<ToneSettings>(DEFAULT_TONE);
+  // "" once a value is changed by hand
+  const [tonePreset, setTonePreset] = useState(DEFAULT_PRESET);
+  const [presets, setPresets] = useState<TonePreset[]>([]);
   const [faceStyle, setFaceStyle] = useState<FaceStyle>("photo");
   const [chunkSeconds, setChunkSeconds] = useState(CHUNK_SECONDS.default);
   const [seed, setSeed] = useState(0);
@@ -166,6 +182,12 @@ export function Openjutsu() {
 
   useEffect(() => {
     fetch("/api/models").then((response) => response.json()).then(setFiles, () => {});
+    // Orion's own copy of the default preset wins over the built-in values once it has loaded.
+    fetch("/api/presets").then((response) => response.json()).then(({ tone }: { tone: TonePreset[] }) => {
+      setPresets(tone);
+      const saved = tone.find((p) => p.name === DEFAULT_PRESET);
+      if (saved) setTone(toneFromPreset(saved.settings));
+    }, () => {});
   }, []);
 
   useEffect(() => {
@@ -226,8 +248,20 @@ export function Openjutsu() {
   const whole = !video?.duration || (part.start === 0 && part.length >= video.duration);
   const place = whole ? "Whole" : PLACES.slice(1).find((p) => Math.abs(placeStart(p, video!.duration, part.length) - part.start) < 0.05);
 
+  const faceFix = mode === "post" && post === "face";
+  const colorFix = mode === "post" && post === "color";
+  // Orion's saved presets, with zuanfilm's H3 preset first when Orion does not have it.
+  const presetOptions: TonePreset[] = presets.some((p) => p.name === DEFAULT_PRESET) ? presets : [{ name: DEFAULT_PRESET, settings: DEFAULT_TONE }, ...presets];
+
+  function choosePreset(name: string) {
+    const preset = presetOptions.find((p) => p.name === name);
+    if (!preset) return;
+    setTone(toneFromPreset(preset.settings));
+    setTonePreset(name);
+  }
+
   // Simple mode and Fix faces use only the first character; the others are kept for switching back.
-  const single = mode === "simple" || mode === "face";
+  const single = mode === "simple" || mode === "post";
   const limit = single ? 1 : MAX_CHARACTERS;
   const shown = characters.slice(0, limit);
   const character = characters[0] ?? null;
@@ -253,10 +287,10 @@ export function Openjutsu() {
     setCharacters(characters.map((c, i) => (i === index ? { ...c, role } : c)));
   }
 
-  const clips = !video?.duration ? 0 : mode === "face" ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
+  const clips = !video?.duration ? 0 : faceFix ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
   const edit = EDITS.find((e) => e.id === editMode)!;
   const fromPicture = mode === "object" && editMode === "picture";
-  const ready = mode === "object"
+  const ready = colorFix ? detailOn || toneOn : mode === "object"
     ? editMode === "remove" || (fromPicture ? !!look : !!changeTo.trim() || !!look)
     : !!character;
 
@@ -310,6 +344,13 @@ export function Openjutsu() {
       form.set("seed", String(seed));
       form.set("clip_seconds", String(chunkSeconds));
     }
+    if (kind === "color") {
+      if (detailOn) form.set("detail", String(detail));
+      if (toneOn) {
+        form.set("tone_mode", tone.mode);
+        for (const key of Object.keys(TONE_RANGES) as ToneValue[]) form.set(`tone_${key}`, String(tone[key]));
+      }
+    }
     if (kind === "object") {
       form.set("edit_mode", editMode);
       form.set("target", editTarget.trim() || edit.target);
@@ -320,7 +361,7 @@ export function Openjutsu() {
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
-    if (kind !== "mask") {
+    if (kind !== "mask" && kind !== "color") {
       form.set("motion", String(motion));
       form.set("steps", String(steps));
       form.set("model", model);
@@ -438,8 +479,38 @@ export function Openjutsu() {
             </div>
 
             <div className="panel">
-              <h2><span>2</span> {mode === "object" ? "What to change" : mode === "face" ? "Whose face" : mode === "simple" ? "Character" : "Characters"}</h2>
-              {mode === "object" ? (
+              <h2><span>2</span> {mode === "object" ? "What to change" : colorFix ? "Colour fix" : faceFix ? "Whose face" : mode === "simple" ? "Character" : "Characters"}</h2>
+              {mode === "post" && (
+                <div className="segmented">
+                  {POSTS.map((p) => (
+                    <button key={p.id} className={p.id === post ? "on" : ""} onClick={() => setPost(p.id)}>{p.label}</button>
+                  ))}
+                </div>
+              )}
+              {colorFix ? (<>
+                <label className="setting toggle">
+                  <span>Detail contrast <small>Softens H3&apos;s crunchy fine detail and over-sharpened skin, without blurring edges.</small></span>
+                  <input type="checkbox" checked={detailOn} onChange={(event) => setDetailOn(event.target.checked)} />
+                  <i aria-hidden />
+                </label>
+                {detailOn && <label className="setting">
+                  <span>Amount <small>{detail.toFixed(2)}: below 0 softens, above 0 sharpens.</small></span>
+                  <input type="range" min={DETAIL.min} max={DETAIL.max} step={0.01} value={detail} onChange={(event) => setDetail(Number(event.target.value))} />
+                </label>}
+                <label className="setting toggle">
+                  <span>Tone mapper <small>Orion4D DCTL Tone Mapper, a colour grade over every frame. {DEFAULT_PRESET} lifts the blacks, softens contrast and highlights and takes a little saturation out.</small></span>
+                  <input type="checkbox" checked={toneOn} onChange={(event) => setToneOn(event.target.checked)} />
+                  <i aria-hidden />
+                </label>
+                {toneOn && <div className="setting">
+                  <span>Preset <small>Orion&apos;s saved presets. Change the values under Settings to make your own.</small></span>
+                  <select className="file-name" aria-label="Tone mapper preset" value={tonePreset} onChange={(event) => choosePreset(event.target.value)}>
+                    {!tonePreset && <option value="">Custom</option>}
+                    {presetOptions.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
+                  </select>
+                </div>}
+                <p className="hint">No H3 run: the video is only filtered, so it keeps its frames and soundtrack. The detail contrast runs first, then the tone mapper.</p>
+              </>) : mode === "object" ? (
                 <div className="edit">
                   <div className="segmented">
                     {EDITS.map((e) => (
@@ -478,7 +549,7 @@ export function Openjutsu() {
                   <div className="character" key={c.url}>
                     <img src={c.url} alt={`Character ${i + 1}`} />
                     <button className="remove" onClick={() => removeCharacter(i)} aria-label={`Remove character ${i + 1}`}>×</button>
-                    {mode !== "face" && <label>
+                    {mode !== "post" && <label>
                       <span>Who do they replace? (optional)</span>
                       <input
                         value={c.role}
@@ -496,7 +567,7 @@ export function Openjutsu() {
                   </DropZone>
                 )}
               </div>
-              {mode === "face" ? (<>
+              {faceFix ? (<>
                 <div className="segmented">
                   {(Object.keys(FACE_STYLE_TEXT) as FaceStyle[]).map((f) => (
                     <button key={f} className={f === faceStyle ? "on" : ""} onClick={() => setFaceStyle(f)}>{FACE_STYLE_TEXT[f].label}</button>
@@ -524,9 +595,32 @@ export function Openjutsu() {
             </div>
           </section>
 
+          {colorFix ? toneOn && (
+            <section className="panel settings">
+              <h2><span>3</span> Settings <small>{tonePreset || "Custom"}</small></h2>
+              <div className="setting">
+                <span>Tone mapper mode</span>
+                <div className="segmented">
+                  {TONE_MODES.map((m) => (
+                    <button key={m} className={m === tone.mode ? "on" : ""} onClick={() => { setTone({ ...tone, mode: m }); setTonePreset(""); }}>{m}</button>
+                  ))}
+                </div>
+              </div>
+              {(Object.keys(TONE_RANGES) as ToneValue[]).map((key) => (
+                <label className="setting" key={key}>
+                  <span>{TONE_RANGES[key].label} <small>{tone[key].toFixed(2)}</small></span>
+                  <input
+                    type="range" min={TONE_RANGES[key].min} max={TONE_RANGES[key].max} step={TONE_RANGES[key].step} value={tone[key]}
+                    onChange={(event) => { setTone({ ...tone, [key]: Number(event.target.value) }); setTonePreset(""); }}
+                  />
+                </label>
+              ))}
+              <p className="hint">Strength mixes the grade with the original: 0.3 is 30% of it. Pick the preset again to undo your changes.</p>
+            </section>
+          ) : (
           <section className="panel settings">
             <h2><span>3</span> Settings</h2>
-            {mode !== "face" && <div className="setting">
+            {mode !== "post" && <div className="setting">
               <span>Resolution</span>
               <div className="segmented">
                 {RESOLUTIONS.map((r) => (
@@ -564,7 +658,7 @@ export function Openjutsu() {
                 <i aria-hidden />
               </label>
             )}
-            {mode !== "face" && <div className="setting">
+            {mode !== "post" && <div className="setting">
               <span>Mask margin <small>{mode === "object"
                 ? editMode === "background" ? "How far the new place reaches into the edge of what stays." : "Room around it for a bigger new shape and its shadow."
                 : <>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</>}</small></span>
@@ -579,7 +673,7 @@ export function Openjutsu() {
                   <button onClick={() => setSeed(Math.floor(Math.random() * MAX_SEED))} aria-label="Random seed">🎲</button>
                 </div>
               </div>
-              {mode === "face" ? (
+              {faceFix ? (
                 <div className="setting">
                   <span>Chunk length <small>{chunkSeconds.toFixed(1)} s of face per H3 generation; chunks overlap by 1 s and are crossfaded.</small></span>
                   <input type="range" min={CHUNK_SECONDS.min} max={CHUNK_SECONDS.max} step={0.5} value={chunkSeconds} onChange={(event) => setChunkSeconds(Number(event.target.value))} />
@@ -590,7 +684,7 @@ export function Openjutsu() {
                   <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
                 </div>
               )}
-              {mode !== "face" && <div className="setting">
+              {mode !== "post" && <div className="setting">
                 <span>Motion reference <small>Size of the grey figures H3 copies the motion from. Bigger follows the source poses a bit more closely; sampling takes about a third longer at 768 px and about 2.4× as long at 1376 px.</small></span>
                 <div className="segmented">
                   {MOTION_SIZES.map((m) => (
@@ -629,18 +723,21 @@ export function Openjutsu() {
               </div>
             </details>
           </section>
+          )}
 
           <div className="go">
             {formError && <p className="error">{formError}</p>}
             <div className="row">
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
-              <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "face" ? "face" : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
+              <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
                 {submitting ? "Uploading…" : "Generate"}
               </button>
             </div>
-            <small>{clips && ready
-              ? mode === "face" ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}`
-              : `Add a video and ${mode === "object" ? "say what it becomes" : mode === "face" ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
+            <small>{colorFix
+              ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
+              : clips && ready
+              ? faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}`
+              : `Add a video and ${mode === "object" ? "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>
       )}
@@ -672,7 +769,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
         <video src={job.video.url} controls autoPlay playsInline />
         <div className="row">
           <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
-          <button className="secondary" onClick={onReset}>{run.kind === "object" ? "New edit" : run.kind === "face" ? "Fix another" : "New swap"}</button>
+          <button className="secondary" onClick={onReset}>{run.kind === "object" ? "New edit" : run.kind === "face" || run.kind === "color" ? "Fix another" : "New swap"}</button>
         </div>
       </section>
     );
@@ -683,17 +780,19 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       <section className="panel">
         <h2>{status === "canceled" ? "Canceled" : status === "succeeded" ? "Finished without a video" : status === "expired" ? "Job no longer available" : "Something went wrong"}</h2>
         {job?.error && <p className="error">{job.error}</p>}
-        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : "h3_oneclick_swap"} folder.</p>}
+        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : run.kind === "color" ? "openjutsu_color" : "h3_oneclick_swap"} folder.</p>}
         <button className="secondary" onClick={onReset}>Back</button>
       </section>
     );
   }
 
   const face = run.kind === "face";
+  const color = run.kind === "color";
   const sampling = progress?.classType === "SamplerCustomAdvanced";
   const chunk = Math.min(progress?.pass ?? 0, run.clips);
   let fraction = 0;
-  if (face) fraction = sampling ? 0.1 + 0.85 * (chunk - 1 + (progress!.steps ? (progress!.step ?? 0) / progress!.steps : 0)) / run.clips : chunk ? 0.97 : 0.05;
+  if (color) fraction = COLOR_SHARE[progress?.classType ?? ""] ?? 0.05;
+  else if (face) fraction = sampling ? 0.1 + 0.85 * (chunk - 1 + (progress!.steps ? (progress!.step ?? 0) / progress!.steps : 0)) / run.clips : chunk ? 0.97 : 0.05;
   else if (mask) fraction = progress?.classType === "SAM3_VideoTrack" && progress.steps ? (progress.step ?? 0) / progress.steps : 0;
   else if (progress?.classType === "MiniMaxH3ChainAssemble") fraction = 0.99;
   else if (progress?.clip) fraction = (progress.clip - 1 + clipShare(progress)) / clips;
@@ -701,7 +800,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
   return (
     <section className="panel progress">
       <div className="row">
-        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : mask ? "Checking the mask"
+        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : mask ? "Checking the mask" : color ? "Fixing the colours"
           : face ? (sampling ? `Chunk ${chunk} of up to ${run.clips}` : chunk ? "Pasting the face back" : "Tracking the face")
           : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
@@ -713,7 +812,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       </p>
       {preview && <img className="preview" src={preview} alt="Mask preview: white areas are regenerated" />}
       {streamError && <p className="error">{streamError}</p>}
-      <p className="hint">{mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
+      <p className="hint">{mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
       <button className="secondary" onClick={onCancel}>Cancel</button>
     </section>
   );
