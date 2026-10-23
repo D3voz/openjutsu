@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { nodeDescriber } from "../lib/progress.ts";
-import { MASK_NODES, NODES, canvasSize, pruneMask, pruneSimple, setSection, type ApiGraph, type SimpleSettings } from "../lib/simple.ts";
+import { MASK_NODES, NODES, canvasSize, isLink, pruneMask, pruneSimple, setSection, type ApiGraph, type SimpleSettings } from "../lib/simple.ts";
 
 const isLinkTo = (g: ApiGraph, value: unknown, type: string) => Array.isArray(value) && g[value[0] as string]?.class_type === type;
 const load = (name: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/${name}.api.json`, import.meta.url), "utf8"));
@@ -34,13 +34,16 @@ test("without hat fix the hat nodes go and the grow mask reads the people mask",
   assert.ok(graph[NODES.hat[0]], "the source graph is not modified");
 });
 
-test("a custom resolution is the Swap Plan's short edge; the canvas keeps the source shape", () => {
-  const plan = pruneSimple(graph, { ...settings(true), resolution: 1000 })[NODES.plan].inputs;
-  assert.deepEqual([plan.short_edge, plan.resolution], [1000, graph[NODES.plan].inputs.resolution]);
-  assert.equal(pruneSimple(graph, settings(true))[NODES.plan].inputs.short_edge, undefined);
+test("a custom size crops the source frames to that canvas before anything reads them", () => {
+  const frameReaders = (g: ApiGraph, id: string) => Object.values(g).flatMap((node) => Object.values(node.inputs)).filter((v) => isLink(v) && v[0] === id && v[1] === 0).length;
+  const pruned = pruneSimple(graph, { ...settings(true), resolution: { width: 1248, height: 736 } });
+  assert.deepEqual(pruned.custom_size.inputs, { image: [NODES.video, 0], upscale_method: "bilinear", width: 1248, height: 736, crop: "center" });
+  assert.equal(frameReaders(pruned, NODES.video), 1);
+  assert.equal(frameReaders(pruned, "custom_size"), frameReaders(graph, NODES.video));
+  assert.deepEqual([pruned[NODES.plan].inputs.short_edge, pruned[NODES.video].inputs.audio], [736, graph[NODES.video].inputs.audio]);
+  assert.equal(pruneSimple(graph, settings(true)).custom_size, undefined);
   assert.deepEqual(canvasSize(640, 360, "736p"), [1312, 736]);
-  assert.deepEqual(canvasSize(640, 360, 1000), [1792, 992]);
-  assert.deepEqual(canvasSize(1080, 1920, 1000), [992, 1792]);
+  assert.deepEqual(canvasSize(1080, 1920, "480p"), [480, 864]);
 });
 
 test("a part of the video becomes VHS's skip and frame cap; the whole video keeps 0", () => {

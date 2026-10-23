@@ -31,7 +31,8 @@ test("change with a picture keeps the graph and sets the plan", () => {
   assert.equal(node(pruned, "Grow mask").inputs.expand, 40);
   assert.equal(node(pruned, "Tracked area").inputs.max_people, 1);
   assert.ok(node(graph, OBJECT_PICTURE), "the source graph is not modified");
-  assert.equal(node(pruneObject(graph, true, { ...settings("change"), resolution: 640 }), "Object Swap Plan (what to change)").inputs.short_edge, 640);
+  const custom = pruneObject(graph, true, { ...settings("change"), resolution: { width: 640, height: 960 } });
+  assert.deepEqual([node(custom, "Object Swap Plan (what to change)").inputs.short_edge, custom.custom_size.inputs.image], [640, [nodeByTitle(custom, OBJECT_VIDEO), 0]]);
 });
 
 test("several things are tracked together, one of each when only the biggest is kept", () => {

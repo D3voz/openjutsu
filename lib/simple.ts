@@ -6,19 +6,30 @@ export type ApiNode = { class_type: string; inputs: Record<string, unknown>; _me
 export type ApiGraph = Record<string, ApiNode>;
 
 export const RESOLUTIONS = ["480p", "576p", "736p", "768p", "1080p"] as const;
-// A number is a custom short edge in pixels; the Swap Plan rounds the canvas to 32 and keeps the source shape either way.
-export type Resolution = (typeof RESOLUTIONS)[number] | number;
-export const SHORT_EDGE = { min: 256, max: 2048, step: 32, default: 960 };
+export type Preset = (typeof RESOLUTIONS)[number];
+export type Size = { width: number; height: number };
+// A preset is the short edge and keeps the source shape; a custom size is the exact canvas.
+export type Resolution = Preset | Size;
+export const CUSTOM_SIZE = { min: 256, max: 2048, step: 32 };
 
 // Canvas the Swap Plan makes for a source of this size, as its plan_clips does.
-export function canvasSize(width: number, height: number, resolution: Resolution) {
-  const scale = (typeof resolution === "number" ? resolution : parseInt(resolution)) / Math.min(width, height);
+export function canvasSize(width: number, height: number, preset: Preset) {
+  const scale = parseInt(preset) / Math.min(width, height);
   return [width, height].map((side) => Math.max(32, Math.round((side * scale) / 32) * 32));
 }
 
-export function setResolution(plan: Record<string, unknown>, resolution: Resolution) {
-  if (typeof resolution === "number") plan.short_edge = resolution;
-  else plan.resolution = resolution;
+// A custom size scales and centre-crops the source frames before anything reads them, so SAM, the masks,
+// the motion reference and the generation share that shape; the Production Plan alone would crop the frames but stretch the mask.
+export function setResolution(graph: ApiGraph, plan: string, video: string, resolution: Resolution) {
+  if (typeof resolution === "string") {
+    graph[plan].inputs.resolution = resolution;
+    return;
+  }
+  for (const node of Object.values(graph)) {
+    for (const [name, value] of Object.entries(node.inputs)) if (isLink(value) && value[0] === video && value[1] === 0) node.inputs[name] = ["custom_size", 0];
+  }
+  graph.custom_size = { class_type: "ImageScale", inputs: { image: [video, 0], upscale_method: "bilinear", width: resolution.width, height: resolution.height, crop: "center" }, _meta: { title: "Custom size (centre crop)" } };
+  graph[plan].inputs.short_edge = Math.min(resolution.width, resolution.height);
 }
 
 export const CLIP_SECONDS = { min: 2.5, max: 15, default: 6 };
@@ -142,7 +153,7 @@ export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGrap
   if (!settings.noLipSync) dropNoLipSync(graph);
   setMotionSize(graph, settings.motion);
   const plan = graph[NODES.plan].inputs;
-  setResolution(plan, settings.resolution);
+  setResolution(graph, NODES.plan, NODES.video, settings.resolution);
   plan.seed = settings.seed;
   plan.clip_seconds = settings.clipSeconds;
   plan.roles = settings.role.replace(/\s+/g, " ").trim();

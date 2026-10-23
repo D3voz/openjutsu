@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "rea
 import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
-import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, SHORT_EDGE, canvasSize, type Margin, type MotionSize, type Resolution, type Section } from "../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 import type { EditMode } from "../lib/object.ts";
@@ -142,7 +142,7 @@ export function Openjutsu() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [maxQuality, setMaxQuality] = useState(false);
   const [resolution, setResolution] = useState<Resolution>("736p");
-  const [customEdge, setCustomEdge] = useState(SHORT_EDGE.default);
+  const [customSize, setCustomSize] = useState<Size>({ width: 1248, height: 736 });
   const [hatFix, setHatFix] = useState(false);
   const [noLipSync, setNoLipSync] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
@@ -289,13 +289,15 @@ export function Openjutsu() {
     setCharacters(characters.map((c, i) => (i === index ? { ...c, role } : c)));
   }
 
-  const canvas = video?.width ? canvasSize(video.width, video.height, resolution) : null;
+  const canvas = typeof resolution === "object" ? [resolution.width, resolution.height] : video?.width ? canvasSize(video.width, video.height, resolution) : null;
+  const resolutionField = typeof resolution === "object" ? `${resolution.width}x${resolution.height}` : resolution;
 
-  function chooseEdge(value: number) {
-    const edge = Math.min(SHORT_EDGE.max, Math.max(SHORT_EDGE.min, Math.round(value / SHORT_EDGE.step) * SHORT_EDGE.step || SHORT_EDGE.default));
-    setCustomEdge(edge);
-    setResolution(edge);
-    return edge;
+  function chooseSize(side: keyof Size, value: number) {
+    const snapped = Math.min(CUSTOM_SIZE.max, Math.max(CUSTOM_SIZE.min, Math.round(value / CUSTOM_SIZE.step) * CUSTOM_SIZE.step || customSize[side]));
+    const size = { ...customSize, [side]: snapped };
+    setCustomSize(size);
+    setResolution(size);
+    return snapped;
   }
 
   const clips = !video?.duration ? 0 : faceFix ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
@@ -334,7 +336,7 @@ export function Openjutsu() {
       form.set("role", character.role);
     }
     if (kind === "simple") {
-      form.set("resolution", String(resolution));
+      form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
@@ -345,7 +347,7 @@ export function Openjutsu() {
         form.append("role", c.role);
       }
       form.set("max_quality", String(kind === "advanced_maxq"));
-      form.set("resolution", String(resolution));
+      form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
@@ -369,7 +371,7 @@ export function Openjutsu() {
       if (look && editMode !== "remove") form.set("picture", look.file);
       form.set("biggest_only", String(biggestOnly));
       form.set("keep_outline", String(keepOutline));
-      form.set("resolution", String(resolution));
+      form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
@@ -638,19 +640,26 @@ export function Openjutsu() {
           <section className="panel settings">
             <h2><span>3</span> Settings</h2>
             {mode !== "post" && <div className="setting">
-              <span>Resolution <small>{canvas ? `${canvas[0]} × ${canvas[1]} for this video.` : "Short edge of the video."} The shape follows the source.</small></span>
+              <span>Resolution <small>{typeof resolution === "object" ? "Width × height. The video is scaled and centre-cropped to this shape." : `${canvas ? `${canvas[0]} × ${canvas[1]} for this video` : "Short edge of the video"}. The shape follows the source.`}</small></span>
               <div className="segmented">
                 {RESOLUTIONS.map((r) => (
                   <button key={r} className={r === resolution ? "on" : ""} onClick={() => setResolution(r)}>{r}</button>
                 ))}
-                <button className={typeof resolution === "number" ? "on" : ""} onClick={() => setResolution(customEdge)}>Custom</button>
+                <button className={typeof resolution === "object" ? "on" : ""} onClick={() => setResolution(customSize)}>Custom</button>
               </div>
-              {typeof resolution === "number" && (
-                <input
-                  className="steps-input" type="number" aria-label="Custom short edge in pixels" min={SHORT_EDGE.min} max={SHORT_EDGE.max} step={SHORT_EDGE.step}
-                  defaultValue={resolution} onBlur={(event) => { event.target.value = String(chooseEdge(Number(event.target.value))); }}
-                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
-                />
+              {typeof resolution === "object" && (
+                <div className="custom-size">
+                  {(["width", "height"] as const).map((side) => (
+                    <label key={side}>
+                      {side === "height" && "×"}
+                      <input
+                        className="steps-input" type="number" aria-label={`Custom ${side} in pixels`} min={CUSTOM_SIZE.min} max={CUSTOM_SIZE.max} step={CUSTOM_SIZE.step}
+                        defaultValue={resolution[side]} onBlur={(event) => { event.target.value = String(chooseSize(side, Number(event.target.value))); }}
+                        onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                      />
+                    </label>
+                  ))}
+                </div>
               )}
             </div>}
             {mode === "object" && editMode !== "background" && !fromPicture && (

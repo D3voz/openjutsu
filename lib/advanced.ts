@@ -75,7 +75,7 @@ export function pruneAdvanced(source: ApiGraph, pictures: number, settings: Adva
   }
   const plan = graph[nodeByTitle(graph, PLAN)].inputs;
   const roles = settings.roles.slice(0, pictures).map((role) => role.replace(/\s+/g, " ").trim());
-  setResolution(plan, settings.resolution);
+  setResolution(graph, nodeByTitle(graph, PLAN), nodeByTitle(graph, VIDEO), settings.resolution);
   plan.seed = settings.seed;
   plan.clip_seconds = settings.clipSeconds;
   plan.roles = roles.some(Boolean) ? roles.map((role, i) => role || ordinal(i, pictures)).join("\n") : "";

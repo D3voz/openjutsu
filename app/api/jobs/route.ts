@@ -5,7 +5,7 @@ import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from ".
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
 import { EDIT_MODES, OBJECT_MARGINS, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
-import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, SHORT_EDGE, type Margin, type MotionSize, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, type Margin, type MotionSize, type Preset, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
 
@@ -40,11 +40,12 @@ function parsePicture(picture: FormDataEntryValue | null) {
 
 function parseRun(form: FormData) {
   const entry = String(form.get("resolution"));
-  const edge = Number(entry);
-  const resolution: Resolution = RESOLUTIONS.includes(entry as (typeof RESOLUTIONS)[number]) ? entry as Resolution : edge;
-  if (typeof resolution === "number" && !(Number.isInteger(edge) && edge >= SHORT_EDGE.min && edge <= SHORT_EDGE.max)) {
-    throw new Error(`Choose a resolution, or a custom short edge of ${SHORT_EDGE.min}-${SHORT_EDGE.max} px.`);
+  const custom = entry.match(/^(\d+)x(\d+)$/);
+  const [width, height] = custom ? [custom[1], custom[2]].map((side) => Math.round(Number(side) / CUSTOM_SIZE.step) * CUSTOM_SIZE.step) : [0, 0];
+  if (custom ? !(Math.min(width, height) >= CUSTOM_SIZE.min && Math.max(width, height) <= CUSTOM_SIZE.max) : !RESOLUTIONS.includes(entry as Preset)) {
+    throw new Error(`Choose a resolution, or a custom size of ${CUSTOM_SIZE.min}-${CUSTOM_SIZE.max} px a side.`);
   }
+  const resolution: Resolution = custom ? { width, height } : entry as Preset;
   const motion = Number(form.get("motion"));
   if (!MOTION_SIZES.includes(motion as MotionSize)) throw new Error("Choose a supported motion reference size.");
   const seed = Number(form.get("seed"));

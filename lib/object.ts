@@ -85,6 +85,6 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     seed: settings.seed,
     clip_seconds: settings.clipSeconds,
   });
-  setResolution(plan, settings.resolution);
+  setResolution(graph, id("Object Swap Plan (what to change)"), id(OBJECT_VIDEO), settings.resolution);
   return graph;
 }
