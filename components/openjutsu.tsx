@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "rea
 import type { PublicJob } from "../lib/comfy.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
-import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, type Margin, type MotionSize, type Resolution, type Section } from "../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, SHORT_EDGE, canvasSize, type Margin, type MotionSize, type Resolution, type Section } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 import type { EditMode } from "../lib/object.ts";
@@ -136,12 +136,13 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 
 export function Openjutsu() {
   const [mode, setMode] = useState<Mode>("simple");
-  const [video, setVideo] = useState<{ file: File; url: string; duration: number } | null>(null);
+  const [video, setVideo] = useState<{ file: File; url: string; duration: number; width: number; height: number } | null>(null);
   const [part, setPart] = useState<Section>({ start: 0, length: 0 });
   const player = useRef<HTMLVideoElement>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [maxQuality, setMaxQuality] = useState(false);
   const [resolution, setResolution] = useState<Resolution>("736p");
+  const [customEdge, setCustomEdge] = useState(SHORT_EDGE.default);
   const [hatFix, setHatFix] = useState(false);
   const [noLipSync, setNoLipSync] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
@@ -228,12 +229,12 @@ export function Openjutsu() {
     if (!file) return;
     if (video) URL.revokeObjectURL(video.url);
     const url = URL.createObjectURL(file);
-    setVideo({ file, url, duration: 0 });
+    setVideo({ file, url, duration: 0, width: 0, height: 0 });
     setPart({ start: 0, length: 0 });
     const probe = document.createElement("video");
     probe.preload = "metadata";
     probe.onloadedmetadata = () => {
-      setVideo((current) => (current?.url === url ? { ...current, duration: probe.duration } : current));
+      setVideo((current) => (current?.url === url ? { ...current, duration: probe.duration, width: probe.videoWidth, height: probe.videoHeight } : current));
       setPart({ start: 0, length: probe.duration });
     };
     probe.src = url;
@@ -288,6 +289,15 @@ export function Openjutsu() {
     setCharacters(characters.map((c, i) => (i === index ? { ...c, role } : c)));
   }
 
+  const canvas = video?.width ? canvasSize(video.width, video.height, resolution) : null;
+
+  function chooseEdge(value: number) {
+    const edge = Math.min(SHORT_EDGE.max, Math.max(SHORT_EDGE.min, Math.round(value / SHORT_EDGE.step) * SHORT_EDGE.step || SHORT_EDGE.default));
+    setCustomEdge(edge);
+    setResolution(edge);
+    return edge;
+  }
+
   const clips = !video?.duration ? 0 : faceFix ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
   const edit = EDITS.find((e) => e.id === editMode)!;
   const fromPicture = mode === "object" && editMode === "picture";
@@ -324,7 +334,7 @@ export function Openjutsu() {
       form.set("role", character.role);
     }
     if (kind === "simple") {
-      form.set("resolution", resolution);
+      form.set("resolution", String(resolution));
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
@@ -335,7 +345,7 @@ export function Openjutsu() {
         form.append("role", c.role);
       }
       form.set("max_quality", String(kind === "advanced_maxq"));
-      form.set("resolution", resolution);
+      form.set("resolution", String(resolution));
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
@@ -359,7 +369,7 @@ export function Openjutsu() {
       if (look && editMode !== "remove") form.set("picture", look.file);
       form.set("biggest_only", String(biggestOnly));
       form.set("keep_outline", String(keepOutline));
-      form.set("resolution", resolution);
+      form.set("resolution", String(resolution));
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
@@ -628,12 +638,20 @@ export function Openjutsu() {
           <section className="panel settings">
             <h2><span>3</span> Settings</h2>
             {mode !== "post" && <div className="setting">
-              <span>Resolution</span>
+              <span>Resolution <small>{canvas ? `${canvas[0]} × ${canvas[1]} for this video.` : "Short edge of the video."} The shape follows the source.</small></span>
               <div className="segmented">
                 {RESOLUTIONS.map((r) => (
                   <button key={r} className={r === resolution ? "on" : ""} onClick={() => setResolution(r)}>{r}</button>
                 ))}
+                <button className={typeof resolution === "number" ? "on" : ""} onClick={() => setResolution(customEdge)}>Custom</button>
               </div>
+              {typeof resolution === "number" && (
+                <input
+                  className="steps-input" type="number" aria-label="Custom short edge in pixels" min={SHORT_EDGE.min} max={SHORT_EDGE.max} step={SHORT_EDGE.step}
+                  defaultValue={resolution} onBlur={(event) => { event.target.value = String(chooseEdge(Number(event.target.value))); }}
+                  onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+                />
+              )}
             </div>}
             {mode === "object" && editMode !== "background" && !fromPicture && (
               <label className="setting toggle">
@@ -750,7 +768,7 @@ export function Openjutsu() {
             <small>{colorFix
               ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
               : clips && ready
-              ? faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${resolution}`
+              ? faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
               : `Add a video and ${mode === "object" ? "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>

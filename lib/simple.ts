@@ -6,7 +6,20 @@ export type ApiNode = { class_type: string; inputs: Record<string, unknown>; _me
 export type ApiGraph = Record<string, ApiNode>;
 
 export const RESOLUTIONS = ["480p", "576p", "736p", "768p", "1080p"] as const;
-export type Resolution = (typeof RESOLUTIONS)[number];
+// A number is a custom short edge in pixels; the Swap Plan rounds the canvas to 32 and keeps the source shape either way.
+export type Resolution = (typeof RESOLUTIONS)[number] | number;
+export const SHORT_EDGE = { min: 256, max: 2048, step: 32, default: 960 };
+
+// Canvas the Swap Plan makes for a source of this size, as its plan_clips does.
+export function canvasSize(width: number, height: number, resolution: Resolution) {
+  const scale = (typeof resolution === "number" ? resolution : parseInt(resolution)) / Math.min(width, height);
+  return [width, height].map((side) => Math.max(32, Math.round((side * scale) / 32) * 32));
+}
+
+export function setResolution(plan: Record<string, unknown>, resolution: Resolution) {
+  if (typeof resolution === "number") plan.short_edge = resolution;
+  else plan.resolution = resolution;
+}
 
 export const CLIP_SECONDS = { min: 2.5, max: 15, default: 6 };
 export const MAX_SEED = 0xffffffff;
@@ -129,7 +142,7 @@ export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGrap
   if (!settings.noLipSync) dropNoLipSync(graph);
   setMotionSize(graph, settings.motion);
   const plan = graph[NODES.plan].inputs;
-  plan.resolution = settings.resolution;
+  setResolution(plan, settings.resolution);
   plan.seed = settings.seed;
   plan.clip_seconds = settings.clipSeconds;
   plan.roles = settings.role.replace(/\s+/g, " ").trim();

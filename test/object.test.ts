@@ -31,6 +31,7 @@ test("change with a picture keeps the graph and sets the plan", () => {
   assert.equal(node(pruned, "Grow mask").inputs.expand, 40);
   assert.equal(node(pruned, "Tracked area").inputs.max_people, 1);
   assert.ok(node(graph, OBJECT_PICTURE), "the source graph is not modified");
+  assert.equal(node(pruneObject(graph, true, { ...settings("change"), resolution: 640 }), "Object Swap Plan (what to change)").inputs.short_edge, 640);
 });
 
 test("several things are tracked together, one of each when only the biggest is kept", () => {

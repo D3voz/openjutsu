@@ -2,7 +2,7 @@
 // workflows/object.api.json is exported (ComfyUI user/default/oneclick_object_build.js) in change mode with a picture;
 // each request prunes it. Nodes are found by title.
 import { nodeByTitle } from "./advanced.ts";
-import { setMotionSize, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
+import { setMotionSize, setResolution, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
 
 export const EDIT_MODES = ["change", "remove", "background"] as const;
 export type EditMode = (typeof EDIT_MODES)[number];
@@ -82,9 +82,9 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     target: settings.target,
     change_to: settings.changeTo,
     keep_outline: settings.keepOutline,
-    resolution: settings.resolution,
     seed: settings.seed,
     clip_seconds: settings.clipSeconds,
   });
+  setResolution(plan, settings.resolution);
   return graph;
 }
