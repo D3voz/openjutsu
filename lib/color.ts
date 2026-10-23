@@ -1,6 +1,6 @@
 // Fix colours: post-processing for a finished video. Image Detail Contrast (F:\AI\comfyui-image-detail-contrast) softens
-// H3's crunchy fine detail, then Orion4D's DCTL Tone Mapper grades the frames: by default zuanfilm's H3 preset, which
-// lifts the blacks, softens contrast and highlights and takes a little saturation out. workflows/color.api.json is
+// H3's crunchy fine detail, then Orion4D's DCTL Tone Mapper grades the frames: by default H3 soft, a lighter take on
+// zuanfilm's H3 preset that softens contrast and highlights without washing out the blacks. workflows/color.api.json is
 // hand-written; each request sets the values and drops a step that is turned off. Nodes are found by title.
 import { nodeByTitle } from "./advanced.ts";
 import type { ApiGraph } from "./simple.ts";
@@ -28,10 +28,10 @@ export const TONE_RANGES: Record<ToneValue, { label: string; min: number; max: n
   strength: { label: "Strength", min: 0, max: 2, step: 0.01 },
 };
 
-export const DEFAULT_PRESET = "H3 zuanfilm";
+export const DEFAULT_PRESET = "H3 soft";
 export const DEFAULT_TONE: ToneSettings = {
-  mode: "Reinhard", exposure: 0.09, contrast: 0.81, pivot: 0.69, highlight_rolloff: 0.27,
-  shadow_lift: 0.33, black_floor: 0.12, saturation: 0.93, strength: 0.3,
+  mode: "Reinhard", exposure: 0.09, contrast: 0.84, pivot: 0.69, highlight_rolloff: 0.27,
+  shadow_lift: 0.15, black_floor: 0.03, saturation: 1.05, strength: 0.2,
 };
 
 export const DETAIL = { min: -1, max: 1, default: -0.2 };

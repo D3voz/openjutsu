@@ -250,7 +250,7 @@ export function Openjutsu() {
 
   const faceFix = mode === "post" && post === "face";
   const colorFix = mode === "post" && post === "color";
-  // Orion's saved presets, with zuanfilm's H3 preset first when Orion does not have it.
+  // Orion's saved presets, with the default preset first when Orion does not have it.
   const presetOptions: TonePreset[] = presets.some((p) => p.name === DEFAULT_PRESET) ? presets : [{ name: DEFAULT_PRESET, settings: DEFAULT_TONE }, ...presets];
 
   function choosePreset(name: string) {
@@ -498,7 +498,7 @@ export function Openjutsu() {
                   <input type="range" min={DETAIL.min} max={DETAIL.max} step={0.01} value={detail} onChange={(event) => setDetail(Number(event.target.value))} />
                 </label>}
                 <label className="setting toggle">
-                  <span>Tone mapper <small>Orion4D DCTL Tone Mapper, a colour grade over every frame. {DEFAULT_PRESET} lifts the blacks, softens contrast and highlights and takes a little saturation out.</small></span>
+                  <span>Tone mapper <small>Orion4D DCTL Tone Mapper, a colour grade over every frame. {DEFAULT_PRESET} softens contrast and highlights and keeps the blacks deep.</small></span>
                   <input type="checkbox" checked={toneOn} onChange={(event) => setToneOn(event.target.checked)} />
                   <i aria-hidden />
                 </label>
@@ -615,7 +615,7 @@ export function Openjutsu() {
                   />
                 </label>
               ))}
-              <p className="hint">Strength mixes the grade with the original: 0.3 is 30% of it. Pick the preset again to undo your changes.</p>
+              <p className="hint">Strength mixes the grade with the original: 0.2 is 20% of it. Pick the preset again to undo your changes.</p>
             </section>
           ) : (
           <section className="panel settings">
