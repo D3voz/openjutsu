@@ -29,13 +29,17 @@ export const OBJECT_PICTURE = "Picture 1";
 export const objectTargets = (target: string) => target.split(",").map((t) => t.trim()).filter(Boolean);
 
 // The picture describer names only what is copied from the picture, with about 20 more words for each thing.
+// Asked for "the top", it described only the tee under an open flannel shirt, so layers are named outer first.
 function describer(settings: ObjectSettings) {
-  const things = settings.mode === "background" ? ["place (the setting, its lighting and what is around)"] : objectTargets(settings.target);
+  const background = settings.mode === "background";
+  const things = background ? ["place (the setting, its lighting and what is around)"] : objectTargets(settings.target);
   const named = things.length === 1 ? things[0] : things.slice(0, -1).join(", ") + " and the " + things.at(-1);
   const words = 30 + 20 * things.length;
   return {
     prompt: `Describe the ${named} in this picture in about ${words} words${things.length > 1 ? ", one sentence for each" : ""}: their shape, colours, `
-      + "materials, patterns and details. No preamble, and nothing about anything else in the picture.",
+      + "materials, patterns and details. "
+      + (background ? "" : "Include every layer worn there, outer layer first: an open shirt or jacket over a top is part of the top. ")
+      + "No preamble, and nothing about anything else in the picture.",
     max_length: 2 * words + 40,
   };
 }
