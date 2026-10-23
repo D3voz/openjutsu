@@ -55,8 +55,8 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     delete plan.picture_1_text;
     delete ref["ref_images.ref_image_0"];
   }
-  // A grey shape in the motion reference would come back as a grey object.
-  if (settings.mode === "remove") {
+  // H3 copies a grey shape's colour and cut, so a changed top would keep the old silhouette and a removed object would come back grey.
+  if (settings.mode !== "background") {
     delete ref["ref_videos.ref_video_0"];
     delete ref["ref_video_audios.ref_video_audio_0"];
   }

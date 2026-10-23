@@ -44,7 +44,11 @@ test("without a picture the picture branch goes", () => {
   const pruned = pruneObject(graph, false, settings("change"));
   assert.deepEqual(dangling(pruned), []);
   assert.ok(!titles(pruned).includes(OBJECT_PICTURE));
-  assert.ok(node(pruned, "Reference Conditioning").inputs["ref_videos.ref_video_0"]);
+});
+
+test("change drops the grey motion reference", () => {
+  const ref = node(pruneObject(graph, true, settings("change")), "Reference Conditioning").inputs;
+  assert.deepEqual(Object.keys(ref).filter((name) => name.startsWith("ref_")), ["ref_image_size", "ref_images.ref_image_0"]);
 });
 
 test("remove drops the picture and the grey motion reference", () => {
@@ -60,6 +64,7 @@ test("background flips the mask and greys all of it", () => {
   assert.equal(pruned[grow].inputs.flip_input, true);
   const grey = node(pruned, "Turn it grey (shape and movement only)").inputs;
   assert.deepEqual([grey.mask, grey.size], [[grow, 0], [grow, 0]]);
+  assert.ok(node(pruned, "Reference Conditioning").inputs["ref_videos.ref_video_0"]);
 });
 
 test("the model settings reach the Object Swap Plan", () => {
