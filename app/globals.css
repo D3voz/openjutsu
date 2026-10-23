@@ -74,7 +74,7 @@ h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
 .video-pick { display: grid; gap: 8px; }
 video { width: 100%; border-radius: 12px; background: #000; max-height: 420px; }
 
-.characters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.characters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .character { position: relative; background: var(--panel-2); border-radius: 14px; overflow: hidden; display: grid; }
 .character img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; display: block; }
 .character label { display: grid; gap: 4px; padding: 10px; font-size: 0.82em; color: var(--muted); }
