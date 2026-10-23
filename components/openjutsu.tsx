@@ -151,6 +151,7 @@ export function Openjutsu() {
   const [changeTo, setChangeTo] = useState("");
   const [look, setLook] = useState<{ file: File; url: string } | null>(null);
   const [biggestOnly, setBiggestOnly] = useState(false);
+  const [keepOutline, setKeepOutline] = useState(true);
   const [post, setPost] = useState<Post>("face");
   const [detailOn, setDetailOn] = useState(true);
   const [detail, setDetail] = useState(DETAIL.default);
@@ -357,6 +358,7 @@ export function Openjutsu() {
       form.set("change_to", changeTo);
       if (look && editMode !== "remove") form.set("picture", look.file);
       form.set("biggest_only", String(biggestOnly));
+      form.set("keep_outline", String(keepOutline));
       form.set("resolution", resolution);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -637,6 +639,13 @@ export function Openjutsu() {
               <label className="setting toggle">
                 <span>Only the biggest one <small>Off: every match SAM finds changes (everyone&apos;s hair). On: only the one that fills the most of the frame.</small></span>
                 <input type="checkbox" checked={biggestOnly} onChange={(event) => setBiggestOnly(event.target.checked)} />
+                <i aria-hidden />
+              </label>
+            )}
+            {mode === "object" && editMode === "change" && (
+              <label className="setting toggle">
+                <span>Keep original outline <small>On: the face, hands and arms around it stay exact, but the new look keeps the old shape (sleeves, length). Off: the shape can change (long hair to a bob, pants to a skirt), but edges near the face and hands may be lost.</small></span>
+                <input type="checkbox" checked={keepOutline} onChange={(event) => setKeepOutline(event.target.checked)} />
                 <i aria-hidden />
               </label>
             )}

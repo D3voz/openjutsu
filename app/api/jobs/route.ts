@@ -65,7 +65,8 @@ function parseObject(form: FormData) {
   const picture = entry instanceof File && entry.size > 0 && mode !== "remove" ? parsePicture(entry) : null;
   if (mode !== "remove" && !changeTo && !picture) throw new Error("Say what it becomes, or add a picture.");
   const settings: ObjectSettings = {
-    mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", margin: margin as ObjectMargin, ...parseRun(form),
+    mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", keepOutline: form.get("keep_outline") === "true",
+    margin: margin as ObjectMargin, ...parseRun(form),
   };
   return { picture, settings };
 }

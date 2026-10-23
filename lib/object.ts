@@ -16,6 +16,7 @@ export type ObjectSettings = {
   target: string; // what SAM tracks, several separated by commas; for background, what stays
   changeTo: string; // what it becomes, or for remove what shows instead
   biggestOnly: boolean;
+  keepOutline: boolean; // change: send the grey shape, which keeps the face and hands around it but also the old outline
   resolution: Resolution;
   motion: MotionSize;
   margin: ObjectMargin;
@@ -59,8 +60,8 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     delete plan.picture_1_text;
     delete ref["ref_images.ref_image_0"];
   }
-  // H3 copies a grey shape's colour and cut, so a changed top would keep the old silhouette and a removed object would come back grey.
-  if (settings.mode !== "background") {
+  // H3 copies a grey shape's outline, so a changed top keeps the old silhouette and a removed object would come back grey.
+  if (settings.mode === "remove" || settings.mode === "change" && !settings.keepOutline) {
     delete ref["ref_videos.ref_video_0"];
     delete ref["ref_video_audios.ref_video_audio_0"];
   }
@@ -80,6 +81,7 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     mode: settings.mode,
     target: settings.target,
     change_to: settings.changeTo,
+    keep_outline: settings.keepOutline,
     resolution: settings.resolution,
     seed: settings.seed,
     clip_seconds: settings.clipSeconds,

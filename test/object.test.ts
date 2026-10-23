@@ -8,7 +8,7 @@ import { isLink, type ApiGraph } from "../lib/simple.ts";
 
 const graph: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/object.api.json", import.meta.url), "utf8"));
 const settings = (mode: ObjectSettings["mode"]): ObjectSettings => ({
-  mode, target: "hair", changeTo: "pink hair", biggestOnly: true, resolution: "480p", motion: 512, margin: "loose", seed: 5, clipSeconds: 4,
+  mode, target: "hair", changeTo: "pink hair", biggestOnly: true, keepOutline: false, resolution: "480p", motion: 512, margin: "loose", seed: 5, clipSeconds: 4,
 });
 const dangling = (g: ApiGraph) => Object.entries(g).flatMap(([id, node]) =>
   Object.entries(node.inputs).filter(([, v]) => isLink(v) && !g[v[0]]).map(([name]) => `${id}.${name}`));
@@ -46,9 +46,12 @@ test("without a picture the picture branch goes", () => {
   assert.ok(!titles(pruned).includes(OBJECT_PICTURE));
 });
 
-test("change drops the grey motion reference", () => {
+test("change drops the grey motion reference unless the outline is kept", () => {
   const ref = node(pruneObject(graph, true, settings("change")), "Reference Conditioning").inputs;
   assert.deepEqual(Object.keys(ref).filter((name) => name.startsWith("ref_")), ["ref_image_size", "ref_images.ref_image_0"]);
+  const kept = pruneObject(graph, true, { ...settings("change"), keepOutline: true });
+  assert.ok(node(kept, "Reference Conditioning").inputs["ref_videos.ref_video_0"]);
+  assert.equal(node(kept, "Object Swap Plan (what to change)").inputs.keep_outline, true);
 });
 
 test("remove drops the picture and the grey motion reference", () => {
