@@ -551,6 +551,23 @@ export function Openjutsu() {
     setStreamError("");
   }
 
+  async function fixResult(next: Post) {
+    if (!job?.video) return;
+    setFormError("");
+    try {
+      const response = await fetch(job.video.url);
+      if (!response.ok) throw new Error();
+      const blob = await response.blob();
+      chooseVideo([new File([blob], job.video.name, { type: blob.type || "video/mp4" })]);
+    } catch {
+      setFormError("Could not load the result video. Download it and choose it in Post-processing.");
+      return;
+    }
+    reset();
+    setMode("post");
+    setPost(next);
+  }
+
   return (
     <main className="shell">
       <header className="top">
@@ -600,7 +617,7 @@ export function Openjutsu() {
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
-          onCancel={cancel} onReset={reset} onGenerate={video && character && !submitting && mode === "simple" ? () => submit("simple") : null}
+          onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={video && character && !submitting && mode === "simple" ? () => submit("simple") : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
           photos={shown.map((c) => c.url)}
           onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
@@ -969,9 +986,9 @@ export function Openjutsu() {
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames }: {
+function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onFix, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
-  onCancel: () => void; onReset: () => void; onGenerate: (() => void) | null;
+  onCancel: () => void; onReset: () => void; onFix: (post: Post) => void; onGenerate: (() => void) | null;
   margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
   photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string;
 }) {
@@ -1005,6 +1022,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
         {run.kind === "montage" && job.data && <KeptNote url={job.data} />}
         <div className="row">
           <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
+          {POSTS.filter((p) => p.id !== run.kind).map((p) => <button key={p.id} className="secondary" onClick={() => onFix(p.id)}>{p.label}</button>)}
           <button className="secondary" onClick={onReset}>{run.kind === "object" ? "New edit" : run.kind === "face" || run.kind === "color" ? "Fix another" : "New swap"}</button>
         </div>
       </section>
