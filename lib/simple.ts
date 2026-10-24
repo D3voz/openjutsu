@@ -25,11 +25,16 @@ export function setResolution(graph: ApiGraph, plan: string, video: string, reso
     graph[plan].inputs.resolution = resolution;
     return;
   }
+  cropSource(graph, video, resolution);
+  graph[plan].inputs.short_edge = Math.min(resolution.width, resolution.height);
+}
+
+// Also for Find people, whose SAM must see the same frames as the montage render.
+export function cropSource(graph: ApiGraph, video: string, size: Size) {
   for (const node of Object.values(graph)) {
     for (const [name, value] of Object.entries(node.inputs)) if (isLink(value) && value[0] === video && value[1] === 0) node.inputs[name] = ["custom_size", 0];
   }
-  graph.custom_size = { class_type: "ImageScale", inputs: { image: [video, 0], upscale_method: "bilinear", width: resolution.width, height: resolution.height, crop: "center" }, _meta: { title: "Custom size (centre crop)" } };
-  graph[plan].inputs.short_edge = Math.min(resolution.width, resolution.height);
+  graph.custom_size = { class_type: "ImageScale", inputs: { image: [video, 0], upscale_method: "bilinear", width: size.width, height: size.height, crop: "center" }, _meta: { title: "Custom size (centre crop)" } };
 }
 
 export const CLIP_SECONDS = { min: 2.5, max: 15, default: 6 };

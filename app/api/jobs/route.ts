@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { listModels, submitAdvanced, submitColor, submitFace, submitMask, submitObject, submitSimple } from "../../../lib/comfy.ts";
+import { listModels, submitAdvanced, submitColor, submitFace, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
+import { TRACKS_FILE, type Label } from "../../../lib/montage.ts";
 import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type ToneMode, type ToneSettings, type ToneValue } from "../../../lib/color.ts";
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
@@ -38,14 +39,18 @@ function parsePicture(picture: FormDataEntryValue | null) {
   return picture;
 }
 
-function parseRun(form: FormData) {
+function parseResolution(form: FormData): Resolution {
   const entry = String(form.get("resolution"));
   const custom = entry.match(/^(\d+)x(\d+)$/);
   const [width, height] = custom ? [custom[1], custom[2]].map((side) => Math.round(Number(side) / CUSTOM_SIZE.step) * CUSTOM_SIZE.step) : [0, 0];
   if (custom ? !(Math.min(width, height) >= CUSTOM_SIZE.min && Math.max(width, height) <= CUSTOM_SIZE.max) : !RESOLUTIONS.includes(entry as Preset)) {
     throw new Error(`Choose a resolution, or a custom size of ${CUSTOM_SIZE.min}-${CUSTOM_SIZE.max} px a side.`);
   }
-  const resolution: Resolution = custom ? { width, height } : entry as Preset;
+  return custom ? { width, height } : entry as Preset;
+}
+
+function parseRun(form: FormData) {
+  const resolution = parseResolution(form);
   const motion = Number(form.get("motion"));
   if (!MOTION_SIZES.includes(motion as MotionSize)) throw new Error("Choose a supported motion reference size.");
   const seed = Number(form.get("seed"));
@@ -137,7 +142,36 @@ function parseAdvanced(form: FormData) {
   const maxQuality = form.get("max_quality") === "true";
   if (maxQuality && pictures.length !== 2) throw new Error("One pass per person needs exactly two characters.");
   const roles = form.getAll("role").map((role) => String(role).slice(0, 200));
-  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", montage: form.get("montage") === "true", ...parseRun(form), ...parseMask(form) } };
+  return { pictures, maxQuality, settings: { roles, noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) } };
+}
+
+// Find people matches the tracks to the roles' looks, so every photo needs one.
+function parsePeople(form: FormData) {
+  const roles = form.getAll("role").map((role) => String(role).replace(/\s+/g, " ").trim().slice(0, 200));
+  if (roles.length < 1 || roles.length > MAX_CHARACTERS) throw new Error(`Add 1-${MAX_CHARACTERS} character photos.`);
+  if (roles.some((role) => !role)) throw new Error("Say who each photo replaces and how they look, e.g. “the dancer - white polo, jeans”.");
+  return { roles, resolution: parseResolution(form) };
+}
+
+// The appearances picked in the person list: a SAM track within its frames, and the photo it becomes.
+function parseLabels(entry: FormDataEntryValue | null, photos: number): Label[] {
+  let labels: Label[] = [];
+  try {
+    labels = JSON.parse(String(entry));
+  } catch {}
+  const whole = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0;
+  const valid = Array.isArray(labels) && labels.length > 0
+    && labels.every((l) => whole(l?.track) && whole(l.start) && whole(l.end) && l.end > l.start && whole(l.role) && l.role >= 1 && l.role <= photos);
+  if (!valid) throw new Error("Pick a photo for at least one person.");
+  return labels.map(({ track, start, end, role }) => ({ track, start, end, role }));
+}
+
+function parseMontage(form: FormData) {
+  const { pictures, settings } = parseAdvanced(form);
+  if (pictures.length !== parsePeople(form).roles.length) throw new Error("Give each photo a role.");
+  const tracks = String(form.get("tracks") ?? "");
+  if (!TRACKS_FILE.test(tracks)) throw new Error("Find people again.");
+  return { pictures, settings, tracks, labels: parseLabels(form.get("labels"), pictures.length) };
 }
 
 export async function POST(request: Request) {
@@ -150,6 +184,13 @@ export async function POST(request: Request) {
     if (mode === "mask") {
       const { hatFix, margin, target } = parseMask(form);
       submit = () => submitMask(video, section, hatFix, margin, target);
+    } else if (mode === "people") {
+      const { roles, resolution } = parsePeople(form);
+      submit = () => submitPeople(video, section, roles, resolution);
+    } else if (mode === "montage") {
+      const { pictures, settings, tracks, labels } = parseMontage(form);
+      const model = parseModel(form, await listModels());
+      submit = () => submitMontage(video, section, pictures, settings, tracks, labels, model);
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
       const model = parseModel(form, await listModels());

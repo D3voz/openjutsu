@@ -8,7 +8,7 @@ import { isLink, type ApiGraph } from "../lib/simple.ts";
 const load = (name: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/${name}.api.json`, import.meta.url), "utf8"));
 const graph = load("advanced");
 const maxq = load("advanced_maxq");
-const settings = (hatFix: boolean, roles: string[] = [], noLipSync = true): AdvancedSettings => ({ roles, resolution: "480p", motion: 512, hatFix, noLipSync, montage: false, margin: "tight", seed: 3, clipSeconds: 6 });
+const settings = (hatFix: boolean, roles: string[] = [], noLipSync = true): AdvancedSettings => ({ roles, resolution: "480p", motion: 512, hatFix, noLipSync, margin: "tight", seed: 3, clipSeconds: 6 });
 const titles = (g: ApiGraph) => Object.values(g).map((node) => node._meta?.title ?? "");
 const dangling = (g: ApiGraph) => Object.entries(g).flatMap(([id, node]) =>
   Object.entries(node.inputs).filter(([, v]) => isLink(v) && !g[v[0]]).map(([name]) => `${id}.${name}`));
@@ -92,19 +92,6 @@ test("the motion reference size reaches both passes", () => {
     .map((node) => node.inputs.largest_size);
   assert.deepEqual(sizes(pruneAdvanced(graph, 2, { ...settings(false), motion: 1376 })), [1376]);
   assert.deepEqual(sizes(pruneAdvanced(maxq, 2, { ...settings(false), motion: 1376 })), [1376, 1376]);
-});
-
-test("Montage turns on the on-screen timing in both passes and gets its own run", () => {
-  const timing = (g: typeof graph) => Object.values(g).filter((node) => node.class_type === "H3ClipShots" || node.class_type === "H3FillShots").map((node) => node.inputs.timing);
-  for (const source of [graph, maxq]) {
-    const off = pruneAdvanced(source, 2, { ...settings(false), motion: 768 });
-    const on = pruneAdvanced(source, 2, { ...settings(false), motion: 768, montage: true });
-    assert.ok(timing(off).every((v) => v === undefined));
-    assert.ok(timing(on).length >= 2 && timing(on).every((v) => v === true));
-    assert.equal(off.montage_run_name, undefined);
-    assert.deepEqual(on.montage_run_name.inputs, { string_a: ["motion_run_name", 0], string_b: "_montage", delimiter: "" });
-    assert.ok(Object.values(on).some((node) => node.class_type === "MiniMaxH3ChainPlanModern" && isLink(node.inputs.run_name) && node.inputs.run_name[0] === "montage_run_name"));
-  }
 });
 
 test("picture counts outside the export are refused", () => {

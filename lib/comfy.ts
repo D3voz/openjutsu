@@ -2,12 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Comfy, COMFY_CLOUD_BASE_URL, resolveCredentials, type Job } from "@comfyorg/sdk";
 import { ComfyLow } from "@comfyorg/sdk/low";
-import { MASK_NODES, NODES, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Section, type SimpleSettings } from "./simple.ts";
+import { MASK_NODES, NODES, cropSource, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Resolution, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
+import { PEOPLE_NODES, peopleRoles, pruneMontage, type Label } from "./montage.ts";
 
 export type PublicJob = {
   id: string;
@@ -15,6 +16,7 @@ export type PublicJob = {
   queuePosition: number | null;
   error: string | null;
   video: { id: string; name: string; url: string } | null;
+  data: string | null; // what Find people found, as JSON
 };
 
 export const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
@@ -36,7 +38,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "face", "color"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "face", "color", "people", "montage"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -54,12 +56,14 @@ function jobErrorMessage(error: unknown) {
 
 export function publicJob(job: Job): PublicJob {
   const video = job.outputs.find((output) => output.contentType.startsWith("video/"));
+  const data = job.outputs.find((output) => output.contentType === "application/json");
   return {
     id: job.id,
     status: job.status,
     queuePosition: job.queuePosition,
     error: job.error ? jobErrorMessage(job.error) : null,
     video: video ? { id: video.id, name: video.name, url: `/api/jobs/${job.id}/outputs/${video.id}` } : null,
+    data: data ? `/api/jobs/${job.id}/outputs/${data.id}` : null,
   };
 }
 
@@ -131,6 +135,28 @@ export async function submitMask(video: File, section: Section, hatFix: boolean,
   setSection(graph, MASK_NODES.video, section);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(MASK_NODES.video, "video", await upload(comfy, video));
+  return publicJob(await comfy.submit(workflow));
+}
+
+export async function submitMontage(video: File, section: Section, pictures: File[], settings: AdvancedSettings, tracks: string, labels: Label[], model: ModelSettings) {
+  const comfy = client();
+  const graph = pruneMontage(await loadGraph("montage"), pictures.length, settings, tracks, labels);
+  applyModel(graph, model);
+  setSection(graph, nodeByTitle(graph, VIDEO), section);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(nodeByTitle(graph, VIDEO), "video", await upload(comfy, video));
+  for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", await upload(comfy, picture));
+  return publicJob(await comfy.submit(workflow));
+}
+
+export async function submitPeople(video: File, section: Section, roles: string[], resolution: Resolution) {
+  const comfy = client();
+  const graph = await loadGraph("people");
+  graph[PEOPLE_NODES.crops].inputs.people = peopleRoles(roles);
+  if (typeof resolution === "object") cropSource(graph, PEOPLE_NODES.video, resolution);
+  setSection(graph, PEOPLE_NODES.video, section);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(PEOPLE_NODES.video, "video", await upload(comfy, video));
   return publicJob(await comfy.submit(workflow));
 }
 

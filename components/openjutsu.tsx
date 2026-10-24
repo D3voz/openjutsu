@@ -10,13 +10,15 @@ import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/mod
 import type { EditMode } from "../lib/object.ts";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
+import { appearances, renderLabels, type Appearance, type Label, type People } from "../lib/montage.ts";
 
 type Character = { file: File; url: string; role: string };
 type Mode = "simple" | "advanced" | "object" | "post";
 type Post = "face" | "color";
-type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "face" | "color";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "face" | "color" | "people" | "montage";
 type TonePreset = { name: string; settings: Record<string, unknown> };
-type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number };
+// frames: the video, part and crop SAM saw
+type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number; frames: string };
 // pass counts the sampler runs started so far: Fix faces samples its chunks one after another in the same node.
 type Progress = NodeInfo & { step: number | null; steps: number | null; pass: number };
 
@@ -292,6 +294,8 @@ export function Openjutsu() {
 
   const canvas = typeof resolution === "object" ? [resolution.width, resolution.height] : video?.width ? canvasSize(video.width, video.height, resolution) : null;
   const resolutionField = typeof resolution === "object" ? `${resolution.width}x${resolution.height}` : resolution;
+  // A montage render masks with the tracks Find people saved, so it must use the frames Find people saw.
+  const frames = video ? `${video.file.name}:${video.file.size} ${whole ? "whole" : `${part.start.toFixed(2)}+${part.length.toFixed(2)}`} ${typeof resolution === "object" ? resolutionField : ""}` : "";
 
   function chooseSize(side: keyof Size, value: number) {
     const snapped = Math.min(CUSTOM_SIZE.max, Math.max(CUSTOM_SIZE.min, Math.round(value / CUSTOM_SIZE.step) * CUSTOM_SIZE.step || customSize[side]));
@@ -314,8 +318,8 @@ export function Openjutsu() {
     setLook({ file: files[0], url: URL.createObjectURL(files[0]) });
   }
 
-  async function submit(kind: Kind) {
-    if (!video || (kind !== "mask" && !ready)) return;
+  async function submit(kind: Kind, montagePicks?: { tracks: string; labels: Label[] }) {
+    if (!video || (kind !== "mask" && kind !== "people" && !ready)) return;
     setSubmitting(true);
     setFormError("");
     const form = new FormData();
@@ -348,7 +352,21 @@ export function Openjutsu() {
         form.append("role", c.role);
       }
       form.set("max_quality", String(kind === "advanced_maxq"));
-      form.set("montage", String(montage));
+      form.set("resolution", resolutionField);
+      form.set("seed", String(seed));
+      form.set("clip_seconds", String(clipSeconds));
+    }
+    if (kind === "people") {
+      for (const c of shown) form.append("role", c.role);
+      form.set("resolution", resolutionField);
+    }
+    if (kind === "montage") {
+      for (const c of shown) {
+        form.append("picture", c.file);
+        form.append("role", c.role);
+      }
+      form.set("tracks", montagePicks?.tracks ?? "");
+      form.set("labels", JSON.stringify(montagePicks?.labels ?? []));
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -377,7 +395,7 @@ export function Openjutsu() {
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
-    if (kind !== "mask" && kind !== "color") {
+    if (kind !== "mask" && kind !== "color" && kind !== "people") {
       form.set("motion", String(motion));
       form.set("steps", String(steps));
       form.set("model", model);
@@ -390,7 +408,7 @@ export function Openjutsu() {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
-      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now() };
+      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now(), frames };
       writeRun(next);
       setJob(body);
       setProgress(null);
@@ -411,6 +429,7 @@ export function Openjutsu() {
   }
 
   function reset() {
+    setFormError("");
     writeRun(null);
     setRun(null);
     setJob(null);
@@ -444,11 +463,14 @@ export function Openjutsu() {
         ))}
       </nav>
 
+      {formError && <p className="error" role="alert">{formError}</p>}
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
           onCancel={cancel} onReset={reset} onGenerate={video && character && !submitting && mode === "simple" ? () => submit("simple") : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
+          photos={shown.map((c) => c.url)}
+          onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
         />
       ) : (
         <>
@@ -511,8 +533,9 @@ export function Openjutsu() {
                 {montage && (
                   <p className="hint">
                     For edited clips where different people take turns within one shot, with no hard cut between them: whip pans,
-                    selfie handovers, travel and &ldquo;vibe&rdquo; montages. H3 is told when each person is on screen, so nobody turns
-                    into someone else. Use Standard for everything else.
+                    selfie handovers, travel and &ldquo;vibe&rdquo; montages. Find people tracks everyone over the whole video and matches
+                    them to the photos; you check each appearance and pick its photo, then the video is made in one go. Give every photo a role with a look after
+                    &ldquo; - &rdquo; (&ldquo;the dancer - white polo, jeans&rdquo;) so the people can be told apart. Use Standard for everything else.
                   </p>
                 )}
               </>)}
@@ -707,7 +730,7 @@ export function Openjutsu() {
               <input type="checkbox" checked={noLipSync} onChange={(event) => setNoLipSync(event.target.checked)} />
               <i aria-hidden />
             </label>}
-            {mode === "advanced" && (
+            {mode === "advanced" && !montage && (
               <label className="setting toggle">
                 <span>One pass per person <small>Each character gets their own H3 pass with only their photo, so about twice the generation time.{shown.length === 2 ? "" : " Needs exactly two characters."}</small></span>
                 <input type="checkbox" checked={onePassEach} disabled={shown.length !== 2} onChange={(event) => setMaxQuality(event.target.checked)} />
@@ -782,17 +805,21 @@ export function Openjutsu() {
           )}
 
           <div className="go">
-            {formError && <p className="error">{formError}</p>}
             <div className="row">
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
-              <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
-                {submitting ? "Uploading…" : "Generate"}
-              </button>
+              {mode === "advanced" && montage ? (
+                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("people")}>{submitting ? "Uploading…" : "Find people"}</button>
+              ) : (
+                <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
+                  {submitting ? "Uploading…" : "Generate"}
+                </button>
+              )}
             </div>
             <small>{colorFix
               ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
               : clips && ready
-              ? faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
+              ? mode === "advanced" && montage ? "About 3 minutes per 18 s of video; then you check who becomes which photo and generate."
+              : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
               : `Add a video and ${mode === "object" ? "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>
@@ -801,16 +828,27 @@ export function Openjutsu() {
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onGenerate, margin, onMargin, onRecheck }: {
+function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
   onCancel: () => void; onReset: () => void; onGenerate: (() => void) | null;
   margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
+  photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string;
 }) {
   const status = job?.status ?? "queued";
   const clips = Math.max(run.clips, progress?.clip ?? 1);
-  const mask = run.kind === "mask";
+  const people = run.kind === "people";
+  const mask = run.kind === "mask" || people;
 
-  if (mask && status === "succeeded" && job?.video) {
+  if (people && status === "succeeded" && job?.data) {
+    return (
+      <PersonList
+        url={job.data} photos={photos} onBack={onReset}
+        onGenerate={run.frames === frames ? onMontage : null}
+      />
+    );
+  }
+
+  if (run.kind === "mask" && status === "succeeded" && job?.video) {
     return (
       <MaskCheck
         url={job.video.url} clipSeconds={run.clipSeconds} checked={run.margin ?? "normal"} margin={margin}
@@ -856,7 +894,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
   return (
     <section className="panel progress">
       <div className="row">
-        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : mask ? "Checking the mask" : color ? "Fixing the colours"
+        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : people ? "Finding people" : mask ? "Checking the mask" : color ? "Fixing the colours"
           : face ? (sampling ? `Chunk ${chunk} of up to ${run.clips}` : chunk ? "Pasting the face back" : "Tracking the face")
           : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
@@ -868,7 +906,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       </p>
       {preview && <img className="preview" src={preview} alt="Mask preview: white areas are regenerated" />}
       {streamError && <p className="error">{streamError}</p>}
-      <p className="hint">{mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
+      <p className="hint">{people ? "SAM tracks everyone over the whole video, then Qwen matches each person to a role." : mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
       <button className="secondary" onClick={onCancel}>Cancel</button>
     </section>
   );
@@ -937,6 +975,63 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
         <button className="secondary" onClick={onBack}>Back to settings</button>
       </div>
       {!onGenerate && <p className="hint">Add a character photo in the settings to generate.</p>}
+    </section>
+  );
+}
+
+function PersonList({ url, photos, onBack, onGenerate }: {
+  url: string; photos: string[]; onBack: () => void; onGenerate: ((tracks: string, labels: Label[]) => void) | null;
+}) {
+  const [found, setFound] = useState<{ tracks: string | null; list: Appearance[] } | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch(url).then((response) => response.json()).then((people: People) => setFound({ tracks: people.tracks, list: appearances(people) }),
+      () => setError("Could not read what Find people found."));
+  }, [url]);
+
+  const labels = found ? renderLabels(found.list) : [];
+
+  function pick(index: number, photo: number) {
+    setFound((current) => current && { ...current, list: current.list.map((a, i) => (i === index ? { ...a, pick: photo } : a)) });
+  }
+
+  return (
+    <section className="panel">
+      <h2>People {found && <small>{found.list.length} appearance{found.list.length === 1 ? "" : "s"}</small>}</h2>
+      <p className="hint">
+        Everyone SAM tracked, in order of appearance, matched to the photos. Check each one and pick the photo they become,
+        or Keep to leave them as they are. The whole video is then made in one go, with one H3 pass per photo on screen.
+      </p>
+      {error && <p className="error">{error}</p>}
+      {!found && !error && <p className="hint">Loading…</p>}
+      <div className="people-list">
+        {found?.list.map((a, i) => (
+          <div className="person" key={`${a.track}:${a.start}`}>
+            <img src={a.image} alt={`Appearance ${i + 1}`} />
+            <small>
+              {timecode(a.on[0][0] / 24)}–{timecode(a.on.at(-1)![1] / 24)} · {a.role ? `looks like photo ${a.role}` : "none of the photos"}
+              {a.small ? " · small in the frame" : ""}
+            </small>
+            <div className="segmented photo-pick">
+              {photos.map((photo, k) => (
+                <button key={k} className={a.pick === k + 1 ? "on" : ""} onClick={() => pick(i, k + 1)} aria-label={`Photo ${k + 1}`}>
+                  <img src={photo} alt="" />
+                </button>
+              ))}
+              <button className={a.pick ? "" : "on"} onClick={() => pick(i, 0)}>Keep</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {found && !found.list.length && <p className="hint">Nobody found.</p>}
+      {found && !onGenerate && <p className="hint">The video, the part to use or the custom size changed since Find people, or a photo is missing. Go back and find the people again.</p>}
+      <div className="row">
+        <button className="primary" disabled={!onGenerate || !found?.tracks || !labels.length} onClick={() => onGenerate?.(found!.tracks!, labels)}>
+          {labels.length ? "Generate" : "Pick a photo to generate"}
+        </button>
+        <button className="secondary" onClick={onBack}>Back to settings</button>
+      </div>
     </section>
   );
 }

@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         }
       } catch (error) {
         // The proxy forgets jobs when it restarts; the page then shows the job as no longer available.
-        if (error instanceof NotFound) send({ type: "job", job: { id, status: "expired", queuePosition: null, error: null, video: null } });
+        if (error instanceof NotFound) send({ type: "job", job: { id, status: "expired", queuePosition: null, error: null, video: null, data: null } });
         else if (!request.signal.aborted) send({ type: "error", message: error instanceof Error ? error.message : "Lost the job stream." });
       }
       if (!request.signal.aborted) controller.close();

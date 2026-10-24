@@ -2,7 +2,7 @@
 // workflows/advanced.api.json (one pass) and advanced_maxq.api.json (one pass per person, 2 characters) are exported
 // with every picture, the hat fix and No lip-sync enabled; each request prunes what it does not use. Nodes are found by title, as
 // the builder (ComfyUI user/default/oneclick_advanced_build.js) names them.
-import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, suffixRunName, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
+import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
 
 export const MAX_CHARACTERS = 4;
 
@@ -12,14 +12,13 @@ export type AdvancedSettings = {
   motion: MotionSize;
   hatFix: boolean;
   noLipSync: boolean;
-  montage: boolean; // different people take turns within one shot (whip pans, selfie handovers)
   margin: Margin;
   seed: number;
   clipSeconds: number;
 };
 
 const HAT = /\bhats?\b/i;
-const PLAN = "Swap Plan (roles, seed, size)";
+export const PLAN = "Swap Plan (roles, seed, size)";
 export const VIDEO = "Source video (people get replaced)";
 
 export function nodeByTitle(graph: ApiGraph, title: string) {
@@ -64,17 +63,12 @@ export function pruneAdvanced(source: ApiGraph, pictures: number, settings: Adva
     for (const [name, value] of Object.entries(node.inputs)) {
       if (!isLink(value) || !removed.has(value[0])) continue;
       if (bypass.has(value[0])) node.inputs[name] = bypass.get(value[0]);
-      else if (node._meta?.title === PLAN || name.startsWith("ref_images.")) delete node.inputs[name];
+      else if (/^picture_\d/.test(name) || name.startsWith("ref_images.")) delete node.inputs[name];
       else throw new Error(`Node ${id}.${name} still links to removed node ${value[0]}.`);
     }
   }
   if (!settings.noLipSync) dropNoLipSync(graph);
   setMotionSize(graph, settings.motion);
-  // Montage: the shot list and H3 are told when each person is on screen, so nobody turns into another subject within a shot.
-  if (settings.montage) {
-    for (const node of Object.values(graph)) if (node.class_type === "H3ClipShots" || node.class_type === "H3FillShots") node.inputs.timing = true;
-    suffixRunName(graph, "montage_run_name", "_montage", "Run name for Montage");
-  }
 
   for (const node of Object.values(graph)) {
     if (node.class_type === "GrowMaskWithBlur" && / grow mask /.test(node._meta?.title ?? "")) node.inputs.expand = MARGINS[settings.margin];

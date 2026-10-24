@@ -1,0 +1,12 @@
+{
+  "1": {"class_type": "VHS_LoadVideo", "_meta": {"title": "Source video"}, "inputs": {"video": "", "force_rate": 24, "custom_width": 0, "custom_height": 0, "frame_load_cap": 0, "skip_first_frames": 0, "select_every_nth": 1, "format": "None"}},
+  "2": {"class_type": "CheckpointLoaderSimple", "_meta": {"title": "SAM 3.1"}, "inputs": {"ckpt_name": "sam3.1_multiplex_fp16.safetensors"}},
+  "3": {"class_type": "CLIPTextEncode", "_meta": {"title": "SAM: people"}, "inputs": {"text": "person", "clip": ["2", 1]}},
+  "4": {"class_type": "ImageScaleToMaxDimension", "_meta": {"title": "SAM video (1008 px, as the render)"}, "inputs": {"upscale_method": "area", "largest_size": 1008, "image": ["1", 0]}},
+  "5": {"class_type": "SAM3_VideoTrack", "_meta": {"title": "SAM 3.1 track every person"}, "inputs": {"detection_threshold": 0.35, "max_objects": 0, "detect_interval": 1, "images": ["4", 0], "model": ["2", 0], "conditioning": ["3", 0]}},
+  "6": {"class_type": "H3TrackCrops", "_meta": {"title": "Show each track per shot"}, "inputs": {"cut_threshold": 40, "max_crops": 32, "people": "<Subject 1>: the main person", "track_data": ["5", 0], "images": ["4", 0]}},
+  "7": {"class_type": "CLIPLoader", "_meta": {"title": "Describer: Qwen3-VL 8B"}, "inputs": {"clip_name": "qwen3vl_8b_int8_convrot.safetensors", "type": "stable_diffusion", "device": "default"}},
+  "8": {"class_type": "TextGenerate", "_meta": {"title": "Who is each track (Qwen3-VL)"}, "inputs": {"prompt": ["6", 1], "max_length": 1200, "sampling_mode": "off", "thinking": false, "use_default_template": true, "mtp": "auto", "clip": ["7", 0], "image": ["6", 0]}},
+  "9": {"class_type": "H3TrackRoles", "_meta": {"title": "Read the track labels"}, "inputs": {"segments": ["6", 2], "answer": ["8", 0]}},
+  "10": {"class_type": "H3MontagePeople", "_meta": {"title": "People per shot (for the piece list)"}, "inputs": {"track_data": ["5", 0], "crops": ["6", 0], "labels": ["9", 0]}}
+}

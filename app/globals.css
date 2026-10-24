@@ -159,3 +159,10 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 .lora-list { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 1 1 100%; }
 .lora { display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem auto; gap: 8px; width: 100%; }
 .lora .file-name { width: 100%; }
+
+.people-list { display: flex; gap: 12px; flex-wrap: wrap; }
+.person { display: grid; gap: 6px; background: var(--panel-2); border-radius: 12px; padding: 8px; max-width: 100%; }
+.person > img { height: 150px; max-width: 100%; object-fit: contain; border-radius: 8px; }
+.photo-pick { background: var(--bg); align-items: center; }
+.photo-pick button { padding: 3px; }
+.photo-pick img { width: 34px; height: 44px; object-fit: cover; border-radius: 5px; display: block; }
