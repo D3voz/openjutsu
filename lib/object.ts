@@ -44,6 +44,7 @@ export type ObjectSettings = {
   seed: number;
   clipSeconds: number;
   placement?: PlacementKeyframe[];
+  action?: string; // add: what the new thing does over the clip; empty for a still object
 };
 
 export const OBJECT_VIDEO = "Source video";
@@ -85,7 +86,8 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     delete ref["ref_images.ref_image_0"];
   }
   // H3 copies a grey shape's outline, so a changed top keeps the old silhouette and a removed object would come back grey.
-  if (settings.mode === "remove" || settings.mode === "change" && !settings.keepOutline) {
+  // For add, the original clip shows the spot empty and H3 copied that back: a dancer never appeared beside the others.
+  if (settings.mode === "remove" || settings.mode === "add" || settings.mode === "change" && !settings.keepOutline) {
     delete ref["ref_videos.ref_video_0"];
     delete ref["ref_video_audios.ref_video_audio_0"];
   }
@@ -114,7 +116,7 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     plan.placement = placement;
     plan.change_to = addedObject(settings.changeTo);
     plan.keep_outline = false;
-    ref["ref_videos.ref_video_0"] = [id("Motion reference for this clip"), 0];
+    plan.action = settings.action ?? "";
     graph.object_placement = { class_type: "H3ObjectPlacementMask", inputs: {
       images: [id("Source clip (frames + audio)"), 0], start_frame: [id("Clip start frame"), 1], placement,
     }, _meta: { title: "Object placement area" } };

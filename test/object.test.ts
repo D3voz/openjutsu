@@ -79,18 +79,20 @@ test("the model settings reach the Object Swap Plan", () => {
   assert.deepEqual(dangling(pruned), []);
 });
 
-test("adding an object uses placement keyframes and the original video, without SAM or grey references", () => {
+test("adding an object uses placement keyframes, without SAM, grey shapes or the original video as a reference", () => {
   const placement = [{ frame: 0, x: 0.3, y: 0.4, width: 0.2, height: 0.25 }];
   for (const picture of [false, true]) {
-    const pruned = pruneObject(graph, picture, { ...settings("add"), target: "on the table", changeTo: "a cake", placement });
+    const pruned = pruneObject(graph, picture, { ...settings("add"), target: "on the table", changeTo: "a cake", placement, action: "Steam rises from it." });
     assert.deepEqual(dangling(pruned), []);
     assert.ok(!Object.values(pruned).some((n) => ["SAM3_VideoTrack", "H3PeopleMask", "H3GreyMannequins", "CheckpointLoaderSimple"].includes(n.class_type)));
     const ref = node(pruned, "Reference Conditioning").inputs;
-    assert.deepEqual(ref["ref_videos.ref_video_0"], [nodeByTitle(pruned, "Motion reference for this clip"), 0]);
+    assert.equal(ref["ref_videos.ref_video_0"], undefined);
+    assert.equal(ref["ref_video_audios.ref_video_audio_0"], undefined);
     assert.equal(!!ref["ref_images.ref_image_0"], picture);
     const plan = node(pruned, "Object Swap Plan (what to change)").inputs;
     assert.equal(plan.mode, "add");
     assert.equal(plan.keep_outline, false);
+    assert.equal(plan.action, "Steam rises from it.");
     assert.equal(plan.placement, JSON.stringify(placement));
     assert.equal(pruned.object_placement.class_type, "H3ObjectPlacementMask");
     assert.equal(pruned.object_placement.inputs.placement, plan.placement);

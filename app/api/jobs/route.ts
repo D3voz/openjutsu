@@ -79,7 +79,7 @@ function parseObject(form: FormData) {
   const settings: ObjectSettings = {
     mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", keepOutline: form.get("keep_outline") === "true",
     margin: margin as ObjectMargin, ...parseRun(form),
-    ...(mode === "add" ? { placement: parsePlacement(form.get("placement")) } : {}),
+    ...(mode === "add" ? { placement: parsePlacement(form.get("placement")), action: String(form.get("action") ?? "").replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
   };
   return { picture, settings };
 }

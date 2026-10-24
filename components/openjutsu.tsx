@@ -248,6 +248,7 @@ export function Openjutsu() {
   const [editMode, setEditMode] = useState<EditTab>("change");
   const [editTarget, setEditTarget] = useState(EDITS[0].target);
   const [changeTo, setChangeTo] = useState("");
+  const [action, setAction] = useState("");
   const [look, setLook] = useState<{ file: File; url: string } | null>(null);
   const [biggestOnly, setBiggestOnly] = useState(false);
   const [keepOutline, setKeepOutline] = useState(true);
@@ -546,7 +547,10 @@ export function Openjutsu() {
       if (look && editMode !== "remove") form.set("picture", look.file);
       form.set("biggest_only", String(biggestOnly));
       form.set("keep_outline", String(keepOutline));
-      if (editMode === "add") form.set("placement", JSON.stringify(placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) }))));
+      if (editMode === "add") {
+        form.set("placement", JSON.stringify(placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) }))));
+        form.set("action", action);
+      }
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -807,7 +811,7 @@ export function Openjutsu() {
                       <button key={e.id} className={e.id === editMode ? "on" : ""} onClick={() => {
                         // Each tab's fields mean something else: "top, pants" left over from Change made From picture swap only the top.
                         // The default goes in as a value, not a placeholder, so an untouched box shows what SAM tracks.
-                        if (e.id !== editMode) { setEditTarget(e.target); setChangeTo(""); }
+                        if (e.id !== editMode) { setEditTarget(e.target); setChangeTo(""); setAction(""); }
                         setEditMode(e.id);
                       }}>{e.label}</button>
                     ))}
@@ -819,6 +823,10 @@ export function Openjutsu() {
                   {!pictureOnly && <label>
                     <span>{edit.toHint}</span>
                     <input value={changeTo} maxLength={300} placeholder={`e.g. ${edit.to}`} onChange={(event) => setChangeTo(event.target.value)} />
+                  </label>}
+                  {editMode === "add" && <label>
+                    <span>What happens with it <small>Optional. Leave empty for a still object.</small></span>
+                    <input value={action} maxLength={300} placeholder="e.g. she dances the same routine in sync with the others" onChange={(event) => setAction(event.target.value)} />
                   </label>}
                   {editMode !== "remove" && (look ? (
                     <div className="character look">
