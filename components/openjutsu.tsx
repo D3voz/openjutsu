@@ -169,6 +169,40 @@ function FilePicker({ value, options, onChange, label }: { value: string; option
   );
 }
 
+function jobLine(run: Run, job: PublicJob | null) {
+  return `Job: ${run.kind} ${run.id}, status ${job?.status ?? "unknown"}`;
+}
+
+// A plain-text report for a GitHub issue or Discord: nothing about the uploads, prompts or saved settings.
+function CopyDetails({ lines }: { lines: string[] }) {
+  const [copied, setCopied] = useState(false);
+  const [manual, setManual] = useState("");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+  useEffect(() => box.current?.select(), [manual]);
+
+  async function copy() {
+    const text = ["Openjutsu", ...lines.filter(Boolean), `Browser: ${navigator.userAgent}`, `Time: ${new Date().toISOString()}`].join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setManual("");
+      setCopied(true);
+    } catch {
+      // No clipboard over plain HTTP: select the text so it can be copied by hand.
+      setManual(text);
+    }
+  }
+
+  return (<>
+    <button className="secondary" onClick={copy}>{copied ? "Copied" : "Copy error details"}</button>
+    {manual && <textarea ref={box} className="report" readOnly rows={manual.split("\n").length} value={manual} aria-label="Error details" onFocus={(event) => event.currentTarget.select()} />}
+  </>);
+}
+
 function MarginPicker({ value, onChange }: { value: Margin; onChange: (margin: Margin) => void }) {
   return (
     <div className="segmented">
@@ -426,6 +460,7 @@ export function Openjutsu() {
     : !!character;
   const generateKind: Kind = mode === "object" ? controlNet ? "control" : fromPicture ? "simple" : "object"
     : mode === "post" ? post : mode === "simple" ? "simple" : montage ? "montage" : onePassEach ? "advanced_maxq" : "advanced";
+  const tab = `Tab: ${mode === "post" ? `post/${post}` : mode === "object" ? `object/${editMode}` : mode === "advanced" && montage ? "advanced/montage" : mode}`;
 
   function chooseLook(files: File[]) {
     if (!files[0]) return;
@@ -638,7 +673,10 @@ export function Openjutsu() {
         ))}
       </nav>
 
-      {formError && <p className="error" role="alert">{formError}</p>}
+      {formError && <div className="row">
+        <p className="error" role="alert">{formError}</p>
+        <CopyDetails lines={[tab, run ? jobLine(run, job) : "", `Error: ${formError}`]} />
+      </div>}
       {checkingSetup && <p className="hint" role="status">Checking required nodes and models…</p>}
       {setup && !setup.ok && (
         <section className="panel setup" role="alert">
@@ -657,6 +695,9 @@ export function Openjutsu() {
               <code>{item.name}</code><small>ComfyUI/models/{item.folder}</small>
             </li>)}</ul>
           </>}
+          <CopyDetails lines={[tab, "Setup check failed", setup.error ? `Error: ${setup.error}` : "",
+            ...setup.packs.map((pack) => `Missing pack: ${pack.name} ${pack.url} (nodes: ${pack.nodes.join(", ")})`),
+            ...setup.models.map((item) => `Missing model: ComfyUI/models/${item.folder}/${item.name}`)]} />
         </section>
       )}
       {run ? (
@@ -1106,6 +1147,7 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
         {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : run.kind === "color" ? "openjutsu_color" : "h3_oneclick_swap"} folder.</p>}
         <div className="row">
           {status !== "succeeded" && onRetry && <button className="primary" onClick={onRetry}>Retry</button>}
+          {(status === "failed" || status === "expired") && <CopyDetails lines={[jobLine(run, job), job?.error ? `Error: ${job.error}` : "", streamError && `Stream error: ${streamError}`]} />}
           <button className="secondary" onClick={onReset}>Back</button>
         </div>
       </section>
@@ -1137,7 +1179,10 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
         {progress?.steps ? ` · step ${progress.step ?? 0}/${progress.steps}` : ""}
       </p>
       {preview && <img className="preview" src={preview} alt="Mask preview: white areas are regenerated" />}
-      {streamError && <p className="error">{streamError}</p>}
+      {streamError && <div className="row">
+        <p className="error">{streamError}</p>
+        <CopyDetails lines={[jobLine(run, job), `Stream error: ${streamError}`]} />
+      </div>}
       <p className="hint">{people ? "SAM tracks everyone over the whole video, then Qwen matches each person to a role." : mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
       <button className="secondary" onClick={onCancel}>Cancel</button>
     </section>

@@ -65,6 +65,7 @@ h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
 .setup a { color: var(--accent); }
 .setup small { display: block; overflow-wrap: anywhere; }
 .setup code { overflow-wrap: anywhere; }
+.report { flex-basis: 100%; width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 0.82em/1.5 ui-monospace, monospace; resize: vertical; }
 
 .drop {
   border: 1.5px dashed var(--line); border-radius: 14px; display: grid; place-items: center; text-align: center;
