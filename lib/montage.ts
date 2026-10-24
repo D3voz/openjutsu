@@ -26,7 +26,7 @@ export const TRACKS = "Tracks from Find people";
 // The montage graph's own tracking and labelling, for a run without review.
 const SAM = "SAM 3.1 track every person (whole video)";
 const CROPS = "Show each track per shot";
-const ANALYSIS = [SAM, CROPS, "Who is each track (Qwen3-VL)", "Read the track labels", "Picks without review"];
+const ANALYSIS = [SAM, CROPS, "Who is each track (Qwen3-VL)", "Picks without review"];
 export const TRACKS_FILE = /^h3_montage_people_\d+_\.npz$/;
 
 // Listed even when unlabelled once on screen this long or this big.

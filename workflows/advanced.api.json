@@ -673,45 +673,24 @@
    "title": "Show each track per shot"
   }
  },
- "46": {
+ "47": {
   "inputs": {
-   "prompt": [
-    "45",
-    1
-   ],
-   "max_length": 400,
-   "sampling_mode": "off",
-   "thinking": false,
-   "use_default_template": true,
-   "mtp": "auto",
    "clip": [
     "22",
     0
    ],
-   "image": [
+   "crops": [
     "45",
     0
-   ]
-  },
-  "class_type": "TextGenerate",
-  "_meta": {
-   "title": "Who is each track (Qwen3-VL)"
-  }
- },
- "47": {
-  "inputs": {
+   ],
    "segments": [
     "45",
-    2
-   ],
-   "answer": [
-    "46",
-    0
+    1
    ]
   },
   "class_type": "H3TrackRoles",
   "_meta": {
-   "title": "Read the track labels"
+   "title": "Who is each track (Qwen3-VL)"
   }
  },
  "48": {
