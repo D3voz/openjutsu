@@ -197,3 +197,18 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 /* Keep the result's native controls visible while they are shown. */
 .compare:hover .before, .compare.paused .before { clip-path: inset(0 calc(100% - var(--split)) 72px 0); }
 .compare:hover .compare-line, .compare.paused .compare-line { bottom: 72px; }
+
+.history { display: grid; gap: 4px; }
+.history h2 { margin: 0; font-size: 14px; color: var(--muted); }
+.history .link { background: none; border: 0; padding: 0; color: var(--accent); font-size: 0.86em; }
+.history ul { list-style: none; margin: 0; padding: 0; display: grid; }
+.history li button {
+  width: 100%; display: grid; grid-template-columns: 8.5rem 8rem 6rem minmax(0, 1fr); gap: 2px 12px; align-items: baseline;
+  text-align: left; background: none; border: 0; border-radius: 8px; padding: 5px 8px; font-size: 0.9em;
+}
+.history li button:hover:not(:disabled) { background: var(--panel); }
+.history .failed { color: var(--danger); }
+.history .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 760px) {
+  .history li button { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}

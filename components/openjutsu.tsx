@@ -22,12 +22,21 @@ type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "contr
 type TonePreset = { name: string; settings: Record<string, unknown> };
 // frames: the video, part and crop SAM saw
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number; frames: string };
+type PastRun = Run & { status?: string; result?: string };
 // pass counts the sampler runs started so far: Fix faces samples its chunks one after another in the same node.
 type Progress = NodeInfo & { step: number | null; steps: number | null; pass: number };
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
 const RUN_KEY = "openjutsu.run";
 const SETTINGS_KEY = "openjutsu.settings";
+const HISTORY_KEY = "openjutsu.history";
+const HISTORY_LENGTH = 20;
+
+const KIND_LABELS: Record<Kind, string> = {
+  simple: "Person swap", mask: "Mask check", advanced: "Advanced swap", advanced_maxq: "Advanced swap", object: "Object swap",
+  control: "ControlNet", face: "Fix faces", color: "Fix colours", people: "Find people", montage: "Montage",
+};
+const STATUS_LABELS: Record<string, string> = { succeeded: "Done", failed: "Failed", canceled: "Canceled", expired: "Expired" };
 
 const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
@@ -67,6 +76,15 @@ function writeRun(run: Run | null) {
     if (run) localStorage.setItem(RUN_KEY, JSON.stringify(run));
     else localStorage.removeItem(RUN_KEY);
   } catch {}
+}
+
+function readHistory(): PastRun[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
+    return Array.isArray(list) ? list.filter((p) => typeof p?.id === "string" && Object.hasOwn(KIND_LABELS, p.kind)) : [];
+  } catch {
+    return [];
+  }
 }
 
 type Settings = {
@@ -223,6 +241,7 @@ export function Openjutsu() {
   const [formError, setFormError] = useState("");
 
   const [run, setRun] = useState<Run | null>(null);
+  const [history, setHistory] = useState<PastRun[]>([]);
   const [job, setJob] = useState<PublicJob | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [preview, setPreview] = useState("");
@@ -230,7 +249,10 @@ export function Openjutsu() {
   const [now, setNow] = useState(Date.now());
   const [restored, setRestored] = useState(false);
 
-  useEffect(() => setRun(readRun()), []);
+  useEffect(() => {
+    setRun(readRun());
+    setHistory(readHistory());
+  }, []);
 
   const settings: Settings = {
     mode, maxQuality, montage, resolution, customSize, hatFix, noLipSync, margin, target, editMode, editTarget, biggestOnly, keepOutline, post,
@@ -254,6 +276,19 @@ export function Openjutsu() {
       localStorage.setItem(SETTINGS_KEY, savedSettings);
     } catch {}
   }, [restored, savedSettings]);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch {}
+  }, [restored, history]);
+
+  // A finished job that ComfyUI later forgets keeps its finished status and file name.
+  useEffect(() => {
+    if (!job || !TERMINAL.has(job.status)) return;
+    setHistory((list) => list.map((p) => p.id !== job.id || (p.status && job.status === "expired") ? p : { ...p, status: job.status, result: job.video?.name }));
+  }, [job?.id, job?.status]);
 
   useEffect(() => setSetup(null), [mode, post, montage, maxQuality, resolution, motion, hatFix, noLipSync, model, loras, detailOn, toneOn, faceStyle, editMode, characters.length, !!look]);
 
@@ -389,6 +424,8 @@ export function Openjutsu() {
   const ready = colorFix ? detailOn || toneOn : mode === "object"
     ? editMode === "remove" || (pictureOnly ? !!look : (editMode !== "add" || placement.length > 0) && (!!changeTo.trim() || !!look))
     : !!character;
+  const generateKind: Kind = mode === "object" ? controlNet ? "control" : fromPicture ? "simple" : "object"
+    : mode === "post" ? post : mode === "simple" ? "simple" : montage ? "montage" : onePassEach ? "advanced_maxq" : "advanced";
 
   function chooseLook(files: File[]) {
     if (!files[0]) return;
@@ -514,6 +551,7 @@ export function Openjutsu() {
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
       const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : kind === "control" ? CONTROL_MAX_SECONDS : clipSeconds, startedAt: Date.now(), frames };
       writeRun(next);
+      setHistory((list) => [next, ...list.filter((p) => p.id !== next.id)].slice(0, HISTORY_LENGTH));
       setJob(body);
       setProgress(null);
       setPreview("");
@@ -549,6 +587,13 @@ export function Openjutsu() {
     setProgress(null);
     setPreview("");
     setStreamError("");
+  }
+
+  function reopen(past: PastRun) {
+    setFormError("");
+    setSetup(null);
+    writeRun(past);
+    setRun(past);
   }
 
   async function fixResult(next: Post) {
@@ -622,6 +667,7 @@ export function Openjutsu() {
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
           photos={shown.map((c) => c.url)}
           onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
+          onRetry={video && ready && !submitting && run.kind === generateKind && generateKind !== "montage" ? () => { reset(); submit(generateKind); } : null}
         />
       ) : (
         <>
@@ -966,7 +1012,7 @@ export function Openjutsu() {
                 <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>Find people</button>
                 <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}</button>
               </>) : (
-                <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? controlNet ? "control" : fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
+                <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(generateKind)}>
                   {submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}
                 </button>
               )}
@@ -981,18 +1027,39 @@ export function Openjutsu() {
               : mode === "object" && editMode === "add" && video && !placement.length ? "Draw where the new object should go."
               : `Add a video and ${mode === "object" ? editMode === "add" ? "describe the object to add" : "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
+
+          {history.length > 0 && (
+            <section className="history">
+              <div className="row">
+                <h2>Recent jobs</h2>
+                <button className="link" onClick={() => setHistory([])}>Clear</button>
+              </div>
+              <ul>
+                {history.map((p) => (
+                  <li key={p.id}>
+                    <button disabled={submitting} onClick={() => reopen(p)}>
+                      <span>{KIND_LABELS[p.kind]}</span>
+                      <small>{new Date(p.startedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                      <small className={p.status}>{STATUS_LABELS[p.status ?? ""] ?? "Not finished"}</small>
+                      <small className="file">{p.result}</small>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
     </main>
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, before, onCancel, onReset, onFix, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames }: {
+function RunView({ run, job, progress, preview, streamError, now, before, onCancel, onReset, onFix, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames, onRetry }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
   before: { url: string; start: number } | null;
   onCancel: () => void; onReset: () => void; onFix: (post: Post) => void; onGenerate: (() => void) | null;
   margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
-  photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string;
+  photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string; onRetry: (() => void) | null;
 }) {
   const status = job?.status ?? "queued";
   const clips = Math.max(run.clips, progress?.clip ?? 1);
@@ -1037,7 +1104,10 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
         <h2>{status === "canceled" ? "Canceled" : status === "succeeded" ? "Finished without a video" : status === "expired" ? "Job no longer available" : "Something went wrong"}</h2>
         {job?.error && <p className="error">{job.error}</p>}
         {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : run.kind === "color" ? "openjutsu_color" : "h3_oneclick_swap"} folder.</p>}
-        <button className="secondary" onClick={onReset}>Back</button>
+        <div className="row">
+          {status !== "succeeded" && onRetry && <button className="primary" onClick={onRetry}>Retry</button>}
+          <button className="secondary" onClick={onReset}>Back</button>
+        </div>
       </section>
     );
   }
