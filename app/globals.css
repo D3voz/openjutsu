@@ -60,6 +60,11 @@ h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .hint { margin: 0; color: var(--muted); font-size: 0.86em; }
 .error { margin: 0; color: var(--danger); }
+.setup { border-color: var(--danger); }
+.setup ul { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.setup a { color: var(--accent); }
+.setup small { display: block; overflow-wrap: anywhere; }
+.setup code { overflow-wrap: anywhere; }
 
 .drop {
   border: 1.5px dashed var(--line); border-radius: 14px; display: grid; place-items: center; text-align: center;
@@ -95,6 +100,12 @@ video { width: 100%; border-radius: 12px; background: #000; max-height: 420px; }
 .edit input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; width: 100%; font-size: 1rem; }
 .edit input:focus { outline: none; border-color: var(--accent); }
 .edit .look, .edit .drop.add { width: 50%; }
+.placement { display: grid; gap: 10px; min-width: 0; }
+.placement canvas { width: 100%; height: auto; display: block; background: #000; border-radius: 10px; cursor: crosshair; touch-action: none; }
+.placement input[type="range"] { width: 100%; }
+.placement-keys { display: flex; gap: 6px; flex-wrap: wrap; }
+.placement-keys button { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; background: var(--panel-2); }
+.placement-keys button.on { border-color: var(--accent); color: var(--accent); }
 
 .settings { gap: 12px; }
 .setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }

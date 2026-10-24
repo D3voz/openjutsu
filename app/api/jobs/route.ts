@@ -1,3 +1,4 @@
+import { apiAccess, HttpError, readFormData } from "../../../lib/http.ts";
 import { NextResponse } from "next/server";
 import { listModels, submitAdvanced, submitColor, submitFace, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
 import { TRACKS_FILE, type Label } from "../../../lib/montage.ts";
@@ -5,7 +6,7 @@ import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
-import { EDIT_MODES, OBJECT_MARGINS, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
+import { EDIT_MODES, OBJECT_MARGINS, parsePlacement, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, type Margin, type MotionSize, type Preset, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
@@ -21,8 +22,8 @@ function parseVideo(form: FormData) {
 function parseSection(form: FormData): Section {
   const start = Number(form.get("start") ?? 0);
   const length = Number(form.get("length") ?? 0);
-  if (!(start >= 0)) throw new Error("The start of the part to use must be 0 s or later.");
-  if (!(length === 0 || length >= MIN_SECTION_SECONDS)) throw new Error(`The part to use must be at least ${MIN_SECTION_SECONDS} s long.`);
+  if (!Number.isFinite(start) || !(start >= 0)) throw new Error("The start of the part to use must be 0 s or later.");
+  if (!Number.isFinite(length) || !(length === 0 || length >= MIN_SECTION_SECONDS)) throw new Error(`The part to use must be at least ${MIN_SECTION_SECONDS} s long.`);
   return { start, length };
 }
 
@@ -65,18 +66,19 @@ function parseRun(form: FormData) {
 
 function parseObject(form: FormData) {
   const mode = String(form.get("edit_mode"));
-  if (!EDIT_MODES.includes(mode as EditMode)) throw new Error("Choose change, remove or background.");
+  if (!EDIT_MODES.includes(mode as EditMode)) throw new Error("Choose change, remove, background or add.");
   const margin = String(form.get("margin") ?? "normal");
   if (!Object.hasOwn(OBJECT_MARGINS, margin)) throw new Error("Choose a supported mask margin.");
   const target = String(form.get("target") ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
-  if (!target) throw new Error(mode === "background" ? "Say what stays, for example person." : "Say what to change, for example hair.");
+  if (!target) throw new Error(mode === "add" ? "Say where the object goes, for example on the table." : mode === "background" ? "Say what stays, for example person." : "Say what to change, for example hair.");
   const changeTo = String(form.get("change_to") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
   const entry = form.get("picture");
   const picture = entry instanceof File && entry.size > 0 && mode !== "remove" ? parsePicture(entry) : null;
-  if (mode !== "remove" && !changeTo && !picture) throw new Error("Say what it becomes, or add a picture.");
+  if (mode !== "remove" && !changeTo && !picture) throw new Error(mode === "add" ? "Describe the object to add, or add a picture." : "Say what it becomes, or add a picture.");
   const settings: ObjectSettings = {
     mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", keepOutline: form.get("keep_outline") === "true",
     margin: margin as ObjectMargin, ...parseRun(form),
+    ...(mode === "add" ? { placement: parsePlacement(form.get("placement")) } : {}),
   };
   return { picture, settings };
 }
@@ -176,10 +178,24 @@ function parseMontage(form: FormData) {
   return { pictures, settings, review: { tracks: String(tracks), labels: parseLabels(form.get("labels"), pictures.length) } };
 }
 
+let submitting = false;
+
 export async function POST(request: Request) {
+  const denied = apiAccess(request);
+  if (denied) return denied;
+  if (submitting) return NextResponse.json({ error: "Another upload is in progress. Try again shortly." }, { status: 429, headers: { "Retry-After": "5" } });
+  submitting = true;
+  try {
+    return await submitJob(request);
+  } finally {
+    submitting = false;
+  }
+}
+
+async function submitJob(request: Request) {
   let submit: () => ReturnType<typeof submitSimple>;
   try {
-    const form = await request.formData();
+    const form = await readFormData(request);
     const mode = form.get("mode");
     const video = parseVideo(form);
     const section = parseSection(form);
@@ -216,7 +232,7 @@ export async function POST(request: Request) {
       throw new Error("Unknown mode.");
     }
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: error instanceof HttpError ? error.status : 400 });
   }
 
   try {

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { nodeByTitle } from "../lib/advanced.ts";
 import { applyModel, DEFAULT_MODEL } from "../lib/model.ts";
-import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "../lib/object.ts";
+import { OBJECT_PICTURE, OBJECT_VIDEO, parsePlacement, placementAt, pruneObject, type ObjectSettings } from "../lib/object.ts";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
 
 const graph: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/object.api.json", import.meta.url), "utf8"));
@@ -77,4 +77,48 @@ test("the model settings reach the Object Swap Plan", () => {
   applyModel(pruned, { ...DEFAULT_MODEL, steps: 9 });
   assert.equal(node(pruned, "Object Swap Plan (what to change)").inputs.steps, 9);
   assert.deepEqual(dangling(pruned), []);
+});
+
+test("adding an object uses placement keyframes and the original video, without SAM or grey references", () => {
+  const placement = [{ frame: 0, x: 0.3, y: 0.4, width: 0.2, height: 0.25 }];
+  for (const picture of [false, true]) {
+    const pruned = pruneObject(graph, picture, { ...settings("add"), target: "on the table", changeTo: "a cake", placement });
+    assert.deepEqual(dangling(pruned), []);
+    assert.ok(!Object.values(pruned).some((n) => ["SAM3_VideoTrack", "H3PeopleMask", "H3GreyMannequins", "CheckpointLoaderSimple"].includes(n.class_type)));
+    const ref = node(pruned, "Reference Conditioning").inputs;
+    assert.deepEqual(ref["ref_videos.ref_video_0"], [nodeByTitle(pruned, "Motion reference for this clip"), 0]);
+    assert.equal(!!ref["ref_images.ref_image_0"], picture);
+    const plan = node(pruned, "Object Swap Plan (what to change)").inputs;
+    assert.equal(plan.mode, "add");
+    assert.equal(plan.keep_outline, false);
+    assert.equal(plan.placement, JSON.stringify(placement));
+    assert.equal(pruned.object_placement.class_type, "H3ObjectPlacementMask");
+    assert.equal(pruned.object_placement.inputs.placement, plan.placement);
+    assert.deepEqual(pruned.object_placement.inputs.images, [nodeByTitle(pruned, "Source clip (frames + audio)"), 0]);
+    assert.deepEqual(pruned.object_placement.inputs.start_frame, [nodeByTitle(pruned, "Clip start frame"), 1]);
+    assert.deepEqual(node(pruned, "Grow mask").inputs.mask, ["object_placement", 0]);
+  }
+});
+
+test("add placements use the selected canvas and the model settings still reach generation", () => {
+  const pruned = pruneObject(graph, false, { ...settings("add"), placement: [{ frame: -24, x: 0.2, y: 0.4, width: 0.3, height: 0.2 }], resolution: { width: 640, height: 960 } });
+  applyModel(pruned, { ...DEFAULT_MODEL, steps: 8 });
+  assert.deepEqual(dangling(pruned), []);
+  assert.equal(node(pruned, "Object Swap Plan (what to change)").inputs.steps, 8);
+  assert.deepEqual(node(pruned, "Source clip (frames + audio)").inputs.source_frames, ["custom_size", 0]);
+  assert.deepEqual(node(pruned, "Motion reference video (~512 px)").inputs.image, ["custom_size", 0]);
+});
+
+test("placement validation rejects missing or invalid geometry and sorts valid keyframes", () => {
+  for (const placement of [null, [], "{", [{ frame: 0, x: -0.1, y: 0.2, width: 0.2, height: 0.2 }],
+    [{ frame: 0, x: 0.9, y: 0.2, width: 0.2, height: 0.2 }], [{ frame: 0, x: 0.2, y: 0.2, width: 0, height: 0.2 }]]) {
+    assert.throws(() => parsePlacement(placement));
+  }
+  const points = [{ frame: 48, x: 0.6, y: 0.2, width: 0.2, height: 0.2 }, { frame: 0, x: 0.2, y: 0.4, width: 0.2, height: 0.2 }];
+  const sorted = parsePlacement(JSON.stringify(points));
+  assert.deepEqual(sorted.map((p) => p.frame), [0, 48]);
+  assert.deepEqual(placementAt(sorted, -24), { x: 0.2, y: 0.4, width: 0.2, height: 0.2 });
+  const middle = placementAt(sorted, 24)!;
+  assert.ok(Math.abs(middle.x - 0.4) < 1e-6 && Math.abs(middle.y - 0.3) < 1e-6);
+  assert.deepEqual(placementAt(sorted, 96), { x: 0.6, y: 0.2, width: 0.2, height: 0.2 });
 });

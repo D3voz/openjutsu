@@ -105,6 +105,14 @@ test("node ids map to titles and clip numbers", () => {
   assert.equal(describe(NODES.final)?.clip, null);
 });
 
+test("unknown duration and invalid clip lengths do not enter the planning loop", () => {
+  for (const duration of [Infinity, NaN, -1, 0]) {
+    assert.equal(clipCount(duration, 6), 0);
+    assert.deepEqual(clipStarts(duration, 6), [0]);
+  }
+  for (const length of [Infinity, NaN, 0, 39 / 24]) assert.equal(clipCount(12, length), 0);
+});
+
 test("clip count follows the Swap Plan grid", () => {
   assert.equal(clipCount(6, 6), 1);
   assert.equal(clipCount(16, 6), 4);

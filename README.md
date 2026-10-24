@@ -27,13 +27,15 @@ Install these into `ComfyUI/custom_nodes` (ComfyUI Manager finds the first three
 | [ComfyUI-Fantastic-MiniMaxH3-PromptBuilder](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder) | masked video-edit latent |
 | [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Grow Mask With Blur |
 | [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite) | video loading |
-| `comfyui-h3-oneclick-swap` | swap and object plans, people and role masks, grey mannequins, track labelling, cut finder, shot list, face-fix chunks (TODO: link the published pack) |
+| [comfyui-h3-oneclick-swap](https://github.com/D3voz/comfyui-h3-oneclick-swap) | swap and object plans, people and role masks, grey mannequins, track labelling, cut finder, shot list, face-fix chunks |
 | [ComfyUI-H3-FaceRefine](https://github.com/Carasibana/ComfyUI-H3-FaceRefine) | Fix faces: face tracking and cropping, SAM face masks, pasting back |
 | [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) | Fix faces: SAM loader |
-| `comfyui-image-detail-contrast` | Fix colours: Image Detail Contrast (TODO: link the published pack) |
+| [comfyui-image-detail-contrast](https://github.com/D3voz/comfyui-image-detail-contrast) | Fix colours: Image Detail Contrast |
 | [Orion4D_FXMax](https://github.com/orion4d/Orion4D_FXMax) | Fix colours: DCTL Tone Mapper and its presets |
 
 Restart ComfyUI after installing them.
+
+Before uploading a job, Openjutsu checks the selected workflow against ComfyUI's node and model lists. Missing packs appear with installation links; missing model files appear with their destination folders. Disabled steps are excluded from the check. This checks registered nodes and listed model files, not Python dependencies, model integrity or available VRAM. `COMFYUI_URL` must point at ComfyUI itself (normally `http://127.0.0.1:8188`).
 
 ### Models
 
@@ -75,11 +77,15 @@ On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or star
 
 `.env.local` sets `COMFY_BASE_URL=http://127.0.0.1:8189`. Leave `COMFY_API_KEY` empty for a local proxy. The base model and LoRA pickers read ComfyUI's model lists from `COMFYUI_URL` (default `http://127.0.0.1:8188`); without it they become text fields.
 
+Uploads are limited to 512 MB total per request, including reference pictures. One upload/submission is accepted at a time per app process; other tabs can retry once it finishes. Generation continues in ComfyUI independently.
+
 A 6 s clip at 480p takes about 6–13 minutes on a 4060 Ti, most of it in H3 sampling. 736p is the default; 1080p is about 2.5× slower than 736p and needs much more memory. Custom sets an exact width × height from 256 to 2048 px a side (rounded to 32); the video is scaled and centre-cropped to that shape first. It needs the `short_edge` input of the H3 Swap Plan nodes in comfyui-h3-oneclick-swap.
 
 Advanced motion transfer has a **Montage** tab for edited clips where different people take turns within one shot without a hard cut (whip pans, selfie handovers, travel montages). Write roles as "who - looks" ("the dancer - white polo, jeans"): the looks help match the people, and only the part before " - " reaches H3. **Generate** tracks everyone with SAM over the whole video, matches each appearance to the roles with Qwen (a person SAM loses and finds again is matched again, so they keep their photo; Qwen sees each appearance in its frame and close up at three moments, a few appearances at a time, and is asked again about any it skips or matches to one photo twice at the same moment) and makes the video as one chain like Standard, with overlapping clips: each clip has one H3 pass per photo on screen in it (the two with the most screen time) that masks only that photo's appearances, with a prompt about that person only. Appearances on screen for under 12 frames or at under 2% of the frame stay as they are, since H3 draws them as grey figures; the result page lists them. **Find people** (about 3 minutes for 18 s of video) is the optional review: it does the tracking and matching alone, lists the appearances with a photo picker each and saves the tracks, and Generate from that list masks with exactly those tracks. The saved tracks live in ComfyUI's temp folder and are checked against the video, part and size, so after a ComfyUI restart or a change, Find people again. It needs the pack's `H3TrackCrops` and `H3TrackRoles` (which now runs Qwen itself), `H3MontagePeople`, `H3MontageTracks`, `H3MontagePicks`, `H3MontagePlan` and `H3MontagePass` nodes.
 
 ## Tips
+
+- **Add an object:** under Object swap, choose **Add**. Describe the object (for example `a chocolate cake on a plate`) and where it goes (`on the table`). Draw a box covering the whole object and its shadow in the placement editor. An optional reference picture controls its appearance. One box stays fixed on screen; for camera movement, scrub forward and draw more boxes to animate the placement. This uses manual placement keyframes, not SAM tracking. Changing the source video, selected section or resolution clears the boxes. Update `comfyui-h3-oneclick-swap` and restart ComfyUI to load the new `H3ObjectPlacementMask` node.
 
 - Only the main person is regenerated; anyone else in the video stays as they are.
 - **Part to use** (under the source video) swaps only part of the video: **Whole**, or a **Length** placed at the **Start**, **Middle** or **End**, fine-tuned with **Starts at**. The sound is cut to the same part, the preview loops it, and Check mask uses it too. A shorter part renders faster (fewer clips).
@@ -139,7 +145,8 @@ Not tested yet. The app code does not change, only `.env.local`:
 
 2. Create a deployment from the released Build on the Developer Platform. The workflow has only been run on a 16 GB card with 64 GB of system RAM, so choose at least that.
 3. Set `COMFY_BASE_URL` to the deployment URL and `COMFY_API_KEY` to a key from the workspace that owns it. The key stays on the server; never put it in a `NEXT_PUBLIC_` variable.
-4. Host the Next.js app anywhere that runs Node (`npm run build && npm start`). Streaming progress needs a host that keeps long responses open.
+4. Before hosting or tunneling the app, set a strong `OPENJUTSU_PASSWORD` and use HTTPS. Open the page and sign in as `openjutsu` with that password; the same browser login protects uploads, job controls, progress and downloads. This is a single-owner app: everyone given the password shares access to its jobs. Never expose a password-free server, including through a reverse proxy that forwards a localhost Host header.
+5. Host the Next.js app anywhere that runs Node (`npm run build && npm start`). Streaming progress needs a host that keeps long responses open. Preserve the public Host and scheme when reverse proxying so same-origin API checks work. Local password-free use remains bound to `127.0.0.1` by the supplied launch commands.
 
 Notes:
 

@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import type { PublicJob } from "../lib/comfy.ts";
+import type { SetupRequest, SetupResult } from "../lib/setup.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
-import type { EditMode } from "../lib/object.ts";
+import type { EditMode, PlacementKeyframe } from "../lib/object.ts";
+import { ObjectPlacement } from "./object-placement.tsx";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
 import { appearances, renderLabels, type Appearance, type Kept, type Label, type People, type Review } from "../lib/montage.ts";
@@ -43,6 +45,7 @@ const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
 type EditTab = EditMode | "picture";
 const EDITS: { id: EditTab; label: string; target: string; what: string; to: string; toHint: string }[] = [
   { id: "change", label: "Change", target: "hair, top", what: "What to change", to: "short bright pink hair and a black leather jacket", toHint: "What it becomes" },
+  { id: "add", label: "Add", target: "on the table", what: "Where it goes", to: "a chocolate cake on a plate", toHint: "Object to add" },
   { id: "remove", label: "Remove", target: "poster", what: "What to remove", to: "a plain wall", toHint: "What shows instead (optional)" },
   { id: "background", label: "Background", target: "person", what: "What stays", to: "a snowy mountain pass at dusk", toHint: "The new place" },
   { id: "picture", label: "From picture", target: "person", what: "Who is replaced", to: "", toHint: "" },
@@ -156,6 +159,7 @@ export function Openjutsu() {
   const [look, setLook] = useState<{ file: File; url: string } | null>(null);
   const [biggestOnly, setBiggestOnly] = useState(false);
   const [keepOutline, setKeepOutline] = useState(true);
+  const [placement, setPlacement] = useState<PlacementKeyframe[]>([]);
   const [post, setPost] = useState<Post>("face");
   const [detailOn, setDetailOn] = useState(true);
   const [detail, setDetail] = useState(DETAIL.default);
@@ -174,6 +178,8 @@ export function Openjutsu() {
   const [loras, setLoras] = useState<Lora[]>(DEFAULT_MODEL.loras);
   const [files, setFiles] = useState<{ models: string[]; loras: string[] }>({ models: [], loras: [] });
   const [submitting, setSubmitting] = useState(false);
+  const [checkingSetup, setCheckingSetup] = useState(false);
+  const [setup, setSetup] = useState<SetupResult | null>(null);
   const [formError, setFormError] = useState("");
 
   const [run, setRun] = useState<Run | null>(null);
@@ -184,6 +190,8 @@ export function Openjutsu() {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => setRun(readRun()), []);
+
+  useEffect(() => setSetup(null), [mode, post, montage, maxQuality, resolution, motion, hatFix, noLipSync, model, loras, detailOn, toneOn, faceStyle, editMode, characters.length, !!look]);
 
   useEffect(() => {
     fetch("/api/models").then((response) => response.json()).then(setFiles, () => {});
@@ -237,8 +245,9 @@ export function Openjutsu() {
     const probe = document.createElement("video");
     probe.preload = "metadata";
     probe.onloadedmetadata = () => {
-      setVideo((current) => (current?.url === url ? { ...current, duration: probe.duration, width: probe.videoWidth, height: probe.videoHeight } : current));
-      setPart({ start: 0, length: probe.duration });
+      const duration = Number.isFinite(probe.duration) ? probe.duration : 0;
+      setVideo((current) => (current?.url === url ? { ...current, duration, width: probe.videoWidth, height: probe.videoHeight } : current));
+      setPart({ start: 0, length: duration });
     };
     probe.src = url;
   }
@@ -246,6 +255,7 @@ export function Openjutsu() {
   function choosePart(start: number, length: number) {
     const duration = video?.duration ?? 0;
     const next = { start: Math.min(Math.max(0, start), duration - length), length };
+    if (next.start !== part.start || next.length !== part.length) setPlacement([]);
     setPart(next);
     if (player.current) player.current.currentTime = next.start;
   }
@@ -294,6 +304,7 @@ export function Openjutsu() {
 
   const canvas = typeof resolution === "object" ? [resolution.width, resolution.height] : video?.width ? canvasSize(video.width, video.height, resolution) : null;
   const resolutionField = typeof resolution === "object" ? `${resolution.width}x${resolution.height}` : resolution;
+  useEffect(() => setPlacement([]), [video?.url, resolutionField]);
   // A montage render masks with the tracks Find people saved, so it must use the frames Find people saw.
   const frames = video ? `${video.file.name}:${video.file.size} ${whole ? "whole" : `${part.start.toFixed(2)}+${part.length.toFixed(2)}`} ${typeof resolution === "object" ? resolutionField : ""}` : "";
 
@@ -309,7 +320,7 @@ export function Openjutsu() {
   const edit = EDITS.find((e) => e.id === editMode)!;
   const fromPicture = mode === "object" && editMode === "picture";
   const ready = colorFix ? detailOn || toneOn : mode === "object"
-    ? editMode === "remove" || (fromPicture ? !!look : !!changeTo.trim() || !!look)
+    ? editMode === "remove" || (fromPicture ? !!look : (editMode !== "add" || placement.length > 0) && (!!changeTo.trim() || !!look))
     : !!character;
 
   function chooseLook(files: File[]) {
@@ -321,6 +332,8 @@ export function Openjutsu() {
   async function submit(kind: Kind, review?: Review) {
     if (!video || (kind !== "mask" && kind !== "people" && !ready)) return;
     setSubmitting(true);
+    setCheckingSetup(true);
+    setSetup(null);
     setFormError("");
     const form = new FormData();
     form.set("mode", kind);
@@ -393,6 +406,7 @@ export function Openjutsu() {
       if (look && editMode !== "remove") form.set("picture", look.file);
       form.set("biggest_only", String(biggestOnly));
       form.set("keep_outline", String(keepOutline));
+      if (editMode === "add") form.set("placement", JSON.stringify(placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) }))));
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -406,7 +420,26 @@ export function Openjutsu() {
         form.append("lora_strength", String(l.strength));
       }
     }
+    const shared = { resolution, motion, hatFix, noLipSync, margin, seed, clipSeconds };
+    const selectedModel = { model, loras, steps };
+    let selection: SetupRequest;
+    if (kind === "simple") selection = { kind, settings: { ...shared, role: fromPicture ? "" : character?.role ?? "", target: String(form.get("target")) }, model: selectedModel };
+    else if (kind === "advanced" || kind === "advanced_maxq") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, model: selectedModel };
+    else if (kind === "montage") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, review: review ?? null, model: selectedModel };
+    else if (kind === "object") selection = { kind, settings: { ...shared, mode: editMode as EditMode, target: String(form.get("target")), changeTo, biggestOnly, keepOutline,
+      ...(editMode === "add" ? { placement: placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}) }, picture: !!look && editMode !== "remove", model: selectedModel };
+    else if (kind === "face") selection = { kind, settings: { style: faceStyle, seed, chunkSeconds }, model: selectedModel };
+    else if (kind === "color") selection = { kind, settings: { detail: detailOn ? detail : null, tone: toneOn ? tone : null } };
+    else if (kind === "mask") selection = { kind, hatFix, margin, target: String(form.get("target")) };
+    else selection = { kind, resolution };
+
     try {
+      const checked = await fetch("/api/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection) });
+      const result = await checked.json();
+      if (!checked.ok) throw new Error(result.error ?? "Could not check setup.");
+      setSetup(result);
+      if (!result.ok) return;
+      setCheckingSetup(false);
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
@@ -420,18 +453,27 @@ export function Openjutsu() {
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not start the job.");
     } finally {
+      setCheckingSetup(false);
       setSubmitting(false);
     }
   }
 
   async function cancel() {
     if (!run) return;
-    const response = await fetch(`/api/jobs/${run.id}`, { method: "DELETE" });
-    if (response.ok) setJob(await response.json());
+    setFormError("");
+    try {
+      const response = await fetch(`/api/jobs/${run.id}`, { method: "DELETE" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Could not cancel the job.");
+      setJob(body);
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not cancel the job.");
+    }
   }
 
   function reset() {
     setFormError("");
+    setSetup(null);
     writeRun(null);
     setRun(null);
     setJob(null);
@@ -466,6 +508,26 @@ export function Openjutsu() {
       </nav>
 
       {formError && <p className="error" role="alert">{formError}</p>}
+      {checkingSetup && <p className="hint" role="status">Checking required nodes and models…</p>}
+      {setup && !setup.ok && (
+        <section className="panel setup" role="alert">
+          <h2>Setup needs attention</h2>
+          {setup.error && <p className="error">{setup.error}</p>}
+          {setup.packs.length > 0 && <>
+            <p className="hint">Install or update the items below, then restart ComfyUI and try again.</p>
+            <ul>{setup.packs.map((pack) => <li key={pack.url}>
+              <a href={pack.url} target="_blank" rel="noopener noreferrer">{pack.name} ↗</a>
+              <small>Missing nodes: {pack.nodes.join(", ")}</small>
+            </li>)}</ul>
+          </>}
+          {setup.models.length > 0 && <>
+            <p className="hint">Add these models to ComfyUI, or choose an installed base model or LoRA, then try again.</p>
+            <ul>{setup.models.map((item) => <li key={`${item.folder}/${item.name}`}>
+              <code>{item.name}</code><small>ComfyUI/models/{item.folder}</small>
+            </li>)}</ul>
+          </>}
+        </section>
+      )}
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
@@ -577,7 +639,7 @@ export function Openjutsu() {
                     ))}
                   </div>
                   <label>
-                    <span>{edit.what} <small>What SAM tracks, in English.{(editMode === "change" || editMode === "remove") && " Separate several with commas."}</small></span>
+                    <span>{edit.what} <small>{editMode === "add" ? "Describe the placement, for example on the table in front of the person." : "What SAM tracks, in English."}{(editMode === "change" || editMode === "remove") && " Separate several with commas."}</small></span>
                     <input value={editTarget} maxLength={100} placeholder={edit.target} onChange={(event) => setEditTarget(event.target.value)} />
                   </label>
                   {!fromPicture && <label>
@@ -592,15 +654,18 @@ export function Openjutsu() {
                   ) : (
                     <DropZone accept="image/*" onFiles={chooseLook} className="add">
                       <strong>+</strong>
-                      <span>{fromPicture ? "The picture to copy" : editMode === "background" ? "Picture of the place (optional)" : "Picture of the new look (optional)"}</span>
+                      <span>{fromPicture ? "The picture to copy"  : editMode === "add" ? "Picture of the object (optional)" : editMode === "background" ? "Picture of the place (optional)" : "Picture of the new look (optional)"}</span>
                     </DropZone>
                   ))}
                   <p className="hint">
                     {editMode === "change" && "Only what SAM tracks is regenerated: hair, a top, a car. A picture of an outfit, hairstyle or product is copied onto it."}
+                    {editMode === "add" && "A new object is generated inside your placement area while the scene continues. Keep the supporting surface visible and describe where the object rests."}
                     {editMode === "remove" && "What SAM tracks is erased and filled with what is around it. The camera, people and sound stay."}
                     {editMode === "background" && "Everything except what SAM tracks becomes the new place; the camera movement stays."}
                     {fromPicture && "The person in the video becomes the person in the picture: face, hair and outfit. The background, motion, camera and sound stay."}
                   </p>
+                  {editMode === "add" && video && canvas && <ObjectPlacement key={`${video.url}:${resolutionField}`} src={video.url}
+                    start={whole ? 0 : part.start} end={whole ? video.duration : part.start + part.length} width={canvas[0]} height={canvas[1]} points={placement} onChange={setPlacement} />}
                 </div>
               ) : (<>
               <div className="characters">
@@ -702,7 +767,7 @@ export function Openjutsu() {
                 </div>
               )}
             </div>}
-            {mode === "object" && editMode !== "background" && !fromPicture && (
+            {mode === "object" && (editMode === "change" || editMode === "remove") && (
               <label className="setting toggle">
                 <span>Only the biggest one <small>Off: every match SAM finds changes (everyone&apos;s hair). On: only the one that fills the most of the frame.</small></span>
                 <input type="checkbox" checked={biggestOnly} onChange={(event) => setBiggestOnly(event.target.checked)} />
@@ -811,10 +876,10 @@ export function Openjutsu() {
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
               {mode === "advanced" && montage ? (<>
                 <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>Find people</button>
-                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? "Uploading…" : "Generate"}</button>
+                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}</button>
               </>) : (
                 <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
-                  {submitting ? "Uploading…" : "Generate"}
+                  {submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}
                 </button>
               )}
             </div>
@@ -823,7 +888,8 @@ export function Openjutsu() {
               : clips && ready
               ? mode === "advanced" && montage ? `${clips} clip${clips > 1 ? "s" : ""} or more at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.`
               : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
-              : `Add a video and ${mode === "object" ? "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
+              : mode === "object" && editMode === "add" && video && !placement.length ? "Draw where the new object should go."
+              : `Add a video and ${mode === "object" ? editMode === "add" ? "describe the object to add" : "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
         </>
       )}
@@ -949,7 +1015,7 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
       <h2>Check the mask</h2>
       <video
         ref={player} src={url} muted playsInline preload="auto"
-        onLoadedMetadata={(event) => setFrames(Math.round(event.currentTarget.duration * 24))}
+        onLoadedMetadata={(event) => setFrames(Number.isFinite(event.currentTarget.duration) ? Math.round(event.currentTarget.duration * 24) : 0)}
         onTimeUpdate={(event) => playing && setFrame(Math.min(frames - 1, Math.floor(event.currentTarget.currentTime * 24)))}
         onEnded={() => setPlaying(false)}
       />

@@ -1,8 +1,11 @@
+import { apiAccess, HttpError } from "../../../../../../lib/http.ts";
 import { getOutput } from "../../../../../../lib/comfy.ts";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; outputId: string }> }) {
+  const denied = apiAccess(request);
+  if (denied) return denied;
   try {
     const { id, outputId } = await params;
     const { name, response } = await getOutput(id, outputId, request.headers.get("Range"));
@@ -16,6 +19,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (new URL(request.url).searchParams.has("download")) headers.set("Content-Disposition", `attachment; filename="${name.replace(/"/g, "")}"`);
     return new Response(response.body, { status: response.status, headers });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Unable to download the output." }, { status: 502 });
+    return Response.json({ error: error instanceof Error ? error.message : "Unable to download the output." }, { status: error instanceof HttpError ? error.status : 502 });
   }
 }

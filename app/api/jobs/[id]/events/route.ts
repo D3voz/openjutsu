@@ -1,3 +1,4 @@
+import { apiAccess, validateJobId } from "../../../../../lib/http.ts";
 import { NotFound } from "@comfyorg/sdk";
 import { getJob, JOB_KINDS, loadGraph, publicJob, rawJobEvents, TERMINAL, type JobKind } from "../../../../../lib/comfy.ts";
 import { nodeDescriber } from "../../../../../lib/progress.ts";
@@ -8,7 +9,14 @@ export const dynamic = "force-dynamic";
 // Server-sent events for the progress view, with node ids turned into node titles and clip
 // numbers. One upstream connection per request; the page's EventSource reconnects.
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = apiAccess(request);
+  if (denied) return denied;
   const { id } = await params;
+  try {
+    validateJobId(id);
+  } catch {
+    return Response.json({ error: "Invalid job ID." }, { status: 400 });
+  }
   const kind = new URL(request.url).searchParams.get("kind") ?? "simple";
   const describe = nodeDescriber(await loadGraph(JOB_KINDS.includes(kind as JobKind) ? (kind as JobKind) : "simple"));
   const encoder = new TextEncoder();

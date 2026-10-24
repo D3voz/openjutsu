@@ -8,6 +8,7 @@ const gridCeil = (frames: number) => Math.ceil((frames - 5) / 17) * 17 + 5;
 function clipLengths(durationSeconds: number, clipSeconds: number) {
   const total = Math.floor(durationSeconds * FPS);
   const clipFrames = Math.floor(clipSeconds * FPS);
+  if (!Number.isFinite(total) || total < 5 || !Number.isFinite(clipFrames) || gridFloor(clipFrames) <= OVERLAP) return [];
   const lengths = [Math.min(gridFloor(clipFrames), gridFloor(total))];
   let rem = total - lengths[0];
   const count = rem >= 17 ? Math.ceil(rem / (gridFloor(clipFrames) - OVERLAP)) : 0;

@@ -1,3 +1,4 @@
+import { validateJobId } from "./http.ts";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Comfy, COMFY_CLOUD_BASE_URL, resolveCredentials, type Job } from "@comfyorg/sdk";
@@ -189,6 +190,7 @@ export async function listTonePresets(): Promise<{ name: string; settings: Recor
 }
 
 export function getJob(id: string) {
+  validateJobId(id);
   return client().jobs.get(id);
 }
 
