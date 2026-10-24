@@ -177,3 +177,23 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 .photo-pick { background: var(--bg); align-items: center; }
 .photo-pick button { padding: 3px; }
 .photo-pick img { width: 34px; height: 44px; object-fit: cover; border-radius: 5px; display: block; }
+
+.compare {
+  position: relative; aspect-ratio: var(--ratio); width: min(100%, 70vh * var(--ratio)); justify-self: center;
+  border-radius: 12px; overflow: hidden; background: #000;
+}
+.compare video { position: absolute; inset: 0; height: 100%; max-height: none; object-fit: contain; }
+.compare .before { pointer-events: none; clip-path: inset(0 calc(100% - var(--split)) 0 0); }
+.compare-label { position: absolute; top: 10px; left: 10px; padding: 2px 8px; border-radius: 99px; background: #000a; font-size: 0.78em; pointer-events: none; }
+.compare-label.after { left: auto; right: 10px; }
+.compare-line { position: absolute; top: 0; bottom: 0; left: var(--split); width: 24px; margin-left: -12px; cursor: ew-resize; touch-action: none; }
+.compare-line::before { content: ""; position: absolute; top: 0; bottom: 0; left: 11px; width: 2px; background: var(--accent); }
+.compare-line::after {
+  content: ""; position: absolute; top: 50%; left: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px #0008;
+}
+.compare-line:focus-visible { outline: none; }
+.compare-line:focus-visible::after { box-shadow: 0 0 0 3px var(--text); }
+/* Keep the result's native controls visible while they are shown. */
+.compare:hover .before, .compare.paused .before { clip-path: inset(0 calc(100% - var(--split)) 72px 0); }
+.compare:hover .compare-line, .compare.paused .compare-line { bottom: 72px; }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from "react";
 import type { PublicJob } from "../lib/comfy.ts";
 import type { SetupRequest, SetupResult } from "../lib/setup.ts";
 import type { NodeInfo } from "../lib/progress.ts";
@@ -617,6 +617,7 @@ export function Openjutsu() {
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
+          before={video ? { url: video.url, start: whole ? 0 : part.start } : null}
           onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={video && character && !submitting && mode === "simple" ? () => submit("simple") : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
           photos={shown.map((c) => c.url)}
@@ -986,8 +987,9 @@ export function Openjutsu() {
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, onCancel, onReset, onFix, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames }: {
+function RunView({ run, job, progress, preview, streamError, now, before, onCancel, onReset, onFix, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
+  before: { url: string; start: number } | null;
   onCancel: () => void; onReset: () => void; onFix: (post: Post) => void; onGenerate: (() => void) | null;
   margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
   photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string;
@@ -1018,7 +1020,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
   if (status === "succeeded" && job?.video) {
     return (
       <section className="panel result">
-        <video src={job.video.url} controls autoPlay playsInline />
+        {before ? <Compare before={before} after={job.video.url} /> : <video src={job.video.url} controls autoPlay playsInline />}
         {run.kind === "montage" && job.data && <KeptNote url={job.data} />}
         <div className="row">
           <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
@@ -1069,6 +1071,68 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
       <p className="hint">{people ? "SAM tracks everyone over the whole video, then Qwen matches each person to a role." : mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
       <button className="secondary" onClick={onCancel}>Cancel</button>
     </section>
+  );
+}
+
+// The result plays with its own controls; the source follows it from the start of the part used, clipped to the left of the divider.
+function Compare({ before, after }: { before: { url: string; start: number }; after: string }) {
+  const result = useRef<HTMLVideoElement>(null);
+  const source = useRef<HTMLVideoElement>(null);
+  const [split, setSplit] = useState(50);
+  const [ratio, setRatio] = useState(16 / 9);
+  const [paused, setPaused] = useState(true);
+
+  function follow(drift = 0) {
+    const r = result.current, s = source.current;
+    if (!r || !s) return;
+    const target = r.currentTime + before.start;
+    if (Math.abs(s.currentTime - target) > drift) s.currentTime = target;
+  }
+
+  function play() {
+    const s = source.current;
+    if (!s || !result.current) return;
+    s.playbackRate = result.current.playbackRate;
+    follow();
+    s.play().catch(() => {});
+    setPaused(false);
+  }
+
+  function pause() {
+    source.current?.pause();
+    follow();
+    setPaused(true);
+  }
+
+  function drag(event: PointerEvent<HTMLDivElement>) {
+    const box = event.currentTarget.parentElement!.getBoundingClientRect();
+    setSplit(Math.min(100, Math.max(0, ((event.clientX - box.left) / box.width) * 100)));
+  }
+
+  return (
+    <div className={`compare ${paused ? "paused" : ""}`} style={{ "--split": `${split}%`, "--ratio": ratio } as CSSProperties}>
+      <video
+        ref={result} src={after} controls autoPlay playsInline
+        onLoadedMetadata={(event) => event.currentTarget.videoHeight && setRatio(event.currentTarget.videoWidth / event.currentTarget.videoHeight)}
+        onPlay={play} onPause={pause} onSeeking={() => follow()} onTimeUpdate={() => follow(0.1)}
+        onRateChange={(event) => { if (source.current) source.current.playbackRate = event.currentTarget.playbackRate; }}
+      />
+      <video ref={source} className="before" src={before.url} muted playsInline preload="auto" aria-hidden onLoadedMetadata={() => follow()} />
+      <span className="compare-label">Before</span>
+      <span className="compare-label after">After</span>
+      <div
+        className="compare-line" role="slider" tabIndex={0} aria-label="Before and after divider"
+        aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(split)}
+        onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag(event); }}
+        onPointerMove={(event) => event.currentTarget.hasPointerCapture(event.pointerId) && drag(event)}
+        onKeyDown={(event) => {
+          const step = event.key === "ArrowLeft" ? -5 : event.key === "ArrowRight" ? 5 : 0;
+          if (!step) return;
+          event.preventDefault();
+          setSplit((current) => Math.min(100, Math.max(0, current + step)));
+        }}
+      />
+    </div>
   );
 }
 
