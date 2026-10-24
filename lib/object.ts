@@ -50,12 +50,14 @@ export const OBJECT_VIDEO = "Source video";
 export const OBJECT_PICTURE = "Picture 1";
 
 export const objectTargets = (target: string) => target.split(",").map((t) => t.trim()).filter(Boolean);
+// What to add, without the verb people type first: the plan writes "Add <it> <where>", and "Add add a toy car" names no object.
+export const addedObject = (changeTo: string) => changeTo.replace(/^(?:add|insert|put)\s+/i, "");
 
 // The picture describer names only what is copied from the picture, with about 20 more words for each thing.
 // Asked for "the top", it described only the tee under an open flannel shirt, so layers are named outer first.
 function describer(settings: ObjectSettings) {
   const background = settings.mode === "background";
-  const things = background ? ["place (the setting, its lighting and what is around)"] : settings.mode === "add" ? [settings.changeTo.replace(/^(?:a|an|the)\s+/i, "") || "main object"] : objectTargets(settings.target);
+  const things = background ? ["place (the setting, its lighting and what is around)"] : settings.mode === "add" ? [addedObject(settings.changeTo).replace(/^(?:a|an|the)\s+/i, "") || "main object"] : objectTargets(settings.target);
   const named = things.length === 1 ? things[0] : things.slice(0, -1).join(", ") + " and the " + things.at(-1);
   const words = 30 + 20 * things.length;
   return {
@@ -110,6 +112,7 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
   if (settings.mode === "add") {
     const placement = JSON.stringify(parsePlacement(settings.placement));
     plan.placement = placement;
+    plan.change_to = addedObject(settings.changeTo);
     plan.keep_outline = false;
     ref["ref_videos.ref_video_0"] = [id("Motion reference for this clip"), 0];
     graph.object_placement = { class_type: "H3ObjectPlacementMask", inputs: {

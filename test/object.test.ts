@@ -100,6 +100,16 @@ test("adding an object uses placement keyframes and the original video, without 
   }
 });
 
+test("adding drops a leading verb, so the plan and the picture describer name the object", () => {
+  const placement = [{ frame: 0, x: 0.3456, y: 0.7576, width: 0.2395, height: 0.0863 }];
+  for (const [changeTo, object] of [["add a toy car", "a toy car"], ["Insert a vase", "a vase"], ["a chocolate cake on a plate", "a chocolate cake on a plate"]]) {
+    const pruned = pruneObject(graph, true, { ...settings("add"), target: "on the table", changeTo, placement });
+    assert.equal(node(pruned, "Object Swap Plan (what to change)").inputs.change_to, object);
+    assert.ok(String(node(pruned, "Describe picture 1").inputs.prompt).startsWith(`Describe the ${object.replace(/^a /, "")} in this picture`));
+  }
+  assert.equal(node(pruneObject(graph, false, { ...settings("change"), changeTo: "add a toy car" }), "Object Swap Plan (what to change)").inputs.change_to, "add a toy car");
+});
+
 test("add placements use the selected canvas and the model settings still reach generation", () => {
   const pruned = pruneObject(graph, false, { ...settings("add"), placement: [{ frame: -24, x: 0.2, y: 0.4, width: 0.3, height: 0.2 }], resolution: { width: 640, height: 960 } });
   applyModel(pruned, { ...DEFAULT_MODEL, steps: 8 });
