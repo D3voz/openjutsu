@@ -10,7 +10,7 @@ import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/mod
 import type { EditMode } from "../lib/object.ts";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
-import { appearances, renderLabels, type Appearance, type Label, type People } from "../lib/montage.ts";
+import { appearances, renderLabels, type Appearance, type Kept, type Label, type People, type Review } from "../lib/montage.ts";
 
 type Character = { file: File; url: string; role: string };
 type Mode = "simple" | "advanced" | "object" | "post";
@@ -318,7 +318,7 @@ export function Openjutsu() {
     setLook({ file: files[0], url: URL.createObjectURL(files[0]) });
   }
 
-  async function submit(kind: Kind, montagePicks?: { tracks: string; labels: Label[] }) {
+  async function submit(kind: Kind, review?: Review) {
     if (!video || (kind !== "mask" && kind !== "people" && !ready)) return;
     setSubmitting(true);
     setFormError("");
@@ -365,8 +365,10 @@ export function Openjutsu() {
         form.append("picture", c.file);
         form.append("role", c.role);
       }
-      form.set("tracks", montagePicks?.tracks ?? "");
-      form.set("labels", JSON.stringify(montagePicks?.labels ?? []));
+      if (review) {
+        form.set("tracks", review.tracks);
+        form.set("labels", JSON.stringify(review.labels));
+      }
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -533,8 +535,8 @@ export function Openjutsu() {
                 {montage && (
                   <p className="hint">
                     For edited clips where different people take turns within one shot, with no hard cut between them: whip pans,
-                    selfie handovers, travel and &ldquo;vibe&rdquo; montages. Find people tracks everyone over the whole video and matches
-                    them to the photos; you check each appearance and pick its photo, then the video is made in one go. Give every photo a role with a look after
+                    selfie handovers, travel and &ldquo;vibe&rdquo; montages. Generate tracks everyone over the whole video, matches them to the
+                    photos and makes the video in one go. To check who becomes which photo first, use Find people. Give every photo a role with a look after
                     &ldquo; - &rdquo; (&ldquo;the dancer - white polo, jeans&rdquo;) so the people can be told apart. Use Standard for everything else.
                   </p>
                 )}
@@ -807,9 +809,10 @@ export function Openjutsu() {
           <div className="go">
             <div className="row">
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
-              {mode === "advanced" && montage ? (
-                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("people")}>{submitting ? "Uploading…" : "Find people"}</button>
-              ) : (
+              {mode === "advanced" && montage ? (<>
+                <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>Find people</button>
+                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? "Uploading…" : "Generate"}</button>
+              </>) : (
                 <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
                   {submitting ? "Uploading…" : "Generate"}
                 </button>
@@ -818,7 +821,7 @@ export function Openjutsu() {
             <small>{colorFix
               ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
               : clips && ready
-              ? mode === "advanced" && montage ? "About 3 minutes per 18 s of video; then you check who becomes which photo and generate."
+              ? mode === "advanced" && montage ? `${clips} clip${clips > 1 ? "s" : ""} or more at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.`
               : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
               : `Add a video and ${mode === "object" ? "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
@@ -861,6 +864,7 @@ function RunView({ run, job, progress, preview, streamError, now, onCancel, onRe
     return (
       <section className="panel result">
         <video src={job.video.url} controls autoPlay playsInline />
+        {run.kind === "montage" && job.data && <KeptNote url={job.data} />}
         <div className="row">
           <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
           <button className="secondary" onClick={onReset}>{run.kind === "object" ? "New edit" : run.kind === "face" || run.kind === "color" ? "Fix another" : "New swap"}</button>
@@ -976,6 +980,21 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
       </div>
       {!onGenerate && <p className="hint">Add a character photo in the settings to generate.</p>}
     </section>
+  );
+}
+
+// A montage without review keeps brief or small appearances as they are; say so instead of passing the swap off as complete.
+function KeptNote({ url }: { url: string }) {
+  const [kept, setKept] = useState<Kept[]>([]);
+  useEffect(() => {
+    fetch(url).then((response) => response.json()).then((data: { kept: Kept[] }) => setKept(data.kept), () => setKept([]));
+  }, [url]);
+  if (!kept.length) return null;
+  return (
+    <p className="hint">
+      Left as they are, too {kept.every((k) => k.small) ? "small" : "brief or small"} for H3 to draw:{" "}
+      {kept.map((k) => `photo ${k.photo}'s person at ${timecode(k.start / 24)}–${timecode(k.end / 24)}`).join(", ")}. Use Find people to pick them anyway.
+    </p>
   );
 }
 

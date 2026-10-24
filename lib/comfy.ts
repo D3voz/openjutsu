@@ -8,7 +8,7 @@ import { applyModel, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
-import { PEOPLE_NODES, peopleRoles, pruneMontage, type Label } from "./montage.ts";
+import { PEOPLE_NODES, peopleRoles, pruneMontage, type Review } from "./montage.ts";
 
 export type PublicJob = {
   id: string;
@@ -16,7 +16,7 @@ export type PublicJob = {
   queuePosition: number | null;
   error: string | null;
   video: { id: string; name: string; url: string } | null;
-  data: string | null; // what Find people found, as JSON
+  data: string | null; // JSON: what Find people found, or who a montage kept as they are
 };
 
 export const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
@@ -138,9 +138,9 @@ export async function submitMask(video: File, section: Section, hatFix: boolean,
   return publicJob(await comfy.submit(workflow));
 }
 
-export async function submitMontage(video: File, section: Section, pictures: File[], settings: AdvancedSettings, tracks: string, labels: Label[], model: ModelSettings) {
+export async function submitMontage(video: File, section: Section, pictures: File[], settings: AdvancedSettings, review: Review | null, model: ModelSettings) {
   const comfy = client();
-  const graph = pruneMontage(await loadGraph("montage"), pictures.length, settings, tracks, labels);
+  const graph = pruneMontage(await loadGraph("montage"), pictures.length, settings, review);
   applyModel(graph, model);
   setSection(graph, nodeByTitle(graph, VIDEO), section);
   const workflow = comfy.workflows.fromJson(graph);

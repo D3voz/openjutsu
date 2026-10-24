@@ -2,13 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { PEOPLE_NODES, TRACKS, TRACKS_FILE, appearances, peopleRoles, pruneMontage, renderLabels, type Track } from "../lib/montage.ts";
-import { PLAN, nodeByTitle, type AdvancedSettings } from "../lib/advanced.ts";
+import { PLAN, VIDEO, nodeByTitle, type AdvancedSettings } from "../lib/advanced.ts";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
 import { DEFAULT_MODEL, applyModel } from "../lib/model.ts";
 
-const track = (id: number, role: number, start: number, end: number, on: [number, number][], area = 0.1): Track => ({ track: id, start, end, role, on, area, image: `img${id}` });
+// the pack's default pick: the photo when on screen 12+ frames at 2%+ of the frame
+const track = (id: number, role: number, start: number, end: number, on: [number, number][], area = 0.1): Track => {
+  const frames = on.reduce((sum, [a, b]) => sum + b - a, 0);
+  return { track: id, start, end, role, on, area, pick: role && area >= 0.02 && frames >= 12 ? role : 0, image: `img${id}` };
+};
 
-test("appearances are listed in order and start as their photo unless brief or small", () => {
+test("appearances are listed in order with the pack's picks, unlabelled ones only when long or big", () => {
   const list = appearances({
     frames: 300, tracks: "h3_montage_people_00001_.npz", people: [
       track(1, 2, 0, 160, [[104, 160]]),
@@ -36,33 +40,58 @@ test("the render gets the picks, keeping each appearance's frames, and leaves ou
   assert.deepEqual(renderLabels(list), [{ track: 1, start: 0, end: 100, role: 1 }]);
 });
 
-test("the montage export loads the tracks Find people saved and takes the picks", () => {
-  const source: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/montage.api.json", import.meta.url), "utf8"));
-  const settings: AdvancedSettings = { roles: ["the dancer - white polo", "the filmer - bucket hat"], resolution: "480p", motion: 512, hatFix: false, noLipSync: false, margin: "normal", seed: 3, clipSeconds: 6 };
-  const labels = [{ track: 0, start: 0, end: 107, role: 2 }];
-  const graph = pruneMontage(source, 2, settings, "h3_montage_people_00003_.npz", labels);
-  const dangling = Object.entries(graph).flatMap(([id, node]) => Object.entries(node.inputs).filter(([, v]) => isLink(v) && !graph[v[0]]).map(([name]) => `${id}.${name}`));
-  assert.deepEqual(dangling, []);
+const source: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/montage.api.json", import.meta.url), "utf8"));
+const settings: AdvancedSettings = { roles: ["the dancer - white polo", "the filmer - bucket hat"], resolution: "480p", motion: 512, hatFix: false, noLipSync: false, margin: "normal", seed: 3, clipSeconds: 6 };
+const dangling = (graph: ApiGraph) => Object.entries(graph).flatMap(([id, node]) => Object.entries(node.inputs).filter(([, v]) => isLink(v) && !graph[v[0]]).map(([name]) => `${id}.${name}`));
+const classes = (graph: ApiGraph) => Object.values(graph).map((node) => node.class_type);
+
+test("without review the montage tracks, labels and picks by itself, matching the roles to the photos", () => {
+  const graph = pruneMontage(source, 2, settings, null);
+  assert.deepEqual(dangling(graph), []);
+  assert.ok(!classes(graph).includes("H3MontageTracks"));
   const plan = graph[nodeByTitle(graph, PLAN)];
   assert.equal(plan.class_type, "H3MontagePlan");
+  const picks = graph[(plan.inputs.labels as [string, number])[0]];
+  assert.equal(picks.class_type, "H3MontagePicks");
+  const sam = graph[(plan.inputs.track_data as [string, number])[0]];
+  assert.equal(sam.class_type, "SAM3_VideoTrack");
+  assert.equal(graph[(picks.inputs.track_data as [string, number])[0]], sam);
+  const crops = Object.values(graph).find((node) => node.class_type === "H3TrackCrops")!;
+  assert.equal(crops.inputs.people, "<Subject 1>: the dancer - white polo\n<Subject 2>: the filmer - bucket hat");
+  // the same tracking as Find people, at the same 1008 px frames as the per-clip hat and face tracking
+  const people: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/people.api.json", import.meta.url), "utf8"));
+  const find = Object.values(people).find((node) => node.class_type === "SAM3_VideoTrack")!;
+  for (const name of ["detection_threshold", "max_objects", "detect_interval"]) assert.equal(sam.inputs[name], find.inputs[name]);
+  const size = (g: ApiGraph, node: typeof sam) => g[(node.inputs.images as [string, number])[0]].inputs.largest_size;
+  assert.equal(size(graph, sam), size(people, find));
+  assert.equal(crops.inputs.max_crops, people[PEOPLE_NODES.crops].inputs.max_crops);
+});
+
+test("with review the montage loads the tracks Find people saved and takes the picks", () => {
+  const labels = [{ track: 0, start: 0, end: 107, role: 2 }];
+  const graph = pruneMontage(source, 2, settings, { tracks: "h3_montage_people_00003_.npz", labels });
+  assert.deepEqual(dangling(graph), []);
+  for (const gone of ["SAM3_VideoTrack" , "H3TrackCrops", "H3TrackRoles", "H3MontagePicks"]) {
+    assert.ok(!Object.values(graph).some((node) => node.class_type === gone && !/hats|faces/.test(node._meta?.title ?? "")), gone);
+  }
+  const plan = graph[nodeByTitle(graph, PLAN)];
   assert.deepEqual(JSON.parse(String(plan.inputs.labels)), labels);
   assert.equal(plan.inputs.roles, "the dancer - white polo\nthe filmer - bucket hat");
   assert.ok(!("picture_3" in plan.inputs) && isLink(plan.inputs.picture_2));
   const tracks = graph[nodeByTitle(graph, TRACKS)];
   assert.equal(tracks.inputs.file, "h3_montage_people_00003_.npz");
   assert.deepEqual(plan.inputs.track_data, [nodeByTitle(graph, TRACKS), 0]);
-  applyModel(graph, { ...DEFAULT_MODEL, steps: 4 });
-  assert.equal(plan.inputs.steps, 4);
   const passes = Object.values(graph).filter((node) => node.class_type === "H3MontagePass");
   assert.deepEqual(passes.map((node) => node.inputs.pass_number), [1, 2]);
+  assert.ok(passes.every((node) => isLink(node.inputs.track_data) && node.inputs.track_data[0] === nodeByTitle(graph, TRACKS)));
   assert.ok(passes.every((node) => isLink(node.inputs.picture_2) && !("picture_3" in node.inputs)));
-  // no person tracking at render time: the masks are the saved ones
-  assert.ok(!Object.values(graph).some((node) => node.class_type === "SAM3_VideoTrack" && /every person/.test(node._meta?.title ?? "")));
-  // the hats and faces SAM finds per clip line up with the saved tracks: both at the same 1008 px frames
+  // the loader checks it gets the frames Find people tracked: the source video's, as H3 Montage People saw them
+  assert.deepEqual(tracks.inputs.source_frames, [nodeByTitle(graph, VIDEO), 0]);
   const people: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/people.api.json", import.meta.url), "utf8"));
-  const find = Object.values(people).find((node) => node.class_type === "SAM3_VideoTrack")!;
-  const size = (g: ApiGraph, title: RegExp) => Object.values(g).find((node) => node.class_type === "ImageScaleToMaxDimension" && title.test(node._meta?.title ?? ""))!.inputs.largest_size;
-  assert.equal(size(graph, /^SAM video/), people[(find.inputs.images as [string, number])[0]].inputs.largest_size);
+  const saved = Object.values(people).find((node) => node.class_type === "H3MontagePeople")!;
+  assert.deepEqual(saved.inputs.source_frames, [PEOPLE_NODES.video, 0]);
+  applyModel(graph, { ...DEFAULT_MODEL, steps: 4 });
+  assert.equal(plan.inputs.steps, 4);
 });
 
 test("only files Find people saves pass as tracks", () => {

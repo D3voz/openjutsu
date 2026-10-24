@@ -166,12 +166,14 @@ function parseLabels(entry: FormDataEntryValue | null, photos: number): Label[] 
   return labels.map(({ track, start, end, role }) => ({ track, start, end, role }));
 }
 
+// Without tracks the montage finds the people itself and starts from the default picks; with them, the person list's picks are used.
 function parseMontage(form: FormData) {
   const { pictures, settings } = parseAdvanced(form);
   if (pictures.length !== parsePeople(form).roles.length) throw new Error("Give each photo a role.");
-  const tracks = String(form.get("tracks") ?? "");
-  if (!TRACKS_FILE.test(tracks)) throw new Error("Find people again.");
-  return { pictures, settings, tracks, labels: parseLabels(form.get("labels"), pictures.length) };
+  const tracks = form.get("tracks");
+  if (tracks === null) return { pictures, settings, review: null };
+  if (!TRACKS_FILE.test(String(tracks))) throw new Error("Find people again.");
+  return { pictures, settings, review: { tracks: String(tracks), labels: parseLabels(form.get("labels"), pictures.length) } };
 }
 
 export async function POST(request: Request) {
@@ -188,9 +190,9 @@ export async function POST(request: Request) {
       const { roles, resolution } = parsePeople(form);
       submit = () => submitPeople(video, section, roles, resolution);
     } else if (mode === "montage") {
-      const { pictures, settings, tracks, labels } = parseMontage(form);
+      const { pictures, settings, review } = parseMontage(form);
       const model = parseModel(form, await listModels());
-      submit = () => submitMontage(video, section, pictures, settings, tracks, labels, model);
+      submit = () => submitMontage(video, section, pictures, settings, review, model);
     } else if (mode === "simple") {
       const { picture, settings } = parseSimple(form);
       const model = parseModel(form, await listModels());
