@@ -11,7 +11,7 @@ import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/mod
 import type { EditMode, PlacementKeyframe } from "../lib/object.ts";
 import { CONTROL_MAX_SECONDS } from "../lib/control.ts";
 import { ObjectPlacement } from "./object-placement.tsx";
-import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
+import { CHUNK_SECONDS, FACE_STYLES, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
 import { appearances, renderLabels, type Appearance, type Kept, type Label, type People, type Review } from "../lib/montage.ts";
 
@@ -27,6 +27,7 @@ type Progress = NodeInfo & { step: number | null; steps: number | null; pass: nu
 
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
 const RUN_KEY = "openjutsu.run";
+const SETTINGS_KEY = "openjutsu.settings";
 
 const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
@@ -66,6 +67,43 @@ function writeRun(run: Run | null) {
     if (run) localStorage.setItem(RUN_KEY, JSON.stringify(run));
     else localStorage.removeItem(RUN_KEY);
   } catch {}
+}
+
+type Settings = {
+  mode: Mode; maxQuality: boolean; montage: boolean; resolution: Resolution; customSize: Size; hatFix: boolean; noLipSync: boolean;
+  margin: Margin; target: string; editMode: EditTab; editTarget: string; biggestOnly: boolean; keepOutline: boolean; post: Post;
+  detailOn: boolean; detail: number; toneOn: boolean; tone: ToneSettings; tonePreset: string; faceStyle: FaceStyle;
+  chunkSeconds: number; seed: number; clipSeconds: number; motion: MotionSize; steps: number; model: string; loras: Lora[];
+};
+
+const isBoolean = (value: unknown) => typeof value === "boolean";
+const isString = (value: unknown) => typeof value === "string";
+const oneOf = (list: readonly unknown[]) => (value: unknown) => list.includes(value);
+const inRange = ({ min, max }: { min: number; max: number }) => (value: unknown) => typeof value === "number" && value >= min && value <= max;
+const isSize = (value: unknown) => !!value && typeof value === "object" && [(value as Size).width, (value as Size).height].every(inRange(CUSTOM_SIZE));
+
+// A saved value that fails its check, say from an older version, is dropped and the field keeps its default.
+const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
+  mode: oneOf(MODES.map((m) => m.id)), maxQuality: isBoolean, montage: isBoolean,
+  resolution: (value) => oneOf(RESOLUTIONS)(value) || isSize(value), customSize: isSize,
+  hatFix: isBoolean, noLipSync: isBoolean, margin: oneOf(Object.keys(MARGINS)), target: isString,
+  editMode: oneOf(EDITS.map((e) => e.id)), editTarget: isString, biggestOnly: isBoolean, keepOutline: isBoolean,
+  post: oneOf(POSTS.map((p) => p.id)), detailOn: isBoolean, detail: inRange(DETAIL), toneOn: isBoolean,
+  tone: (value) => !!value && typeof value === "object" && oneOf(TONE_MODES)((value as ToneSettings).mode)
+    && Object.entries(TONE_RANGES).every(([key, range]) => inRange(range)((value as ToneSettings)[key as ToneValue])),
+  tonePreset: isString, faceStyle: oneOf(FACE_STYLES), chunkSeconds: inRange(CHUNK_SECONDS),
+  seed: (value) => Number.isInteger(value) && inRange({ min: 0, max: MAX_SEED })(value), clipSeconds: inRange(CLIP_SECONDS),
+  motion: oneOf(MOTION_SIZES), steps: (value) => Number.isInteger(value) && inRange(STEPS)(value), model: isString,
+  loras: (value) => Array.isArray(value) && value.length <= MAX_LORAS && value.every((l) => !!l && isString(l.name) && inRange(STRENGTH)(l.strength)),
+};
+
+function readSettings(defaults: Settings): Settings {
+  try {
+    const saved = Object.entries(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}"));
+    return { ...defaults, ...Object.fromEntries(saved.filter(([key, value]) => Object.hasOwn(SETTING_CHECKS, key) && SETTING_CHECKS[key as keyof Settings](value))) };
+  } catch {
+    return defaults;
+  }
 }
 
 function droppedFiles(event: DragEvent, kind: "video" | "image") {
@@ -190,20 +228,45 @@ export function Openjutsu() {
   const [preview, setPreview] = useState("");
   const [streamError, setStreamError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [restored, setRestored] = useState(false);
 
   useEffect(() => setRun(readRun()), []);
+
+  const settings: Settings = {
+    mode, maxQuality, montage, resolution, customSize, hatFix, noLipSync, margin, target, editMode, editTarget, biggestOnly, keepOutline, post,
+    detailOn, detail, toneOn, tone, tonePreset, faceStyle, chunkSeconds, seed, clipSeconds, motion, steps, model, loras,
+  };
+  const savedSettings = JSON.stringify(settings);
+
+  useEffect(() => {
+    const s = readSettings(settings);
+    setMode(s.mode); setMaxQuality(s.maxQuality); setMontage(s.montage); setResolution(s.resolution); setCustomSize(s.customSize);
+    setHatFix(s.hatFix); setNoLipSync(s.noLipSync); setMargin(s.margin); setTarget(s.target); setEditMode(s.editMode); setEditTarget(s.editTarget);
+    setBiggestOnly(s.biggestOnly); setKeepOutline(s.keepOutline); setPost(s.post); setDetailOn(s.detailOn); setDetail(s.detail); setToneOn(s.toneOn);
+    setTone(s.tone); setTonePreset(s.tonePreset); setFaceStyle(s.faceStyle); setChunkSeconds(s.chunkSeconds); setSeed(s.seed);
+    setClipSeconds(s.clipSeconds); setMotion(s.motion); setSteps(s.steps); setModel(s.model); setLoras(s.loras);
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      localStorage.setItem(SETTINGS_KEY, savedSettings);
+    } catch {}
+  }, [restored, savedSettings]);
 
   useEffect(() => setSetup(null), [mode, post, montage, maxQuality, resolution, motion, hatFix, noLipSync, model, loras, detailOn, toneOn, faceStyle, editMode, characters.length, !!look]);
 
   useEffect(() => {
     fetch("/api/models").then((response) => response.json()).then(setFiles, () => {});
-    // Orion's own copy of the default preset wins over the built-in values once it has loaded.
-    fetch("/api/presets").then((response) => response.json()).then(({ tone }: { tone: TonePreset[] }) => {
-      setPresets(tone);
-      const saved = tone.find((p) => p.name === DEFAULT_PRESET);
-      if (saved) setTone(toneFromPreset(saved.settings));
-    }, () => {});
+    fetch("/api/presets").then((response) => response.json()).then(({ tone }: { tone: TonePreset[] }) => setPresets(tone), () => {});
   }, []);
+
+  // Orion's own copy of the chosen preset wins over the built-in or saved values once it has loaded.
+  useEffect(() => {
+    const saved = presets.find((p) => p.name === tonePreset);
+    if (saved) setTone(toneFromPreset(saved.settings));
+  }, [presets]);
 
   useEffect(() => {
     if (!run) return;
