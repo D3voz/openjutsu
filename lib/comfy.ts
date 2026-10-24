@@ -9,6 +9,7 @@ import { applyModel, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
+import { CONTROL_PICTURE, CONTROL_VIDEO, pruneControl, setControlSection, type ControlSettings } from "./control.ts";
 import { PEOPLE_NODES, peopleRoles, pruneMontage, type Review } from "./montage.ts";
 
 export type PublicJob = {
@@ -39,7 +40,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "face", "color", "people", "montage"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "control", "face", "color", "people", "montage"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -107,6 +108,17 @@ export async function submitObject(video: File, section: Section, picture: File 
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, OBJECT_VIDEO), "video", await upload(comfy, video));
   if (picture && settings.mode !== "remove") workflow.setInput(nodeByTitle(graph, OBJECT_PICTURE), "image", await upload(comfy, picture));
+  return publicJob(await comfy.submit(workflow));
+}
+
+export async function submitControl(video: File, section: Section, picture: File, settings: ControlSettings, model: ModelSettings) {
+  const comfy = client();
+  const graph = pruneControl(await loadGraph("control"), settings);
+  applyModel(graph, model);
+  setControlSection(graph, section);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(nodeByTitle(graph, CONTROL_VIDEO), "video", await upload(comfy, video));
+  workflow.setInput(nodeByTitle(graph, CONTROL_PICTURE), "image", await upload(comfy, picture));
   return publicJob(await comfy.submit(workflow));
 }
 

@@ -9,6 +9,7 @@ import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, M
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 import type { EditMode, PlacementKeyframe } from "../lib/object.ts";
+import { CONTROL_MAX_SECONDS } from "../lib/control.ts";
 import { ObjectPlacement } from "./object-placement.tsx";
 import { CHUNK_SECONDS, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
@@ -17,7 +18,7 @@ import { appearances, renderLabels, type Appearance, type Kept, type Label, type
 type Character = { file: File; url: string; role: string };
 type Mode = "simple" | "advanced" | "object" | "post";
 type Post = "face" | "color";
-type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "face" | "color" | "people" | "montage";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "control" | "face" | "color" | "people" | "montage";
 type TonePreset = { name: string; settings: Record<string, unknown> };
 // frames: the video, part and crop SAM saw
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number; frames: string };
@@ -41,14 +42,15 @@ const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
   mouth: { label: "Follow the mouth", hint: "The face follows the video's expressions and mouth movements; a little less like the photo." },
 };
 
-// "From picture" is the Simple person swap with the picture as the character.
-type EditTab = EditMode | "picture";
+// "From picture" is the Simple person swap with the picture as the character; "ControlNet" takes the person and the setting from it.
+type EditTab = EditMode | "picture" | "controlnet";
 const EDITS: { id: EditTab; label: string; target: string; what: string; to: string; toHint: string }[] = [
   { id: "change", label: "Change", target: "hair, top", what: "What to change", to: "short bright pink hair and a black leather jacket", toHint: "What it becomes" },
   { id: "add", label: "Add", target: "on the table", what: "Where it goes", to: "a chocolate cake on a plate", toHint: "Object to add" },
   { id: "remove", label: "Remove", target: "poster", what: "What to remove", to: "a plain wall", toHint: "What shows instead (optional)" },
   { id: "background", label: "Background", target: "person", what: "What stays", to: "a snowy mountain pass at dusk", toHint: "The new place" },
   { id: "picture", label: "From picture", target: "person", what: "Who is replaced", to: "", toHint: "" },
+  { id: "controlnet", label: "ControlNet", target: "person", what: "Who is replaced", to: "", toHint: "" },
 ];
 
 function readRun(): Run | null {
@@ -316,11 +318,13 @@ export function Openjutsu() {
     return snapped;
   }
 
-  const clips = !video?.duration ? 0 : faceFix ? faceChunkCount(part.length || video.duration, chunkSeconds) : clipCount(part.length || video.duration, clipSeconds);
   const edit = EDITS.find((e) => e.id === editMode)!;
   const fromPicture = mode === "object" && editMode === "picture";
+  const controlNet = mode === "object" && editMode === "controlnet";
+  const clips = !video?.duration ? 0 : faceFix ? faceChunkCount(part.length || video.duration, chunkSeconds) : controlNet ? 1 : clipCount(part.length || video.duration, clipSeconds);
+  const pictureOnly = fromPicture || controlNet;
   const ready = colorFix ? detailOn || toneOn : mode === "object"
-    ? editMode === "remove" || (fromPicture ? !!look : (editMode !== "add" || placement.length > 0) && (!!changeTo.trim() || !!look))
+    ? editMode === "remove" || (pictureOnly ? !!look : (editMode !== "add" || placement.length > 0) && (!!changeTo.trim() || !!look))
     : !!character;
 
   function chooseLook(files: File[]) {
@@ -345,7 +349,7 @@ export function Openjutsu() {
     form.set("hat_fix", String(hatFix));
     form.set("no_lip_sync", String(noLipSync));
     form.set("margin", margin);
-    form.set("target", fromPicture ? editTarget.trim() || edit.target : target);
+    form.set("target", pictureOnly ? editTarget.trim() || edit.target : target);
     if (kind === "simple" && fromPicture && look) {
       form.set("picture", look.file);
       form.set("role", "");
@@ -353,7 +357,8 @@ export function Openjutsu() {
       form.set("picture", character.file);
       form.set("role", character.role);
     }
-    if (kind === "simple") {
+    if (kind === "control" && look) form.set("picture", look.file);
+    if (kind === "simple" || kind === "control") {
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
@@ -428,6 +433,7 @@ export function Openjutsu() {
     else if (kind === "montage") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, review: review ?? null, model: selectedModel };
     else if (kind === "object") selection = { kind, settings: { ...shared, mode: editMode as EditMode, target: String(form.get("target")), changeTo, biggestOnly, keepOutline,
       ...(editMode === "add" ? { placement: placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}) }, picture: !!look && editMode !== "remove", model: selectedModel };
+    else if (kind === "control") selection = { kind, settings: { target: String(form.get("target")), resolution, noLipSync, seed }, model: selectedModel };
     else if (kind === "face") selection = { kind, settings: { style: faceStyle, seed, chunkSeconds }, model: selectedModel };
     else if (kind === "color") selection = { kind, settings: { detail: detailOn ? detail : null, tone: toneOn ? tone : null } };
     else if (kind === "mask") selection = { kind, hatFix, margin, target: String(form.get("target")) };
@@ -443,7 +449,7 @@ export function Openjutsu() {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
-      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now(), frames };
+      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : kind === "control" ? CONTROL_MAX_SECONDS : clipSeconds, startedAt: Date.now(), frames };
       writeRun(next);
       setJob(body);
       setProgress(null);
@@ -642,7 +648,7 @@ export function Openjutsu() {
                     <span>{edit.what} <small>{editMode === "add" ? "Describe the placement, for example on the table in front of the person." : "What SAM tracks, in English."}{(editMode === "change" || editMode === "remove") && " Separate several with commas."}</small></span>
                     <input value={editTarget} maxLength={100} placeholder={edit.target} onChange={(event) => setEditTarget(event.target.value)} />
                   </label>
-                  {!fromPicture && <label>
+                  {!pictureOnly && <label>
                     <span>{edit.toHint}</span>
                     <input value={changeTo} maxLength={300} placeholder={`e.g. ${edit.to}`} onChange={(event) => setChangeTo(event.target.value)} />
                   </label>}
@@ -654,7 +660,7 @@ export function Openjutsu() {
                   ) : (
                     <DropZone accept="image/*" onFiles={chooseLook} className="add">
                       <strong>+</strong>
-                      <span>{fromPicture ? "The picture to copy"  : editMode === "add" ? "Picture of the object (optional)" : editMode === "background" ? "Picture of the place (optional)" : "Picture of the new look (optional)"}</span>
+                      <span>{fromPicture ? "The picture to copy" : controlNet ? "The person in their place" : editMode === "add" ? "Picture of the object (optional)" : editMode === "background" ? "Picture of the place (optional)" : "Picture of the new look (optional)"}</span>
                     </DropZone>
                   ))}
                   <p className="hint">
@@ -663,6 +669,7 @@ export function Openjutsu() {
                     {editMode === "remove" && "What SAM tracks is erased and filled with what is around it. The camera, people and sound stay."}
                     {editMode === "background" && "Everything except what SAM tracks becomes the new place; the camera movement stays."}
                     {fromPicture && "The person in the video becomes the person in the picture: face, hair and outfit. The background, motion, camera and sound stay."}
+                    {controlNet && `The person and the place both come from the picture. A depth map of the person in the video keeps their framing, camera and motion; the sound stays. Everyone else in the video is replaced by the picture's setting. Runs as one clip of up to ${CONTROL_MAX_SECONDS} s.`}
                   </p>
                   {editMode === "add" && video && canvas && <ObjectPlacement key={`${video.url}:${resolutionField}`} src={video.url}
                     start={whole ? 0 : part.start} end={whole ? video.duration : part.start + part.length} width={canvas[0]} height={canvas[1]} points={placement} onChange={setPlacement} />}
@@ -792,8 +799,8 @@ export function Openjutsu() {
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>}
-            {(mode === "simple" || mode === "advanced") && <label className="setting toggle">
-              <span>No lip-sync <small>For songs the people in the video do not sing or talk along to, so the new {mode === "advanced" ? "people" : "person"} do{mode === "advanced" ? "" : "es"} not lip-sync them (about 30 s more per clip).</small></span>
+            {(mode === "simple" || mode === "advanced" || controlNet) && <label className="setting toggle">
+              <span>No lip-sync <small>For songs the people in the video do not sing or talk along to, so the new {mode === "advanced" ? "people" : "person"} do{mode === "advanced" ? "" : "es"} not lip-sync them{controlNet ? "" : " (about 30 s more per clip)"}.</small></span>
               <input type="checkbox" checked={noLipSync} onChange={(event) => setNoLipSync(event.target.checked)} />
               <i aria-hidden />
             </label>}
@@ -804,7 +811,7 @@ export function Openjutsu() {
                 <i aria-hidden />
               </label>
             )}
-            {mode !== "post" && <div className="setting">
+            {mode !== "post" && !controlNet && <div className="setting">
               <span>Mask margin <small>{mode === "object"
                 ? editMode === "background" ? "How far the new place reaches into the edge of what stays." : "Room around it for a bigger new shape and its shadow."
                 : <>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</>}</small></span>
@@ -824,13 +831,13 @@ export function Openjutsu() {
                   <span>Chunk length <small>{chunkSeconds.toFixed(1)} s of face per H3 generation; chunks overlap by 1 s and are crossfaded.</small></span>
                   <input type="range" min={CHUNK_SECONDS.min} max={CHUNK_SECONDS.max} step={0.5} value={chunkSeconds} onChange={(event) => setChunkSeconds(Number(event.target.value))} />
                 </div>
-              ) : (
+              ) : !controlNet && (
                 <div className="setting">
                   <span>Clip length <small>{clipSeconds.toFixed(1)} s per H3 generation</small></span>
                   <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
                 </div>
               )}
-              {mode !== "post" && <div className="setting">
+              {mode !== "post" && !controlNet && <div className="setting">
                 <span>Motion reference <small>Size of the grey figures H3 copies the motion from. Bigger follows the source poses a bit more closely; sampling takes about a third longer at 768 px and about 2.4× as long at 1376 px.</small></span>
                 <div className="segmented">
                   {MOTION_SIZES.map((m) => (
@@ -878,7 +885,7 @@ export function Openjutsu() {
                 <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>Find people</button>
                 <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}</button>
               </>) : (
-                <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
+                <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(mode === "object" ? controlNet ? "control" : fromPicture ? "simple" : "object" : mode === "post" ? post : mode === "simple" ? "simple" : onePassEach ? "advanced_maxq" : "advanced")}>
                   {submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}
                 </button>
               )}
@@ -887,7 +894,9 @@ export function Openjutsu() {
               ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
               : clips && ready
               ? mode === "advanced" && montage ? `${clips} clip${clips > 1 ? "s" : ""} or more at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.`
-              : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face` : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
+              : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face`
+              : controlNet ? `One clip at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}${(part.length || video!.duration) > CONTROL_MAX_SECONDS ? `: only the first ${CONTROL_MAX_SECONDS} s of this part are used` : ""}`
+              : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
               : mode === "object" && editMode === "add" && video && !placement.length ? "Draw where the new object should go."
               : `Add a video and ${mode === "object" ? editMode === "add" ? "describe the object to add" : "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>

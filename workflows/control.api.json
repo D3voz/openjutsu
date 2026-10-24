@@ -1,0 +1,1311 @@
+{
+  "2": {
+    "inputs": {
+      "image": "apt_vest_reference.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Picture 1",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "3": {
+    "inputs": {
+      "upscale_method": "area",
+      "largest_size": 768,
+      "image": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToMaxDimension",
+    "_meta": {
+      "title": "Shrink for the describer",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "4": {
+    "inputs": {
+      "prompt": "Describe the person in this picture for a casting sheet, in one sentence of about 40 words: apparent age and gender, hair, facial hair, skin tone, build, and their complete outfit including footwear. No preamble, no background.",
+      "max_length": 120,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "auto",
+      "clip": [
+        "13",
+        0
+      ],
+      "image": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "TextGenerate",
+    "_meta": {
+      "title": "Describe picture 1",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "5": {
+    "inputs": {
+      "video": "spiderman_jeangrey_apt.mp4",
+      "force_rate": 24,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    },
+    "class_type": "VHS_LoadVideo",
+    "_meta": {
+      "title": "Source video (people get replaced)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "6": {
+    "inputs": {
+      "start_index": 0,
+      "duration": 2048,
+      "audio": [
+        "5",
+        2
+      ]
+    },
+    "class_type": "TrimAudioDuration",
+    "_meta": {
+      "title": "Soundtrack (whole video)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "7": {
+    "inputs": {
+      "select_every_nth": 48,
+      "skip_first_images": 24,
+      "images": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "VHS_SelectEveryNthImage",
+    "_meta": {
+      "title": "One frame every 2 s",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "8": {
+    "inputs": {
+      "batch_index": 0,
+      "length": 20,
+      "image": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "At most 20 frames",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "9": {
+    "inputs": {
+      "upscale_method": "area",
+      "largest_size": 640,
+      "image": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToMaxDimension",
+    "_meta": {
+      "title": "Shrink for the describer",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "10": {
+    "inputs": {
+      "prompt": "These are frames from one video, in time order. List the people who appear most, up to four, the person with the most screen time first. Write one numbered line per person: first their role in the video in two to four words, without gender, that stays true in every shot, then \" - \" and how they look, like \"1. the guitarist - tall man with a grey beard in a denim jacket\". Each person appears once. Output only the list.",
+      "max_length": 160,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "auto",
+      "clip": [
+        "13",
+        0
+      ],
+      "image": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "TextGenerate",
+    "_meta": {
+      "title": "Who is in the video",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "11": {
+    "inputs": {
+      "clip_seconds": 6,
+      "overlap_frames": 39,
+      "resolution": "736p",
+      "steps": 6,
+      "seed": 0,
+      "roles": "",
+      "no_lip_sync": [
+        "68",
+        0
+      ],
+      "short_edge": 0,
+      "source_frames": [
+        "5",
+        0
+      ],
+      "picture_1": [
+        "2",
+        0
+      ],
+      "picture_1_text": [
+        "4",
+        0
+      ],
+      "video_people": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "H3PictureSwapPlan",
+    "_meta": {
+      "title": "Swap Plan (roles, seed, size)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "13": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "Describer: Qwen3-VL 8B",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "15": {
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "H3 Diffusion Model",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "16": {
+    "inputs": {
+      "lora_name": "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
+      "strength_model": 1,
+      "model": [
+        "15",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "DMAD LoRA",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "17": {
+    "inputs": {
+      "attention": "comfy kitchen attention",
+      "model": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "ModelAttentionBackend",
+    "_meta": {
+      "title": "Comfy Kitchen Attention",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "18": {
+    "inputs": {
+      "shift_video": 12,
+      "shift_audio": 2,
+      "model": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3SigmaShift",
+    "_meta": {
+      "title": "Sigma Shift",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "19": {
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "H3 Text Encoder",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "20": {
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Video VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "21": {
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "Audio VAE",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "22": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "Sampler",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "23": {
+    "inputs": {
+      "ckpt_name": "sam3.1_multiplex_fp16.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "SAM 3.1",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "24": {
+    "inputs": {
+      "text": "person",
+      "clip": [
+        "23",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "SAM: what to replace",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "25": {
+    "inputs": {
+      "scene_continuity": "Hard picture + protected audio",
+      "audio_profile": "Generate audio"
+    },
+    "class_type": "MiniMaxH3GenerationProfile",
+    "_meta": {
+      "title": "Generation Profile",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "26": {
+    "inputs": {
+      "plan_json": "{\n  \"shots\": [\n    {\n      \"id\": \"intro\",\n      \"prompt\": \"Describe the opening shot.\"\n    },\n    {\n      \"id\": \"continuation\",\n      \"prompt\": \"Continue the same take.\"\n    }\n  ]\n}",
+      "run_name": [
+        "11",
+        3
+      ],
+      "generation_fingerprint": "",
+      "width": [
+        "11",
+        1
+      ],
+      "height": [
+        "11",
+        2
+      ],
+      "encode_mode": "video",
+      "crop": "center",
+      "default_duration_seconds": 15,
+      "default_steps": 6,
+      "base_seed": 0,
+      "segment_crf": 16,
+      "video_blend_frames": 0,
+      "chain_policy": [
+        "25",
+        0
+      ],
+      "plan_json_input": [
+        "11",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ChainPlanModern",
+    "_meta": {
+      "title": "Production Plan (filled by Swap Plan)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "27": {
+    "inputs": {
+      "video_path": "",
+      "audio_path": "",
+      "embedded_audio": "auto",
+      "skip_first_frames": 0,
+      "source_audio": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3SourceTimeline",
+    "_meta": {
+      "title": "Source soundtrack",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "28": {
+    "inputs": {
+      "start_clip": 1,
+      "scene_range": "",
+      "verify_resume_history": true,
+      "plan": [
+        "26",
+        0
+      ],
+      "source_timeline": [
+        "27",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ChainLoopStart",
+    "_meta": {
+      "title": "Loop Start",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "29": {
+    "inputs": {
+      "align_audio_reference": false,
+      "state": [
+        "28",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3ChainCurrent",
+    "_meta": {
+      "title": "Current Clip",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "30": {
+    "inputs": {
+      "prompt": [
+        "46",
+        0
+      ],
+      "width": [
+        "29",
+        8
+      ],
+      "height": [
+        "29",
+        9
+      ],
+      "length": [
+        "29",
+        6
+      ],
+      "ref_image_size": "match",
+      "clip": [
+        "19",
+        0
+      ],
+      "vae": [
+        "20",
+        0
+      ],
+      "audio_vae": [
+        "21",
+        0
+      ],
+      "ref_images.ref_image_0": [
+        "2",
+        0
+      ],
+      "ref_audios.ref_audio_0": [
+        "70",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "_meta": {
+      "title": "Reference Conditioning",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "31": {
+    "inputs": {
+      "source_fps": 24,
+      "crop": "center",
+      "state": [
+        "29",
+        0
+      ],
+      "latent": [
+        "30",
+        1
+      ],
+      "audio_vae": [
+        "21",
+        0
+      ],
+      "source_frames": [
+        "5",
+        0
+      ],
+      "source_audio": [
+        "69",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ContexLoopSourceSlice",
+    "_meta": {
+      "title": "Source clip (frames + audio)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "32": {
+    "inputs": {
+      "upscale_method": "area",
+      "largest_size": 512,
+      "image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToMaxDimension",
+    "_meta": {
+      "title": "Shot list frames (~512 px)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "33": {
+    "inputs": {
+      "expression": "round(a * 24)",
+      "values.a": [
+        "29",
+        10
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Clip start frame",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "34": {
+    "inputs": {
+      "batch_index": [
+        "33",
+        1
+      ],
+      "length": [
+        "29",
+        6
+      ],
+      "image": [
+        "32",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "Shot list frames for this clip",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "35": {
+    "inputs": {
+      "upscale_method": "area",
+      "largest_size": 1008,
+      "image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "ImageScaleToMaxDimension",
+    "_meta": {
+      "title": "SAM video (1008 px, SAM's own size)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "36": {
+    "inputs": {
+      "batch_index": [
+        "33",
+        1
+      ],
+      "length": [
+        "29",
+        6
+      ],
+      "image": [
+        "35",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "SAM frames for this clip",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "37": {
+    "inputs": {
+      "noise_seed": [
+        "29",
+        5
+      ]
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "Clip Seed",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "38": {
+    "inputs": {
+      "detection_threshold": 0.35,
+      "max_objects": 0,
+      "detect_interval": 1,
+      "images": [
+        "36",
+        0
+      ],
+      "model": [
+        "23",
+        0
+      ],
+      "conditioning": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "SAM3_VideoTrack",
+    "_meta": {
+      "title": "SAM 3.1 track every person",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "39": {
+    "inputs": {
+      "headroom": 0,
+      "hold_frames": 1,
+      "max_people": 1,
+      "track_data": [
+        "38",
+        0
+      ]
+    },
+    "class_type": "H3PeopleMask",
+    "_meta": {
+      "title": "Main person, no headroom (for the depth)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "40": {
+    "inputs": {
+      "mask": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "MaskToImage",
+    "_meta": {
+      "title": "Main person mask as image",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "41": {
+    "inputs": {
+      "ckpt_name": "depth_anything_v2_vitb.pth",
+      "resolution": 512,
+      "image": [
+        "36",
+        0
+      ]
+    },
+    "class_type": "DepthAnythingV2Preprocessor",
+    "_meta": {
+      "title": "Depth of this clip (Depth Anything V2)",
+      "cnr_id": "comfyui_controlnet_aux",
+      "ver": "a587a4c1594524c1d2de5cd1a86cd868ff448e1c"
+    }
+  },
+  "42": {
+    "inputs": {
+      "blend_factor": 1,
+      "blend_mode": "multiply",
+      "image1": [
+        "41",
+        0
+      ],
+      "image2": [
+        "40",
+        0
+      ]
+    },
+    "class_type": "ImageBlend",
+    "_meta": {
+      "title": "Depth of the main person only (control video)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "43": {
+    "inputs": {
+      "value": 1,
+      "width": [
+        "29",
+        8
+      ],
+      "height": [
+        "29",
+        9
+      ]
+    },
+    "class_type": "SolidMask",
+    "_meta": {
+      "title": "Whole frame (regenerate everything)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "44": {
+    "inputs": {
+      "cut_threshold": 40,
+      "images": [
+        "34",
+        0
+      ],
+      "shot_prompt": [
+        "11",
+        4
+      ]
+    },
+    "class_type": "H3ClipShots",
+    "_meta": {
+      "title": "Find this clip's cuts",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "45": {
+    "inputs": {
+      "prompt": [
+        "44",
+        1
+      ],
+      "max_length": 500,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "auto",
+      "clip": [
+        "13",
+        0
+      ],
+      "image": [
+        "44",
+        0
+      ]
+    },
+    "class_type": "TextGenerate",
+    "_meta": {
+      "title": "Write this clip's shot list (Qwen3-VL)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "46": {
+    "inputs": {
+      "prompt": [
+        "29",
+        4
+      ],
+      "shots": [
+        "45",
+        0
+      ]
+    },
+    "class_type": "H3FillShots",
+    "_meta": {
+      "title": "Insert shot list into prompt",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "47": {
+    "inputs": {
+      "source": [
+        "46",
+        0
+      ]
+    },
+    "class_type": "PreviewAny",
+    "_meta": {
+      "title": "Clip prompt (what H3 gets)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "48": {
+    "inputs": {
+      "name": "minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors"
+    },
+    "class_type": "ModelPatchLoader",
+    "_meta": {
+      "title": "H3 Fun ControlNet Union 2.0",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "49": {
+    "inputs": {
+      "strength": 1,
+      "start_percent": 0,
+      "end_percent": 1,
+      "model": [
+        "18",
+        0
+      ],
+      "model_patch": [
+        "48",
+        0
+      ],
+      "vae": [
+        "20",
+        0
+      ],
+      "control_video": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3FunControlNetApply",
+    "_meta": {
+      "title": "Apply ControlNet (person depth)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "50": {
+    "inputs": {
+      "images": [
+        "42",
+        0
+      ]
+    },
+    "class_type": "PreviewImage",
+    "_meta": {
+      "title": "Control video (person depth)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "51": {
+    "inputs": {
+      "grow": 0,
+      "keep_audio": true,
+      "megapixels": 0,
+      "vae": [
+        "20",
+        0
+      ],
+      "images": [
+        "31",
+        0
+      ],
+      "mask": [
+        "43",
+        0
+      ],
+      "audio_vae": [
+        "21",
+        0
+      ],
+      "audio": [
+        "31",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3FantasticVideoEditLatent",
+    "_meta": {
+      "title": "Edit latent (source + mask + audio)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "52": {
+    "inputs": {
+      "mask_meaning": "white = generate",
+      "audio_mode": "preserve source audio",
+      "mask_conversion": "H3 exact (causal/token max)",
+      "target_latent": [
+        "51",
+        0
+      ],
+      "mask": [
+        "43",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ContexMaskedTarget",
+    "_meta": {
+      "title": "Masked target",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "53": {
+    "inputs": {
+      "state": [
+        "29",
+        0
+      ],
+      "conditioning": [
+        "30",
+        0
+      ],
+      "vae": [
+        "20",
+        0
+      ],
+      "latent": [
+        "52",
+        0
+      ],
+      "audio_vae": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ChainContext",
+    "_meta": {
+      "title": "Apply Clip Context",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "54": {
+    "inputs": {
+      "model": [
+        "49",
+        0
+      ],
+      "conditioning": [
+        "53",
+        0
+      ]
+    },
+    "class_type": "BasicGuider",
+    "_meta": {
+      "title": "Guider",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "55": {
+    "inputs": {
+      "scheduler": "simple",
+      "steps": [
+        "29",
+        7
+      ],
+      "denoise": 1,
+      "model": [
+        "49",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "Schedule",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "56": {
+    "inputs": {
+      "noise": [
+        "37",
+        0
+      ],
+      "guider": [
+        "54",
+        0
+      ],
+      "sampler": [
+        "22",
+        0
+      ],
+      "sigmas": [
+        "55",
+        0
+      ],
+      "latent_image": [
+        "53",
+        3
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "Sample Video + Audio",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "57": {
+    "inputs": {
+      "samples": [
+        "56",
+        0
+      ],
+      "vae": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "Decode Video",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "58": {
+    "inputs": {
+      "samples": [
+        "56",
+        0
+      ],
+      "vae": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "Decode Audio",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "59": {
+    "inputs": {
+      "trim_frames": [
+        "53",
+        1
+      ],
+      "fps": 24,
+      "match_tail": true,
+      "audio_trim_mode": "sync_with_video",
+      "images": [
+        "63",
+        0
+      ],
+      "audio": [
+        "58",
+        0
+      ],
+      "state": [
+        "29",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3LoopTrim",
+    "_meta": {
+      "title": "Trim Overlap",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "60": {
+    "inputs": {
+      "batch_index": 2,
+      "length": 1,
+      "image": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "Frame 2",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "61": {
+    "inputs": {
+      "amount": 2,
+      "image": [
+        "60",
+        0
+      ]
+    },
+    "class_type": "RepeatImageBatch",
+    "_meta": {
+      "title": "Frame 2 as frames 0 and 1 (they show the picture)",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "62": {
+    "inputs": {
+      "batch_index": 2,
+      "length": 4096,
+      "image": [
+        "57",
+        0
+      ]
+    },
+    "class_type": "ImageFromBatch",
+    "_meta": {
+      "title": "Frame 2 to the end",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "63": {
+    "inputs": {
+      "images.image0": [
+        "61",
+        0
+      ],
+      "images.image1": [
+        "62",
+        0
+      ]
+    },
+    "class_type": "BatchImagesNode",
+    "_meta": {
+      "title": "Clip with frames 0 and 1 replaced",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "64": {
+    "inputs": {
+      "state": [
+        "29",
+        0
+      ],
+      "images": [
+        "59",
+        0
+      ],
+      "sampled_latent": [
+        "56",
+        0
+      ],
+      "audio": [
+        "59",
+        1
+      ],
+      "images_with_overlap": [
+        "59",
+        2
+      ]
+    },
+    "class_type": "MiniMaxH3ChainSegmentSave",
+    "_meta": {
+      "title": "Save Clip + Checkpoint",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "65": {
+    "inputs": {
+      "enabled": false,
+      "play_notification_sound": false,
+      "auto_continue_timeout_minutes": 0,
+      "unload_models_while_waiting": false,
+      "assemble_partial_on_stop": true,
+      "partial_audio_source": "checkpointed",
+      "candidate_count": 1,
+      "review_each_candidate": false,
+      "state": [
+        "29",
+        0
+      ],
+      "segment": [
+        "64",
+        0
+      ],
+      "audio": [
+        "59",
+        1
+      ]
+    },
+    "class_type": "MiniMaxH3ChainReview",
+    "_meta": {
+      "title": "Review (off = no pause)",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "66": {
+    "inputs": {
+      "between_scene_cleanup": "off",
+      "execution_mode": "recursive",
+      "flow": [
+        "28",
+        0
+      ],
+      "state": [
+        "29",
+        0
+      ],
+      "images": [
+        "59",
+        0
+      ],
+      "sampled_latent": [
+        "56",
+        0
+      ],
+      "segment": [
+        "65",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ChainLoopEnd",
+    "_meta": {
+      "title": "Loop End",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "67": {
+    "inputs": {
+      "audio_source": "source",
+      "filename": "swap_%date:yyyy-MM-dd%",
+      "audio_bitrate": 256,
+      "copy_to_output": true,
+      "output_subfolder": "h3_oneclick_swap",
+      "blend_schedule": "plan",
+      "boundary_tone_match": "off",
+      "color_stabilization": "off",
+      "delete_checkpoints_after_assembly": false,
+      "generated_audio_join": "av_overlap",
+      "manifest": [
+        "66",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ChainAssemble",
+    "_meta": {
+      "title": "Final Video",
+      "cnr_id": "comfyui-workflow-encrypt",
+      "ver": "1.0.0"
+    }
+  },
+  "68": {
+    "inputs": {
+      "value": true
+    },
+    "class_type": "PrimitiveBoolean",
+    "_meta": {
+      "title": "No lip-sync in the prompt",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "69": {
+    "inputs": {
+      "volume": -100,
+      "audio": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "AudioAdjustVolume",
+    "_meta": {
+      "title": "Mute the clip audio H3 hears",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  },
+  "70": {
+    "inputs": {
+      "volume": -100,
+      "audio": [
+        "29",
+        12
+      ]
+    },
+    "class_type": "AudioAdjustVolume",
+    "_meta": {
+      "title": "Mute the reference audio H3 hears",
+      "cnr_id": "comfy-core",
+      "ver": "0.42.0"
+    }
+  }
+}

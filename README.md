@@ -8,7 +8,7 @@ The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyor
 
 - **Simple motion transfer**: available. One character replaces the main person (the one who fills the most of the frame). Runs `workflows/simple.api.json`, exported from `H3 One-Click Single Swap (DMAD 6 step).json`.
 - **Advanced motion transfer**: available. 1–4 characters, each with an optional role; every tracked person is matched to a role per shot, and people without a character stay untouched. Runs `workflows/advanced.api.json`, exported from `H3 One-Click Advanced Swap (DMAD 6 step).json`; **One pass per person** (two characters) runs `workflows/advanced_maxq.api.json`.
-- **Object swap**: available. **Change** what SAM tracks (hair, a jacket, a car) into what you describe or show in a picture; **Remove** it; or change the **Background** around it (`person` stays). Only that area is regenerated. **From picture** runs the Simple swap with the picture as the character: its face, hair and outfit, with the original background. Runs `workflows/object.api.json`, exported from `H3 One-Click Object Swap (DMAD 6 step).json`.
+- **Object swap**: available. **Change** what SAM tracks (hair, a jacket, a car) into what you describe or show in a picture; **Remove** it; or change the **Background** around it (`person` stays). Only that area is regenerated. **From picture** runs the Simple swap with the picture as the character: its face, hair and outfit, with the original background. **ControlNet** takes both the person and the place from the picture: the whole frame is regenerated, and a depth map of the person in the video (SAM 3.1 + Depth Anything V2, through the H3 Fun ControlNet Union 2.0) keeps their framing, camera and motion. Everyone else in the video is replaced by the picture's setting. It runs as one H3 clip of up to 15 s (a longer part is cut to its first 15 s), because a continuation clip loses the depth framing. Runs `workflows/object.api.json`, exported from `H3 One-Click Object Swap (DMAD 6 step).json`; ControlNet runs `workflows/control.api.json`, exported from `H3 One-Click Picture Swap ControlNet (DMAD 6 step).json`.
 - **Post-processing**: available, for a finished video. **Fix faces**: H3 draws faces poorly when the person is small in the frame, so this redraws the face of the person in a photo at close-up size and pastes it back. Runs `workflows/face.api.json`, written by `user/default/openjutsu_face_build.py`. **Fix colours** softens H3's harsh look without an H3 run: Image Detail Contrast takes some fine detail contrast out, then Orion4D's DCTL Tone Mapper grades every frame. Runs `workflows/color.api.json`.
 
 ## Requirements
@@ -32,6 +32,7 @@ Install these into `ComfyUI/custom_nodes` (ComfyUI Manager finds the first three
 | [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) | Fix faces: SAM loader |
 | [comfyui-image-detail-contrast](https://github.com/D3voz/comfyui-image-detail-contrast) | Fix colours: Image Detail Contrast |
 | [Orion4D_FXMax](https://github.com/orion4d/Orion4D_FXMax) | Fix colours: DCTL Tone Mapper and its presets |
+| [comfyui_controlnet_aux](https://github.com/Fannovel16/comfyui_controlnet_aux) | ControlNet: Depth Anything V2 (downloads `depth_anything_v2_vitb.pth` on first use) |
 
 Restart ComfyUI after installing them.
 
@@ -50,6 +51,7 @@ Before uploading a job, Openjutsu checks the selected workflow against ComfyUI's
 | `ultralytics/bbox`, `ultralytics/segm` | `face_yolov8m.pt`, `person_yolov8m-seg.pt` ([Bingsu/adetailer](https://huggingface.co/Bingsu/adetailer)), for Fix faces |
 | `sams` | `sam_vit_b_01ec64.pth`, for Fix faces |
 | `insightface/models` | `buffalo_l` (InsightFace downloads it on first use), for Fix faces |
+| `model_patches` | `minimax_h3_fun_controlnet_union_2.0_pruned_int8_convrot.safetensors` ([Kijai/MiniMax-H3-experimental](https://huggingface.co/Kijai/MiniMax-H3-experimental/tree/main/model_patches)), for ControlNet |
 
 ## Run it locally
 

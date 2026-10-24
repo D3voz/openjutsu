@@ -24,7 +24,7 @@ function registryFor(...graphs: ApiGraph[]): NodeRegistry {
   return registry;
 }
 
-test("all nine workflows pass with their nodes and model filenames registered", () => {
+test("all ten workflows pass with their nodes and model filenames registered", () => {
   for (const kind of JOB_KINDS) {
     const graph = load(kind);
     assert.deepEqual(inspectSetup(graph, registryFor(graph)), { ok: true, packs: [], models: [] }, kind);
@@ -43,7 +43,7 @@ test("missing nodes are grouped by their source pack, including both published D
 });
 
 test("all custom node types in the exports have a pack mapping", () => {
-  const custom = /^(H3|MiniMaxH3(?!ReferenceToVideo|SigmaShift)|VHS_|GrowMaskWithBlur$|ImageAndMaskPreview$|ImageDetailContrast$|Orion4D_|SAMLoader$)/;
+  const custom = /^(H3|MiniMaxH3(?!ReferenceToVideo|SigmaShift|FunControlNetApply)|VHS_|GrowMaskWithBlur$|ImageAndMaskPreview$|ImageDetailContrast$|Orion4D_|SAMLoader$)/;
   const graphs = JOB_KINDS.map(load);
   const missing = inspectSetup(Object.fromEntries(graphs.flatMap((g, i) => Object.entries(g).map(([id, node]) => [`${i}_${id}`, node]))), {});
   const core = missing.packs.find((p) => p.url === "https://github.com/Comfy-Org/ComfyUI")!;

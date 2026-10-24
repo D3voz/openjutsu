@@ -1,5 +1,6 @@
 import { pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { pruneColor, type ColorSettings } from "./color.ts";
+import { pruneControl, type ControlSettings } from "./control.ts";
 import { pruneFace, type FaceSettings } from "./face.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
 import { PEOPLE_NODES, pruneMontage, type Review } from "./montage.ts";
@@ -10,6 +11,7 @@ export type SetupRequest =
   | { kind: "simple"; settings: SimpleSettings; model: ModelSettings }
   | { kind: "advanced" | "advanced_maxq"; settings: AdvancedSettings; pictures: number; model: ModelSettings }
   | { kind: "object"; settings: ObjectSettings; picture: boolean; model: ModelSettings }
+  | { kind: "control"; settings: ControlSettings; model: ModelSettings }
   | { kind: "face"; settings: FaceSettings; model: ModelSettings }
   | { kind: "color"; settings: ColorSettings }
   | { kind: "mask"; hatFix: boolean; margin: Margin; target: string }
@@ -28,7 +30,7 @@ export type NodeRegistry = Record<string, NodeInfo>;
 
 const PACKS = [
   { name: "ComfyUI-MiniMaxH3-Context-Loop (0.7.3+)", url: "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Context-Loop", nodes: ["MiniMaxH3GenerationProfile", "MiniMaxH3SourceTimeline", "MiniMaxH3ChainPlanModern", "MiniMaxH3ChainLoopStart", "MiniMaxH3ChainCurrent", "MiniMaxH3ChainContext", "MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainReview", "MiniMaxH3ChainLoopEnd", "MiniMaxH3ChainAssemble", "MiniMaxH3ContexLoopSourceSlice", "MiniMaxH3ContexMaskedTarget", "MiniMaxH3ContexMaskGridPreview", "MiniMaxH3LoopTrim"] },
-  { name: "comfyui-h3-oneclick-swap", url: "https://github.com/D3voz/comfyui-h3-oneclick-swap", nodes: ["H3OneClickSwapPlan", "H3AdvancedSwapPlan", "H3ObjectSwapPlan", "H3ObjectPlacementMask", "H3PeopleMask", "H3GreyMannequins", "H3ClipShots", "H3FillShots", "H3TrackCrops", "H3TrackRoles", "H3RoleMask", "H3SubjectPrompt", "H3MontagePeople", "H3MontageTracks", "H3MontagePicks", "H3MontagePlan", "H3MontagePass", "H3FaceChunks", "H3FaceJoin"] },
+  { name: "comfyui-h3-oneclick-swap", url: "https://github.com/D3voz/comfyui-h3-oneclick-swap", nodes: ["H3OneClickSwapPlan", "H3AdvancedSwapPlan", "H3PictureSwapPlan", "H3ObjectSwapPlan", "H3ObjectPlacementMask", "H3PeopleMask", "H3GreyMannequins", "H3ClipShots", "H3FillShots", "H3TrackCrops", "H3TrackRoles", "H3RoleMask", "H3SubjectPrompt", "H3MontagePeople", "H3MontageTracks", "H3MontagePicks", "H3MontagePlan", "H3MontagePass", "H3FaceChunks", "H3FaceJoin"] },
   { name: "ComfyUI-Fantastic-MiniMaxH3-PromptBuilder", url: "https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder", nodes: ["MiniMaxH3FantasticVideoEditLatent"] },
   { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes", nodes: ["GrowMaskWithBlur", "ImageAndMaskPreview"] },
   { name: "ComfyUI-VideoHelperSuite", url: "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite", nodes: ["VHS_LoadVideo", "VHS_SelectEveryNthImage", "VHS_VideoCombine"] },
@@ -36,6 +38,7 @@ const PACKS = [
   { name: "ComfyUI-Impact-Pack", url: "https://github.com/ltdrdata/ComfyUI-Impact-Pack", nodes: ["SAMLoader"] },
   { name: "comfyui-image-detail-contrast", url: "https://github.com/D3voz/comfyui-image-detail-contrast", nodes: ["ImageDetailContrast"] },
   { name: "Orion4D_FXMax", url: "https://github.com/orion4d/Orion4D_FXMax", nodes: ["Orion4D_FXMax_DCTLToneMapper"] },
+  { name: "comfyui_controlnet_aux", url: "https://github.com/Fannovel16/comfyui_controlnet_aux", nodes: ["DepthAnythingV2Preprocessor"] },
 ];
 const CORE = { name: "ComfyUI (update required)", url: "https://github.com/Comfy-Org/ComfyUI", nodes: [] as string[] };
 const MODEL_INPUTS: Record<string, Record<string, string>> = {
@@ -45,6 +48,7 @@ const MODEL_INPUTS: Record<string, Record<string, string>> = {
   VAELoader: { vae_name: "vae" },
   CheckpointLoaderSimple: { ckpt_name: "checkpoints" },
   SAMLoader: { model_name: "sams" },
+  ModelPatchLoader: { name: "model_patches" },
   H3FaceTrackCrop: { detector: "ultralytics", fallback_detector: "ultralytics" },
 };
 
@@ -52,6 +56,7 @@ export function setupGraph(source: ApiGraph, selection: SetupRequest): ApiGraph 
   let graph: ApiGraph;
   if (selection.kind === "simple") graph = pruneSimple(source, selection.settings);
   else if (selection.kind === "object") graph = pruneObject(source, selection.picture, selection.settings);
+  else if (selection.kind === "control") graph = pruneControl(source, selection.settings);
   else if (selection.kind === "face") graph = pruneFace(source, selection.settings);
   else if (selection.kind === "color") graph = pruneColor(source, selection.settings);
   else if (selection.kind === "mask") graph = pruneMask(source, selection.hatFix, selection.margin, selection.target);
