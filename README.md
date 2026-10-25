@@ -55,13 +55,13 @@ Before uploading a job, Openjutsu checks the selected workflow against ComfyUI's
 
 ## Run it locally
 
-On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or started while it waits). The first run installs `comfy-api-proxy` into `.venv-proxy` and the node packages; then it opens the proxy and the app in two windows and the page in your browser. Close those two windows to stop Openjutsu. The manual steps:
+On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or started while it waits). The first run installs `comfy-api-proxy` 0.1.6 into `.venv-proxy` and the node packages. Each run builds the app, then opens the proxy and the app (`npm start`, the production server) in two windows and the page in your browser. Close those two windows to stop Openjutsu. The manual steps:
 
 1. Start ComfyUI on `127.0.0.1:8188`. On Windows, set `AIOHTTP_NOSENDFILE=1` first (PowerShell: `$env:AIOHTTP_NOSENDFILE = "1"`). Without it, the first partial-file request (the video player sends one when you seek) can stall ComfyUI's `/view`, and every later file download hangs until ComfyUI restarts.
 2. Install and start the proxy, which serves the Comfy API v2 on `127.0.0.1:8189`. Raise the upload cap for longer videos (the default is 100 MB):
 
    ```sh
-   pip install comfy-api-proxy
+   pip install comfy-api-proxy==0.1.6
    comfy-api-proxy run --max-upload-mb 500
    ```
 
@@ -72,8 +72,11 @@ On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or star
    cd openjutsu
    cp .env.example .env.local
    npm ci
-   npm run dev
+   npm run build
+   npm start
    ```
+
+   While changing the code, `npm run dev` runs the development server instead.
 
 4. Open <http://127.0.0.1:3000>.
 
@@ -117,7 +120,7 @@ Each clip, SAM 3.1 tracks everyone at 1008 px (its own working size), and H3 Peo
 
 `lib/model.ts` then sets the Swap Plan's steps and the H3 Diffusion Model file, and replaces the DMAD LoRA node with the chosen LoRAs in a chain (or links the model straight through when there are none). Advanced mode does the same.
 
-`lib/comfy.ts` binds the uploaded video to `VHS_LoadVideo` and the photo to the `LoadImage` node, then submits with the SDK. `/api/jobs/[id]/events` streams `job.events()` to the page as server-sent events. Node ids are turned into node titles and clip numbers there: each clip after the first is a graph expansion whose node ids carry a prefix per clip (`58`, `64.0.0.58`, `64.0.0.Recurse.0.0.58`). The final MP4 is the output of the Final Video node (`MiniMaxH3ChainAssemble`, node `65`).
+`lib/comfy.ts` binds the uploaded video to `VHS_LoadVideo` and the photo to the `LoadImage` node, then submits with the SDK. `/api/jobs/[id]/events` reads the job's raw event stream (the SDK's low-level `getJobEvents`) and forwards it to the page as server-sent events. Node ids are turned into node titles and clip numbers there: each clip after the first is a graph expansion of the loop, whose node ids carry a prefix per clip (`64`, `66.0.0.64`, `66.0.0.Recurse.0.0.64` for Save Clip in clips 1–3). The final MP4 is the output of the Final Video node (`MiniMaxH3ChainAssemble`, node `67`).
 
 `workflows/mask.api.json` is the mask check: the same SAM, People Mask and grow settings over the whole video, with the mask tinted over the frames next to the mannequin, saved as an MP4.
 
@@ -165,4 +168,4 @@ Notes:
 
 ## License
 
-MIT, see [`LICENSE`](LICENSE). Model licences are separate.
+MIT, see [`LICENSE`](LICENSE). Model licences are separate. Fix faces depends on InsightFace `buffalo_l`, which is licensed for non-commercial research only, and on the Ultralytics YOLO weights from Bingsu/adetailer, which are AGPL-3.0.

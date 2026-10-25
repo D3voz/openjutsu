@@ -1,4 +1,4 @@
-// Fix colours: post-processing for a finished video. Image Detail Contrast (F:\AI\comfyui-image-detail-contrast) softens
+// Fix colours: post-processing for a finished video. Image Detail Contrast (comfyui-image-detail-contrast) softens
 // H3's crunchy fine detail, then Orion4D's DCTL Tone Mapper grades the frames: by default H3 soft, a lighter take on
 // zuanfilm's H3 preset that softens contrast and highlights without washing out the blacks. workflows/color.api.json is
 // hand-written; each request sets the values and drops a step that is turned off. Nodes are found by title.

@@ -1,7 +1,7 @@
 {
   "2": {
     "inputs": {
-      "image": "apt_vest_reference.png"
+      "image": ""
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -52,7 +52,7 @@
   },
   "5": {
     "inputs": {
-      "video": "spiderman_jeangrey_apt.mp4",
+      "video": "",
       "force_rate": 24,
       "custom_width": 0,
       "custom_height": 0,

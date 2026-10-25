@@ -1,7 +1,7 @@
 {
  "2": {
   "inputs": {
-   "image": "apt_vest_reference.png"
+   "image": ""
   },
   "class_type": "LoadImage",
   "_meta": {
@@ -46,7 +46,7 @@
  },
  "5": {
   "inputs": {
-   "image": "apt_kurta_reference.png"
+   "image": ""
   },
   "class_type": "LoadImage",
   "_meta": {
@@ -181,7 +181,7 @@
  },
  "14": {
   "inputs": {
-   "video": "apt_rose_16s.mkv",
+   "video": "",
    "force_rate": 24,
    "custom_width": 0,
    "custom_height": 0,
