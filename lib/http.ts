@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import type { AddressInfo } from "node:net";
 
 export class HttpError extends Error {
   status: number;
@@ -26,7 +27,7 @@ export function authorize(request: Request) {
       });
     }
   } else {
-    // Password-free use relies on the launcher's loopback binding. Reject other hostnames, including DNS rebinding.
+    // instrumentation.ts refuses to start password-free on a network address; this only stops DNS rebinding.
     const local = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
     const hosts = [new URL(request.url).host, request.headers.get("Host"), request.headers.get("X-Forwarded-Host")];
     if (hosts.some((host) => host !== null && !local.test(host))) {
@@ -34,6 +35,13 @@ export function authorize(request: Request) {
     }
   }
   return null;
+}
+
+export const PASSWORD_REQUIRED = "Set OPENJUTSU_PASSWORD before serving Openjutsu on a network address.";
+
+// Any peer can fake a localhost Host header, so password-free use needs every listening socket on loopback or a local pipe.
+export function loopbackOnly(addresses: (AddressInfo | string | null)[]) {
+  return addresses.length > 0 && addresses.every((address) => typeof address === "string" || /^(127\.|::1$|::ffff:127\.)/.test(address?.address ?? ""));
 }
 
 export function apiAccess(request: Request) {

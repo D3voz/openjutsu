@@ -147,8 +147,15 @@ Not tested yet. The app code does not change, only `.env.local`:
 
 2. Create a deployment from the released Build on the Developer Platform. The workflow has only been run on a 16 GB card with 64 GB of system RAM, so choose at least that.
 3. Set `COMFY_BASE_URL` to the deployment URL and `COMFY_API_KEY` to a key from the workspace that owns it. The key stays on the server; never put it in a `NEXT_PUBLIC_` variable.
-4. Before hosting or tunneling the app, set a strong `OPENJUTSU_PASSWORD` and use HTTPS. Open the page and sign in as `openjutsu` with that password; the same browser login protects uploads, job controls, progress and downloads. This is a single-owner app: everyone given the password shares access to its jobs. Never expose a password-free server, including through a reverse proxy that forwards a localhost Host header.
-5. Host the Next.js app anywhere that runs Node (`npm run build && npm start`). Streaming progress needs a host that keeps long responses open. Preserve the public Host and scheme when reverse proxying so same-origin API checks work. Local password-free use remains bound to `127.0.0.1` by the supplied launch commands.
+4. Before hosting or tunneling the app, set a strong `OPENJUTSU_PASSWORD` and use HTTPS. Without a password, Openjutsu refuses to start on any address but loopback. Open the page and sign in as `openjutsu` with that password; the same browser login protects uploads, job controls, progress and downloads. This is a single-owner app: everyone given the password shares access to its jobs. The start-up check cannot see a tunnel or reverse proxy on the same machine, so never point one at a password-free server.
+5. Host the Next.js app anywhere that runs Node. `npm start` listens on `127.0.0.1` only; to serve on a network address, build and start Next with the password set (Next uses `PORT` if the host sets it, otherwise 3000):
+
+   ```sh
+   npm run build
+   OPENJUTSU_PASSWORD='<strong password>' npx next start --hostname 0.0.0.0
+   ```
+
+   Streaming progress needs a host that keeps long responses open. Preserve the public Host and scheme when reverse proxying so same-origin API checks work.
 
 Notes:
 

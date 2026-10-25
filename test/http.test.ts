@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:net";
 import test from "node:test";
-import { apiAccess, authorize, HttpError, readFormData, validateJobId } from "../lib/http.ts";
+import { apiAccess, authorize, HttpError, loopbackOnly, PASSWORD_REQUIRED, readFormData, validateJobId } from "../lib/http.ts";
 import { getJob } from "../lib/comfy.ts";
+import { register } from "../instrumentation.ts";
 
 test("URL-shaped job IDs are rejected before the SDK can fetch", async (t) => {
   let requests = 0;
@@ -30,6 +32,39 @@ test("local API access stays password-free; foreign hosts and browser origins ar
   for (const headers of foreignHeaders) assert.equal(apiAccess(new Request("http://127.0.0.1:3000/api/jobs", { headers }))?.status, 403);
   assert.equal(authorize(new Request("https://example.com"))?.status, 403);
   assert.equal(authorize(new Request("http://localhost:3000", { headers: { "Sec-Fetch-Site": "cross-site" } })), null, "ordinary page navigation is allowed");
+});
+
+test("password-free serving starts only on loopback; a network bind needs a password", async (t) => {
+  const previous = { password: process.env.OPENJUTSU_PASSWORD, runtime: process.env.NEXT_RUNTIME };
+  delete process.env.OPENJUTSU_PASSWORD;
+  process.env.NEXT_RUNTIME = "nodejs";
+  const servers: Server[] = [];
+  t.after(() => {
+    for (const [key, value] of [["OPENJUTSU_PASSWORD", previous.password], ["NEXT_RUNTIME", previous.runtime]] as const) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    for (const server of servers) server.close();
+  });
+  const listen = (host: string) => new Promise<void>((resolve) => { const server = createServer(); servers.push(server); server.listen(0, host, resolve); });
+  const errors: unknown[] = [];
+  t.mock.method(console, "error", (message: unknown) => { errors.push(message); });
+  t.mock.method(process, "exit", (code?: number) => { throw new Error(`exit ${code}`); });
+
+  for (const address of ["127.0.0.1", "127.8.0.1", "::1", "::ffff:127.0.0.1"]) assert.equal(loopbackOnly([{ address, family: "", port: 3000 }]), true, address);
+  assert.equal(loopbackOnly(["/tmp/openjutsu.sock"]), true, "pipes are local");
+  for (const address of ["0.0.0.0", "::", "192.168.1.20", "::ffff:10.0.0.2"]) assert.equal(loopbackOnly([{ address, family: "", port: 3000 }]), false, address);
+  assert.equal(loopbackOnly([]), false, "no listening socket proves nothing");
+  assert.equal(loopbackOnly([null]), false);
+
+  await assert.rejects(register(), /exit 1/, "nothing listening yet is not proof of loopback");
+  await listen("127.0.0.1");
+  await register();
+  await listen("0.0.0.0");
+  await assert.rejects(register(), /exit 1/);
+  assert.deepEqual(errors, [PASSWORD_REQUIRED, PASSWORD_REQUIRED]);
+  process.env.OPENJUTSU_PASSWORD = "review-test-password";
+  await register();
+  assert.equal(errors.length, 2);
 });
 
 test("a configured password protects local and hosted access, including media and event requests", (t) => {
