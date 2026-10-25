@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Asset, Comfy, COMFY_CLOUD_BASE_URL, NotFound, resolveCredentials, type Job, type Workflow } from "@comfyorg/sdk";
 import { ComfyLow } from "@comfyorg/sdk/low";
-import { MASK_NODES, NODES, cropSource, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Resolution, type Section, type SimpleSettings } from "./simple.ts";
+import { MASK_NODES, NODES, cropSource, isLink, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Resolution, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
@@ -49,7 +49,26 @@ export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
-  return JSON.parse(await readFile(join(process.cwd(), "workflows", `${kind}.api.json`), "utf8"));
+  const graph: ApiGraph = JSON.parse(await readFile(join(process.cwd(), "workflows", `${kind}.api.json`), "utf8"));
+  silenceWhenSoundless(graph);
+  return graph;
+}
+
+// VHS fails as soon as anything reads the soundtrack of a video that has none, so every reader gets silence instead.
+function silenceWhenSoundless(graph: ApiGraph) {
+  for (const id of Object.keys(graph).filter((id) => graph[id].class_type === "VHS_LoadVideo")) {
+    const soundtrack = `${id}_soundtrack`;
+    let read = false;
+    for (const node of Object.values(graph)) {
+      for (const [name, value] of Object.entries(node.inputs)) {
+        if (isLink(value) && value[0] === id && value[1] === 2) {
+          node.inputs[name] = [soundtrack, 0];
+          read = true;
+        }
+      }
+    }
+    if (read) graph[soundtrack] = { class_type: "H3SoundtrackOrSilence", inputs: { audio: [id, 2], video_info: [id, 3] }, _meta: { title: "Soundtrack (silence if none)" } };
+  }
 }
 
 function jobErrorMessage(error: unknown) {
