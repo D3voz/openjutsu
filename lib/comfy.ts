@@ -7,7 +7,7 @@ import { ComfyLow } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, cropSource, isLink, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Resolution, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyModel, type ModelSettings } from "./model.ts";
-import { OBJECT_PICTURE, OBJECT_VIDEO, pruneObject, type ObjectSettings } from "./object.ts";
+import { OBJECT_PICTURE, OBJECT_VIDEO, pruneFit, pruneObject, type ObjectSettings, type PlacementKeyframe } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
 import { CONTROL_PICTURE, CONTROL_VIDEO, pruneControl, setControlSection, type ControlSettings } from "./control.ts";
@@ -45,7 +45,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "control", "face", "color", "people", "montage"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "fit", "control", "face", "color", "people", "montage"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -182,6 +182,16 @@ export async function submitObject(video: StoredFile, section: Section, picture:
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, OBJECT_VIDEO), "video", upload(comfy, video));
   if (picture && settings.mode !== "remove") workflow.setInput(nodeByTitle(graph, OBJECT_PICTURE), "image", upload(comfy, picture));
+  return submit(comfy, workflow);
+}
+
+export async function submitFit(video: StoredFile, section: Section, placement: PlacementKeyframe[], resolution: Resolution, action = "") {
+  const comfy = client();
+  const graph = pruneFit(await loadGraph("fit"), placement, action);
+  if (typeof resolution === "object") cropSource(graph, nodeByTitle(graph, OBJECT_VIDEO), resolution);
+  setSection(graph, nodeByTitle(graph, OBJECT_VIDEO), section);
+  const workflow = comfy.workflows.fromJson(graph);
+  workflow.setInput(nodeByTitle(graph, OBJECT_VIDEO), "video", upload(comfy, video));
   return submit(comfy, workflow);
 }
 

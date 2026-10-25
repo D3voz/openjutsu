@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { nodeByTitle } from "../lib/advanced.ts";
 import { applyModel, DEFAULT_MODEL } from "../lib/model.ts";
-import { OBJECT_PICTURE, OBJECT_VIDEO, parsePaint, parsePlacement, placementAt, pruneObject, type ObjectSettings } from "../lib/object.ts";
+import { OBJECT_PICTURE, OBJECT_VIDEO, parsePaint, parsePlacement, placementAt, pruneFit, pruneObject, type ObjectSettings } from "../lib/object.ts";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
 
 const graph: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/object.api.json", import.meta.url), "utf8"));
@@ -167,4 +167,46 @@ test("paint rejects malformed and oversized runs at the boundary", () => {
   for (const value of ["{", {}, [{ ...valid, frame: -1 }], [valid, valid], [{ ...valid, width: 257 }],
     [{ ...valid, runs: [63, 2] }], [{ ...valid, runs: [-1, 2] }], [{ ...valid, runs: [10, 5, 12, 2] }],
     [{ ...valid, runs: [10, 1.5] }], [{ ...valid, runs: [10] }], Array(65).fill(valid), " ".repeat(512 * 1024 + 1)]) assert.throws(() => parsePaint(value));
+});
+
+test("the fit check gets the placement and tracks people in the part", () => {
+  const fit: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/fit.api.json", import.meta.url), "utf8"));
+  const placement = [{ frame: 0, x: 0.1, y: 0.05, width: 0.2, height: 0.9 }];
+  const pruned = pruneFit(fit, placement);
+  assert.deepEqual(dangling(pruned), []);
+  assert.equal(node(pruned, "Check the fit").inputs.placement, JSON.stringify(placement));
+  assert.equal(node(pruned, "SAM: people").inputs.text, "person");
+  assert.equal(node(fit, "Check the fit").inputs.placement, "", "the source graph is not modified");
+  assert.throws(() => pruneFit(fit, []), /placement area/);
+});
+
+
+test("an in-sync add tracks the full section and slices the moving area per clip", () => {
+  const placement = [{ frame: 0, x: 0.12, y: 0.03, width: 0.21, height: 0.97 }];
+  for (const action of ["she dances in sync with the other dancer", "copy the same routine", "synchronized dancing"]) {
+    const pruned = pruneObject(graph, true, { ...settings("add"), placement, action });
+    assert.deepEqual(dangling(pruned), []);
+    assert.equal(node(pruned, "SAM: what to change").inputs.text, "person");
+    assert.deepEqual(node(pruned, "SAM 3.1 track it").inputs.images, [nodeByTitle(pruned, "SAM video (1008 px, SAM's own size)"), 0]);
+    assert.equal(pruned.object_moving_area.class_type, "H3AddMovingArea");
+    assert.equal(pruned.object_moving_area.inputs.placement, JSON.stringify(placement));
+    assert.equal(pruned.object_moving_area.inputs.start_frame, 0);
+    assert.equal(node(pruned, "Grow mask").inputs.expand, 0);
+    assert.equal(pruned.object_placement.class_type, "MiniMaxH3ContexLoopMaskSlice");
+    assert.deepEqual(pruned.object_placement.inputs.mask, ["object_moving_area", 0]);
+    assert.deepEqual(pruned.object_placement.inputs.state, [nodeByTitle(pruned, "Current Clip"), 0]);
+    assert.deepEqual(node(pruned, "Grow mask").inputs.mask, ["object_placement", 0]);
+    assert.deepEqual(node(pruned, "Reference Conditioning").inputs["ref_images.ref_image_0"], [nodeByTitle(pruned, OBJECT_PICTURE), 0]);
+    assert.equal(pruned.moving_area_run_name.inputs.string_b, "_moving_area");
+  }
+  const custom = pruneObject(graph, true, { ...settings("add"), placement, action: "dance in sync", resolution: { width: 640, height: 960 } });
+  assert.deepEqual(node(custom, "SAM video (1008 px, SAM's own size)").inputs.image, ["custom_size", 0]);
+});
+
+
+test("the fit preview selects the same moving area as synchronized generation", () => {
+  const fit: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/fit.api.json", import.meta.url), "utf8"));
+  const placement = [{ frame: 0, x: 0.12, y: 0.03, width: 0.21, height: 0.97 }];
+  assert.equal(node(pruneFit(fit, placement, "dance in sync"), "Check the fit").inputs.moving_area, true);
+  assert.equal(node(pruneFit(fit, placement, "steam rises"), "Check the fit").inputs.moving_area, false);
 });

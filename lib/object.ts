@@ -2,7 +2,7 @@
 // workflows/object.api.json is exported (workflows/build/oneclick_object_build.js) in change mode with a picture;
 // each request prunes it. Nodes are found by title.
 import { nodeByTitle } from "./advanced.ts";
-import { setMotionSize, setResolution, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
+import { setMotionSize, setResolution, suffixRunName, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
 
 export const EDIT_MODES = ["change", "remove", "background", "add"] as const;
 export type EditMode = (typeof EDIT_MODES)[number];
@@ -96,6 +96,8 @@ function describer(settings: ObjectSettings) {
   };
 }
 
+const copiesRoutine = (action: string) => /\b(?:in[ -]sync|same (?:dance )?routine|synchroni[sz](?:ed|e|ing))\b/i.test(action);
+
 export function pruneObject(source: ApiGraph, picture: boolean, settings: ObjectSettings): ApiGraph {
   const graph: ApiGraph = structuredClone(source);
   const id = (title: string) => nodeByTitle(graph, title);
@@ -165,14 +167,46 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     plan.change_to = addedObject(settings.changeTo);
     plan.keep_outline = false;
     plan.action = settings.action ?? "";
-    graph.object_placement = { class_type: "H3ObjectPlacementMask", inputs: {
-      images: [id("Source clip (frames + audio)"), 0], start_frame: [id("Clip start frame"), 1], placement,
-    }, _meta: { title: "Object placement area" } };
+    const moving = copiesRoutine(settings.action ?? "");
+    const drop = ["SAM frames for this clip", "Tracked area", "Tracked area, tight (for the grey shape)", "Turn it grey (shape and movement only)"];
+    if (moving) {
+      graph[id("SAM: what to change")].inputs.text = "person";
+      graph[id("SAM 3.1 track it")].inputs.images = [id("SAM video (1008 px, SAM's own size)"), 0];
+      graph.object_moving_area = { class_type: "H3AddMovingArea", inputs: {
+        images: [id("SAM video (1008 px, SAM's own size)"), 0], track_data: [id("SAM 3.1 track it"), 0], placement, start_frame: 0,
+      }, _meta: { title: "Moving edit area (follows the copied routine)" } };
+      graph.object_placement = { class_type: "MiniMaxH3ContexLoopMaskSlice", inputs: {
+        mask: ["object_moving_area", 0], state: [id("Current Clip"), 0], source_fps: 24,
+      }, _meta: { title: "Moving edit area for this clip" } };
+      suffixRunName(graph, "moving_area_run_name", "_moving_area", "Run name for the moving edit area");
+    } else {
+      graph.object_placement = { class_type: "H3ObjectPlacementMask", inputs: {
+        images: [id("Source clip (frames + audio)"), 0], start_frame: [id("Clip start frame"), 1], placement,
+      }, _meta: { title: "Object placement area" } };
+      drop.push("SAM 3.1", "SAM: what to change", "SAM video (1008 px, SAM's own size)", "SAM 3.1 track it");
+    }
     grow.mask = ["object_placement", 0];
-    grow.expand = { tight: 0, normal: 2, loose: 4 }[settings.margin];
-    for (const title of ["SAM 3.1", "SAM: what to change", "SAM video (1008 px, SAM's own size)", "SAM frames for this clip", "SAM 3.1 track it",
-      "Tracked area", "Tracked area, tight (for the grey shape)", "Turn it grey (shape and movement only)"]) delete graph[id(title)];
+    grow.expand = moving ? 0 : { tight: 0, normal: 2, loose: 4 }[settings.margin];
+    for (const title of drop) delete graph[id(title)];
   }
   setResolution(graph, id("Object Swap Plan (what to change)"), id(OBJECT_VIDEO), settings.resolution);
   return graph;
 }
+
+// Fit check (workflows/fit.api.json): before an add that copies someone's routine, shows where that routine leaves the box.
+export function pruneFit(source: ApiGraph, placement: PlacementKeyframe[], action = ""): ApiGraph {
+  const graph: ApiGraph = structuredClone(source);
+  const fit = graph[nodeByTitle(graph, "Check the fit")].inputs;
+  fit.placement = JSON.stringify(parsePlacement(placement));
+  fit.moving_area = copiesRoutine(action);
+  return graph;
+}
+
+// What the fit check found, in frames from the start of the part.
+export type FitSummary = {
+  frames: number;
+  moving?: boolean;
+  person: boolean; // someone to copy was found
+  outside: { start: number; end: number; sides: ("left" | "right" | "top" | "bottom")[] }[];
+  needed: { x: number; y: number; width: number; height: number } | null; // the space their whole routine takes, scaled into the box
+};

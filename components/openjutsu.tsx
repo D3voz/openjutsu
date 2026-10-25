@@ -8,7 +8,7 @@ import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
-import type { EditMode, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
+import type { EditMode, FitSummary, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
 import { CONTROL_MAX_SECONDS } from "../lib/control.ts";
 import { ObjectPlacement } from "./object-placement.tsx";
 import { CHUNK_SECONDS, FACE_STYLES, faceChunkCount, type FaceStyle } from "../lib/face.ts";
@@ -18,7 +18,7 @@ import { appearances, renderLabels, type Appearance, type Kept, type Label, type
 type Character = { file: File; url: string; role: string };
 type Mode = "simple" | "advanced" | "object" | "post";
 type Post = "face" | "color";
-type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "control" | "face" | "color" | "people" | "montage";
+type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "fit" | "control" | "face" | "color" | "people" | "montage";
 type TonePreset = { name: string; settings: Record<string, unknown> };
 // frames: the video, part and crop SAM saw
 type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number; frames: string };
@@ -33,7 +33,7 @@ const HISTORY_KEY = "openjutsu.history";
 const HISTORY_LENGTH = 20;
 
 const KIND_LABELS: Record<Kind, string> = {
-  simple: "Person swap", mask: "Mask check", advanced: "Advanced swap", advanced_maxq: "Advanced swap", object: "Object swap",
+  simple: "Person swap", mask: "Mask check", advanced: "Advanced swap", advanced_maxq: "Advanced swap", object: "Object swap", fit: "Fit check",
   control: "ControlNet", face: "Fix faces", color: "Fix colours", people: "Find people", montage: "Montage",
 };
 const STATUS_LABELS: Record<string, string> = { succeeded: "Done", failed: "Failed", canceled: "Canceled", expired: "Expired" };
@@ -481,7 +481,7 @@ export function Openjutsu() {
   }
 
   async function submit(kind: Kind, review?: Review) {
-    if (!video || (kind !== "mask" && kind !== "people" && !ready)) return;
+    if (!video || (kind === "fit" ? !placement.length : kind !== "mask" && kind !== "people" && !ready)) return;
     setSubmitting(true);
     setCheckingSetup(true);
     setSetup(null);
@@ -520,6 +520,11 @@ export function Openjutsu() {
       form.set("resolution", resolutionField);
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
+    }
+    if (kind === "fit") {
+      form.set("action", action);
+      form.set("placement", JSON.stringify(placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) }))));
+      form.set("resolution", resolutionField);
     }
     if (kind === "people") {
       for (const c of shown) form.append("role", c.role);
@@ -567,7 +572,7 @@ export function Openjutsu() {
       form.set("seed", String(seed));
       form.set("clip_seconds", String(clipSeconds));
     }
-    if (kind !== "mask" && kind !== "color" && kind !== "people") {
+    if (kind !== "mask" && kind !== "color" && kind !== "people" && kind !== "fit") {
       form.set("motion", String(motion));
       form.set("steps", String(steps));
       form.set("model", model);
@@ -721,7 +726,8 @@ export function Openjutsu() {
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
           before={video && same ? { url: video.url, start: whole ? 0 : part.start } : null}
-          onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={video && same && character && !submitting && mode === "simple" ? () => submit("simple") : null}
+          onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={!video || !same || submitting ? null : mode === "simple" && character ? () => submit("simple") : run.kind === "fit" && ready ? () => submit("object") : null}
+          onUseBox={video && same ? (box) => { setPlacement([{ frame: Math.round((whole ? 0 : part.start) * 24), ...box }]); reset(); } : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
           photos={shown.map((c) => c.url)}
           onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
@@ -1076,6 +1082,7 @@ export function Openjutsu() {
           <div className="go">
             <div className="row">
               {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
+              {mode === "object" && editMode === "add" && <button className="secondary" disabled={!video || !placement.length || submitting} onClick={() => submit("fit")}>Check fit</button>}
               {mode === "advanced" && montage ? (<>
                 <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>Find people</button>
                 <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}</button>
@@ -1122,17 +1129,18 @@ export function Openjutsu() {
   );
 }
 
-function RunView({ run, job, progress, preview, streamError, now, before, onCancel, onReset, onFix, onGenerate, margin, onMargin, onRecheck, photos, onMontage, frames, onRetry }: {
+function RunView({ run, job, progress, preview, streamError, now, before, onCancel, onReset, onFix, onGenerate, onUseBox, margin, onMargin, onRecheck, photos, onMontage, frames, onRetry }: {
   run: Run; job: PublicJob | null; progress: Progress | null; preview: string; streamError: string; now: number;
   before: { url: string; start: number } | null;
   onCancel: () => void; onReset: () => void; onFix: (post: Post) => void; onGenerate: (() => void) | null;
+  onUseBox: ((box: NonNullable<FitSummary["needed"]>) => void) | null;
   margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
   photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string; onRetry: (() => void) | null;
 }) {
   const status = job?.status ?? "queued";
   const clips = Math.max(run.clips, progress?.clip ?? 1);
   const people = run.kind === "people";
-  const mask = run.kind === "mask" || people;
+  const mask = run.kind === "mask" || run.kind === "fit" || people;
 
   if (people && status === "succeeded" && job?.data) {
     return (
@@ -1150,6 +1158,10 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
         onMargin={onMargin} onRecheck={onRecheck} onGenerate={onGenerate} onBack={onReset}
       />
     );
+  }
+
+  if (run.kind === "fit" && status === "succeeded" && job?.video) {
+    return <FitCheck url={job.video.url} data={job.data} onUseBox={onUseBox} onGenerate={onGenerate} onBack={onReset} />;
   }
 
   if (status === "succeeded" && job?.video) {
@@ -1195,7 +1207,7 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
   return (
     <section className="panel progress">
       <div className="row">
-        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : people ? "Finding people" : mask ? "Checking the mask" : color ? "Fixing the colours"
+        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : people ? "Finding people" : run.kind === "fit" ? "Checking the fit" : mask ? "Checking the mask" : color ? "Fixing the colours"
           : face ? (sampling ? `Chunk ${chunk} of up to ${run.clips}` : chunk ? "Pasting the face back" : "Tracking the face")
           : progress?.clip ? `Clip ${progress.clip} of ${clips > 1 || run.kind === "montage" ? "about " : ""}${clips}` : "Preparing"}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
@@ -1344,6 +1356,40 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
         <button className="secondary" onClick={onBack}>Back to settings</button>
       </div>
       {!onGenerate && <p className="hint">To generate, load the video this check used and add a character photo in the settings.</p>}
+    </section>
+  );
+}
+
+// Where the routine of the person the add copies leaves the box, before generating.
+function FitCheck({ url, data, onUseBox, onGenerate, onBack }: {
+  url: string; data: string | null; onUseBox: ((box: NonNullable<FitSummary["needed"]>) => void) | null; onGenerate: (() => void) | null; onBack: () => void;
+}) {
+  const [summary, setSummary] = useState<FitSummary | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (data) fetch(data).then((response) => response.json()).then(setSummary, () => setError("Could not read what the fit check found."));
+  }, [data]);
+
+  const misses = summary?.outside ?? [];
+  return (
+    <section className="panel mask-check">
+      <h2>Check the fit</h2>
+      <video src={url} controls loop autoPlay muted playsInline />
+      <p className="hint legend">
+        <i className="swatch green" /> predicted motion inside the edit area <i className="swatch red" /> outside it: possible clipping. Yellow: edit boundary.
+      </p>
+      {error && <p className="error">{error}</p>}
+      {summary && <p>{!summary.person ? "No one to copy was found in this part, so there is nothing to check the box against."
+        : misses.length ? `${summary.moving ? "Their predicted motion leaves the moving edit area" : "Their routine leaves the box"} at ${misses.map((o) => `${timecode(o.start / 24)}–${timecode(o.end / 24)} (${o.sides.join(", ")})`).join(", ")}.`
+        : summary.moving ? "Their predicted motion stays inside the moving edit area." : "Their whole routine fits inside your box."}</p>}
+      <p className="hint">{summary?.moving ? "The yellow boundary follows the copied routine and is the same moving edit area used for generation. Your box sets placement and scale. H3 can move differently, so this remains a guide." : "The check moves the person nearest your box into it, as tall as the box and standing on its bottom edge. H3 follows a routine loosely, so it is a guide, not a promise. A box much wider than one person can also bring back a copy of the dancer."}</p>
+      <div className="row">
+        {summary?.needed && misses.length > 0 && <button className="primary" disabled={!onUseBox} onClick={() => onUseBox?.(summary.needed!)}>Use a box that fits</button>}
+        <button className={misses.length ? "secondary" : "primary"} disabled={!onGenerate} onClick={() => onGenerate?.()}>Generate</button>
+        <button className="secondary" onClick={onBack}>Back to settings</button>
+      </div>
+      {!onGenerate && <p className="hint">To generate, load the video and part this check used and fill in the Add settings.</p>}
     </section>
   );
 }

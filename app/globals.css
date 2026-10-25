@@ -162,6 +162,8 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
 .swatch.cyan { background: rgb(0, 200, 255); }
 .swatch.orange { background: rgb(255, 140, 0); }
+.swatch.green { background: rgb(26, 204, 51); }
+.swatch.red { background: rgb(255, 26, 26); }
 
 .file-name { min-width: 0; width: min(100%, 420px); }
 .steps-input { width: 6rem; }

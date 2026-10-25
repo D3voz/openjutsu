@@ -1,6 +1,6 @@
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { NextResponse } from "next/server";
-import { listModels, submitAdvanced, submitColor, submitControl, submitFace, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
+import { listModels, submitAdvanced, submitColor, submitControl, submitFace, submitFit, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
 import type { ControlSettings } from "../../../lib/control.ts";
 import { TRACKS_FILE, type Label } from "../../../lib/montage.ts";
 import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type ToneMode, type ToneSettings, type ToneValue } from "../../../lib/color.ts";
@@ -235,6 +235,11 @@ async function submitForm(form: FormData) {
     if (mode === "mask") {
       const { hatFix, margin, target } = parseMask(form);
       submit = () => submitMask(video, section, hatFix, margin, target);
+    } else if (mode === "fit") {
+      const placement = parsePlacement(form.get("placement"));
+      const resolution = parseResolution(form);
+      const action = String(form.get("action") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
+      submit = () => submitFit(video, section, placement, resolution, action);
     } else if (mode === "people") {
       const { roles, resolution } = parsePeople(form);
       submit = () => submitPeople(video, section, roles, resolution);
