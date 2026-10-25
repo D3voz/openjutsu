@@ -1,7 +1,7 @@
 // Advanced motion transfer: 1-4 characters, SAM tracks labelled by role, only the labelled people regenerated.
 // workflows/advanced.api.json (one pass) and advanced_maxq.api.json (one pass per person, 2 characters) are exported
 // with every picture, the hat fix and No lip-sync enabled; each request prunes what it does not use. Nodes are found by title, as
-// the builder (ComfyUI user/default/oneclick_advanced_build.js) names them.
+// the builder (workflows/build/oneclick_advanced_build.js) names them.
 import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
 
 export const MAX_CHARACTERS = 4;

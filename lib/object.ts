@@ -1,5 +1,5 @@
 // Object swap: change, remove or re-set the things SAM tracks, keeping the rest of the shot.
-// workflows/object.api.json is exported (ComfyUI user/default/oneclick_object_build.js) in change mode with a picture;
+// workflows/object.api.json is exported (workflows/build/oneclick_object_build.js) in change mode with a picture;
 // each request prunes it. Nodes are found by title.
 import { nodeByTitle } from "./advanced.ts";
 import { setMotionSize, setResolution, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";

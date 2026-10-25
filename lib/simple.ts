@@ -117,7 +117,7 @@ function maskSettings(source: ApiGraph, hatFix: boolean, margin: Margin, target:
   return graph;
 }
 
-// The No lip-sync nodes, titled the same in every swap export (ComfyUI user/default/oneclick_*_build.js).
+// The No lip-sync nodes, titled the same in every swap export (workflows/build/oneclick_*_build.js).
 const MUTE = /^Mute the (clip|reference) audio H3 hears$/;
 const NO_LIP_SYNC = /^(No lip-sync in the prompt|SAM: faces|SAM 3\.1 track faces|Faces \(shown on the mannequins?\))$/;
 

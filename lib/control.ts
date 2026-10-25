@@ -1,6 +1,6 @@
 // ControlNet picture swap: the whole frame, the main person and the setting, comes from the picture. A depth video of only
 // the main person (SAM 3.1 + Depth Anything V2) holds the framing, camera and poses through the H3 Fun ControlNet Union 2.0.
-// workflows/control.api.json is exported (ComfyUI user/default/oneclick_control_build.js) with No lip-sync on; nodes are found by title.
+// workflows/control.api.json is exported (workflows/build/oneclick_control_build.js) with No lip-sync on; nodes are found by title.
 import { nodeByTitle } from "./advanced.ts";
 import { dropNoLipSync, setResolution, setSection, type ApiGraph, type Resolution, type Section } from "./simple.ts";
 
