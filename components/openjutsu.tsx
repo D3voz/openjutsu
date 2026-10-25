@@ -1078,10 +1078,10 @@ export function Openjutsu() {
             <small>{colorFix
               ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
               : clips && ready
-              ? mode === "advanced" && montage ? `${clips} clip${clips > 1 ? "s" : ""} or more at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.`
+              ? mode === "advanced" && montage ? `${clips > 1 ? "About " : ""}${clips} clip${clips > 1 ? "s" : ""} or more at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.`
               : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face`
               : controlNet ? `One clip at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}${(part.length || video!.duration) > CONTROL_MAX_SECONDS ? `: only the first ${CONTROL_MAX_SECONDS} s of this part are used` : ""}`
-              : `${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
+              : `${clips > 1 ? "About " : ""}${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
               : mode === "object" && editMode === "add" && video && !placement.length ? "Draw where the new object should go."
               : `Add a video and ${mode === "object" ? editMode === "add" ? "describe the object to add" : "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
           </div>
@@ -1187,7 +1187,7 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
       <div className="row">
         <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : people ? "Finding people" : mask ? "Checking the mask" : color ? "Fixing the colours"
           : face ? (sampling ? `Chunk ${chunk} of up to ${run.clips}` : chunk ? "Pasting the face back" : "Tracking the face")
-          : progress?.clip ? `Clip ${progress.clip} of ${clips}` : "Preparing"}</h2>
+          : progress?.clip ? `Clip ${progress.clip} of ${clips > 1 || run.kind === "montage" ? "about " : ""}${clips}` : "Preparing"}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
       </div>
       <div className="bar"><div style={{ width: `${Math.round(fraction * 100)}%` }} /></div>
@@ -1315,13 +1315,13 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
           <button className="secondary" onClick={toggle}>{playing ? "Pause" : "Play"}</button>
           <button className="secondary" onClick={() => seek(frame + 1)} aria-label="Next frame">▶</button>
         </div>
-        <small>Frame {frame + 1} / {frames} · {(frame / 24).toFixed(2)} s · clip {starts.filter((start) => start <= frame).length} of {starts.length}</small>
+        <small>Frame {frame + 1} / {frames} · {(frame / 24).toFixed(2)} s · clip {starts.filter((start) => start <= frame).length} of {starts.length > 1 ? "about " : ""}{starts.length}</small>
       </div>
       <p className="hint legend">
         <i className="swatch cyan" /> regenerated <i className="swatch orange" /> tracked person · right: the grey mannequin H3 copies the motion from.
         Anything outside the cyan area stays as it is, so the new character should fit inside it.
       </p>
-      <p className="hint">The check tracks the whole video at once and the render tracks each clip, so they can differ slightly.</p>
+      <p className="hint">The check tracks the whole video at once and the render tracks each clip, so they can differ slightly. Clip numbers here are an estimate: the render also ends clips on hard cuts.</p>
       <div className="setting">
         <span>Mask margin <small>{margin === checked ? `Showing ${checked}.` : `Showing ${checked}; check again to see ${margin}.`} Tight keeps more background, loose gives a bigger character more room.</small></span>
         <MarginPicker value={margin} onChange={onMargin} />

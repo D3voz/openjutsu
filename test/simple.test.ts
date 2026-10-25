@@ -132,3 +132,10 @@ test("the mask check drops the hat nodes without hat fix", () => {
 test("clip starts follow the Swap Plan's 39-frame overlap", () => {
   assert.deepEqual(clipStarts(339 / 24, 6), [0, 102, 204]);
 });
+
+test("clips match clip_plan for a video without cuts: each is the longest that fits", () => {
+  assert.equal(clipCount(107 / 24, 3), 3);
+  // the last clip repeats only five frames: the clip before it had just 17 new frames
+  assert.deepEqual(clipStarts(107 / 24, 3), [0, 17, 68]);
+  assert.deepEqual(clipStarts(16, 6), [0, 102, 204, 306]);
+});
