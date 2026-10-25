@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:net";
 import test from "node:test";
-import { apiAccess, authorize, HttpError, loopbackOnly, PASSWORD_REQUIRED, readFormData, validateJobId } from "../lib/http.ts";
+import { apiAccess, authorize, HttpError, loopbackOnly, PASSWORD_REQUIRED, PASSWORD_TOO_SHORT, readFormData, validateJobId } from "../lib/http.ts";
 import { getJob } from "../lib/comfy.ts";
 import { register } from "../instrumentation.ts";
 
@@ -65,6 +65,12 @@ test("password-free serving starts only on loopback; a network bind needs a pass
   process.env.OPENJUTSU_PASSWORD = "review-test-password";
   await register();
   assert.equal(errors.length, 2);
+  process.env.OPENJUTSU_PASSWORD = "elevenchars";
+  await assert.rejects(register(), /exit 1/, "a short password is refused even on loopback");
+  assert.equal(errors.at(-1), PASSWORD_TOO_SHORT);
+  process.env.OPENJUTSU_PASSWORD = "twelve-chars";
+  await register();
+  assert.equal(errors.length, 3);
 });
 
 test("a configured password protects local and hosted access, including media and event requests", (t) => {
@@ -84,6 +90,46 @@ test("a configured password protects local and hosted access, including media an
   assert.equal(apiAccess(new Request("http://localhost:3000/api/jobs", { headers: { Authorization: authorization, Host: "openjutsu.example", Origin: "https://openjutsu.example:3000", "X-Forwarded-Proto": "https" } }))?.status, 403);
   assert.match(authorize(new Request("http://localhost:3000"))!.headers.get("WWW-Authenticate")!, /^Basic /);
   assert.equal(apiAccess(new Request("https://openjutsu.example/api/jobs", { headers: { Authorization: authorization, Origin: "https://attacker.example" } }))?.status, 403);
+});
+
+test("failed sign-ins back off per client and across forged clients; the right password from a fresh client is never slowed", (t) => {
+  const previous = process.env.OPENJUTSU_PASSWORD;
+  process.env.OPENJUTSU_PASSWORD = "review-test-password";
+  t.after(() => { if (previous === undefined) delete process.env.OPENJUTSU_PASSWORD; else process.env.OPENJUTSU_PASSWORD = previous; });
+  // Start hours after the failures in earlier tests so they are forgotten.
+  let now = performance.now() + 2 * 60 * 60_000;
+  t.mock.method(performance, "now", () => now);
+  const signIn = (password: string | null, client = "203.0.113.7") => {
+    const headers: Record<string, string> = { "X-Forwarded-For": `198.51.100.1, ${client}` };
+    if (password !== null) headers.Authorization = `Basic ${Buffer.from(`openjutsu:${password}`).toString("base64")}`;
+    return authorize(new Request("https://openjutsu.example/api/models", { headers }));
+  };
+  const status = (password: string | null, client?: string) => signIn(password, client)?.status ?? 200;
+
+  for (let i = 0; i < 6; i++) assert.equal(status("wrong"), 401, `failure ${i + 1} is answered`);
+  const refused = signIn("wrong")!;
+  assert.equal(refused.status, 429);
+  assert.equal(refused.headers.get("Retry-After"), "1");
+  assert.equal(status("review-test-password"), 429, "a client in backoff cannot test even the right password");
+  assert.equal(status(null), 401, "asking for the sign-in prompt is never refused");
+  assert.equal(status("review-test-password", "203.0.113.8"), 200, "other clients sign in at once, keyed by the entry nearest the proxy");
+  now += 1000;
+  assert.equal(status("wrong"), 401);
+  now += 1000;
+  assert.equal(status("wrong"), 429, "the delay doubles");
+  now += 1000;
+  assert.equal(status("review-test-password"), 200);
+  assert.equal(status("wrong"), 401, "success clears the client's failures");
+  for (let i = 0; i < 6; i++) status("wrong");
+  now += 60 * 60_000 + 1;
+  assert.equal(status("wrong"), 401, "failures are forgotten after an hour");
+
+  now += 60 * 60_000 + 1;
+  for (let i = 0; i < 21; i++) assert.equal(status("wrong", `forged-${i}`), 401);
+  assert.equal(status("wrong", "forged-new"), 429, "forged client addresses share one allowance");
+  assert.equal(status("review-test-password", "203.0.113.9"), 429);
+  now += 1000;
+  assert.equal(status("review-test-password", "203.0.113.9"), 200);
 });
 
 test("bounded multipart parsing preserves video bytes, duplicate pictures and roles", async () => {
