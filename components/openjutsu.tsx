@@ -63,9 +63,12 @@ const EDITS: { id: EditTab; label: string; target: string; what: string; to: str
   { id: "controlnet", label: "ControlNet", target: "person", what: "Who is replaced", to: "", toHint: "" },
 ];
 
+const isRun = (run: Run | null) => typeof run?.id === "string" && Object.hasOwn(KIND_LABELS, run.kind);
+
 function readRun(): Run | null {
   try {
-    return JSON.parse(localStorage.getItem(RUN_KEY) ?? "null");
+    const run = JSON.parse(localStorage.getItem(RUN_KEY) ?? "null");
+    return isRun(run) ? run : null;
   } catch {
     return null;
   }
@@ -81,7 +84,7 @@ function writeRun(run: Run | null) {
 function readHistory(): PastRun[] {
   try {
     const list = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
-    return Array.isArray(list) ? list.filter((p) => typeof p?.id === "string" && Object.hasOwn(KIND_LABELS, p.kind)) : [];
+    return Array.isArray(list) ? list.filter(isRun) : [];
   } catch {
     return [];
   }
@@ -360,6 +363,10 @@ export function Openjutsu() {
         setStreamError(event.message);
       }
     };
+    // An answer other than an event stream (401, 403, 500) ends the stream for good; a dropped connection is retried.
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) setStreamError("Lost the connection to this job. Reload the page to try again, or go Back: the job keeps running in ComfyUI.");
+    };
     return () => source.close();
   }, [run]);
 
@@ -442,6 +449,8 @@ export function Openjutsu() {
   useEffect(() => setPlacement([]), [video?.url, resolutionField]);
   // A montage render masks with the tracks Find people saved, so it must use the frames Find people saw.
   const frames = video ? `${video.file.name}:${video.file.size} ${whole ? "whole" : `${part.start.toFixed(2)}+${part.length.toFixed(2)}`} ${typeof resolution === "object" ? resolutionField : ""}` : "";
+  // A job reopened from Recent jobs may have used another video, part or size than the one loaded now.
+  const same = run?.frames === frames;
 
   function chooseSize(side: keyof Size, value: number) {
     const snapped = Math.min(CUSTOM_SIZE.max, Math.max(CUSTOM_SIZE.min, Math.round(value / CUSTOM_SIZE.step) * CUSTOM_SIZE.step || customSize[side]));
@@ -707,12 +716,12 @@ export function Openjutsu() {
       {run ? (
         <RunView
           run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
-          before={video ? { url: video.url, start: whole ? 0 : part.start } : null}
-          onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={video && character && !submitting && mode === "simple" ? () => submit("simple") : null}
+          before={video && same ? { url: video.url, start: whole ? 0 : part.start } : null}
+          onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={video && same && character && !submitting && mode === "simple" ? () => submit("simple") : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
           photos={shown.map((c) => c.url)}
           onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
-          onRetry={video && ready && !submitting && run.kind === generateKind && generateKind !== "montage" ? () => { reset(); submit(generateKind); } : null}
+          onRetry={video && same && ready && !submitting && run.kind === generateKind && generateKind !== "montage" ? () => { reset(); submit(generateKind); } : null}
         />
       ) : (
         <>
@@ -1192,7 +1201,10 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
         <CopyDetails lines={[jobLine(run, job), `Stream error: ${streamError}`]} />
       </div>}
       <p className="hint">{people ? "SAM tracks everyone over the whole video, then Qwen matches each person to a role." : mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
-      <button className="secondary" onClick={onCancel}>Cancel</button>
+      <div className="row">
+        <button className="secondary" onClick={onCancel}>Cancel</button>
+        <button className="secondary" onClick={onReset}>Back</button>
+      </div>
     </section>
   );
 }
@@ -1321,7 +1333,7 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
         </button>
         <button className="secondary" onClick={onBack}>Back to settings</button>
       </div>
-      {!onGenerate && <p className="hint">Add a character photo in the settings to generate.</p>}
+      {!onGenerate && <p className="hint">To generate, load the video this check used and add a character photo in the settings.</p>}
     </section>
   );
 }
