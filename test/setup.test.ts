@@ -42,6 +42,18 @@ test("missing nodes are grouped by their source pack, including both published D
   assert.equal(result.packs.find((p) => p.nodes.includes("ImageDetailContrast"))?.url, "https://github.com/D3voz/comfyui-image-detail-contrast");
 });
 
+test("missing pack nodes also point to an old ComfyUI or a pack that failed to load", () => {
+  const graph = load("simple");
+  const registry = registryFor(graph);
+  delete registry.H3OneClickSwapPlan;
+  assert.match(inspectSetup(graph, registry).error!, /ComfyUI may be too old.*Update ComfyUI.*import errors/);
+  const core = registryFor(graph);
+  delete core.SAM3_VideoTrack;
+  const result = inspectSetup(graph, core);
+  assert.equal(result.packs[0].url, "https://github.com/Comfy-Org/ComfyUI");
+  assert.equal(result.error, undefined, "core nodes already say update required");
+});
+
 test("all custom node types in the exports have a pack mapping", () => {
   const custom = /^(H3|MiniMaxH3(?!ReferenceToVideo|SigmaShift|FunControlNetApply)|VHS_|GrowMaskWithBlur$|ImageAndMaskPreview$|ImageDetailContrast$|Orion4D_|SAMLoader$)/;
   const graphs = JOB_KINDS.map(load);

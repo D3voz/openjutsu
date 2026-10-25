@@ -41,6 +41,7 @@ const PACKS = [
   { name: "comfyui_controlnet_aux", url: "https://github.com/Fannovel16/comfyui_controlnet_aux", nodes: ["DepthAnythingV2Preprocessor"] },
 ];
 const CORE = { name: "ComfyUI (update required)", url: "https://github.com/Comfy-Org/ComfyUI", nodes: [] as string[] };
+const PACK_HINT = "Already installed? ComfyUI may be too old for the pack, or the pack failed to load. Update ComfyUI, restart it and check its console for import errors.";
 const MODEL_INPUTS: Record<string, Record<string, string>> = {
   UNETLoader: { unet_name: "diffusion_models" },
   LoraLoaderModelOnly: { lora_name: "loras" },
@@ -90,7 +91,9 @@ export function inspectSetup(graph: ApiGraph, registry: NodeRegistry): SetupResu
         && !models.some((m) => m.name === name && m.folder === folder)) models.push({ name, folder });
     }
   }
-  return { ok: packs.length === 0 && models.length === 0, packs, models };
+  const result: SetupResult = { ok: packs.length === 0 && models.length === 0, packs, models };
+  if (packs.some((p) => p.url !== CORE.url)) result.error = PACK_HINT;
+  return result;
 }
 
 export async function checkSetup(graph: ApiGraph): Promise<SetupResult> {
