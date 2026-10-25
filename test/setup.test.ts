@@ -172,3 +172,19 @@ test("setup route returns missing packs for the chosen workflow without submitti
   assert.equal(result.ok, false);
   assert.equal(result.packs[0].name, "comfyui-h3-oneclick-swap");
 });
+
+
+test("painted Change checks the paint and loop-mask nodes only when needed", () => {
+  const selection: SetupRequest = { kind: "object", picture: false, model: DEFAULT_MODEL, settings: {
+    mode: "change", target: "eyes", changeTo: "black sunglasses", biggestOnly: false, keepOutline: false,
+    resolution: "576p", motion: 512, margin: "loose", seed: 0, clipSeconds: 6,
+    paint: [{ frame: 0, width: 8, height: 8, runs: [18, 4] }],
+  } };
+  const graph = setupGraph(load("object"), selection);
+  const registry = registryFor(graph);
+  delete registry.H3PaintedEditArea;
+  delete registry.MiniMaxH3ContexLoopMaskSlice;
+  const missing = inspectSetup(graph, registry);
+  assert.ok(missing.packs.some((p) => p.url === "https://github.com/D3voz/comfyui-h3-oneclick-swap" && p.nodes.includes("H3PaintedEditArea")));
+  assert.ok(missing.packs.some((p) => p.nodes.includes("MiniMaxH3ContexLoopMaskSlice")));
+});

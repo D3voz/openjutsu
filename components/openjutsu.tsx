@@ -8,7 +8,7 @@ import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
-import type { EditMode, PlacementKeyframe } from "../lib/object.ts";
+import type { EditMode, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
 import { CONTROL_MAX_SECONDS } from "../lib/control.ts";
 import { ObjectPlacement } from "./object-placement.tsx";
 import { CHUNK_SECONDS, FACE_STYLES, faceChunkCount, type FaceStyle } from "../lib/face.ts";
@@ -256,6 +256,7 @@ export function Openjutsu() {
   const [biggestOnly, setBiggestOnly] = useState(false);
   const [keepOutline, setKeepOutline] = useState(true);
   const [placement, setPlacement] = useState<PlacementKeyframe[]>([]);
+  const [paint, setPaint] = useState<PaintKeyframe[]>([]);
   const [post, setPost] = useState<Post>("face");
   const [detailOn, setDetailOn] = useState(true);
   const [detail, setDetail] = useState(DETAIL.default);
@@ -446,7 +447,8 @@ export function Openjutsu() {
 
   const canvas = typeof resolution === "object" ? [resolution.width, resolution.height] : video?.width ? canvasSize(video.width, video.height, resolution) : null;
   const resolutionField = typeof resolution === "object" ? `${resolution.width}x${resolution.height}` : resolution;
-  useEffect(() => setPlacement([]), [video?.url, resolutionField]);
+  useEffect(() => { setPlacement([]); setPaint([]); }, [video?.url, resolutionField, whole, part.start, part.length]);
+  useEffect(() => setPaint([]), [editTarget]);
   // A montage render masks with the tracks Find people saved, so it must use the frames Find people saw.
   const frames = video ? `${video.file.name}:${video.file.size} ${whole ? "whole" : `${part.start.toFixed(2)}+${part.length.toFixed(2)}`} ${typeof resolution === "object" ? resolutionField : ""}` : "";
   // A job reopened from Recent jobs may have used another video, part or size than the one loaded now.
@@ -556,6 +558,7 @@ export function Openjutsu() {
       if (look && editMode !== "remove") form.set("picture", look.file);
       form.set("biggest_only", String(biggestOnly));
       form.set("keep_outline", String(keepOutline));
+      if (editMode === "change" && paint.length) form.set("paint", JSON.stringify(paint.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) }))));
       if (editMode === "add") {
         form.set("placement", JSON.stringify(placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) }))));
         form.set("action", action);
@@ -580,6 +583,7 @@ export function Openjutsu() {
     else if (kind === "advanced" || kind === "advanced_maxq") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, model: selectedModel };
     else if (kind === "montage") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, review: review ?? null, model: selectedModel };
     else if (kind === "object") selection = { kind, settings: { ...shared, mode: editMode as EditMode, target: String(form.get("target")), changeTo, biggestOnly, keepOutline,
+      ...(editMode === "change" ? { paint: paint.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}),
       ...(editMode === "add" ? { placement: placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}) }, picture: !!look && editMode !== "remove", model: selectedModel };
     else if (kind === "control") selection = { kind, settings: { target: String(form.get("target")), resolution, noLipSync, seed }, model: selectedModel };
     else if (kind === "face") selection = { kind, settings: { style: faceStyle, seed, chunkSeconds }, model: selectedModel };
@@ -856,6 +860,12 @@ export function Openjutsu() {
                     {fromPicture && "The person in the video becomes the person in the picture: face, hair and outfit. The background, motion, camera and sound stay."}
                     {controlNet && `The person and the place both come from the picture. A depth map of the person in the video keeps their framing, camera and motion; the sound stays. Everyone else in the video is replaced by the picture's setting. Runs as one clip of up to ${CONTROL_MAX_SECONDS} s.`}
                   </p>
+                  {editMode === "change" && video && canvas && <details>
+                    <summary>Paint edit area (optional)</summary>
+                    <ObjectPlacement key={`${video.url}:${resolutionField}:paint`} src={video.url}
+                      start={whole ? 0 : part.start} end={whole ? video.duration : part.start + part.length}
+                      width={canvas[0]} height={canvas[1]} mode="paint" points={paint} onChange={setPaint} />
+                  </details>}
                   {editMode === "add" && video && canvas && <ObjectPlacement key={`${video.url}:${resolutionField}`} src={video.url}
                     start={whole ? 0 : part.start} end={whole ? video.duration : part.start + part.length} width={canvas[0]} height={canvas[1]} points={placement} onChange={setPlacement} />}
                 </div>

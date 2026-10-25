@@ -90,6 +90,7 @@ Advanced motion transfer has a **Montage** tab for edited clips where different 
 
 ## Tips
 
+- **Paint an edit area:** under Object swap -> Change, expand **Paint edit area** and brush extra space around the tracked part. Use the eraser, brush size and keyframe controls to refine it. During generation the painting follows SAM's bounding box in position and scale; it switches off when the track is missing. The edit includes both SAM's mask and the paint, followed by the chosen mask margin. With no paint, Change is unchanged. Update `comfyui-h3-oneclick-swap` and restart ComfyUI for `H3PaintedEditArea`.
 - **Add an object:** under Object swap, choose **Add**. Describe the object (for example `a chocolate cake on a plate`) and where it goes (`on the table`). Draw a box covering the whole object and its shadow in the placement editor. An optional reference picture controls its appearance. One box stays fixed on screen; for camera movement, scrub forward and draw more boxes to animate the placement. This uses manual placement keyframes, not SAM tracking. Changing the source video, selected section or resolution clears the boxes. Update `comfyui-h3-oneclick-swap` and restart ComfyUI to load the new `H3ObjectPlacementMask` node.
 
 - Only the main person is regenerated; anyone else in the video stays as they are.

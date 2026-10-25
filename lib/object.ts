@@ -22,6 +22,31 @@ export function parsePlacement(value: unknown): PlacementKeyframe[] {
   return points.map(({ frame, x, y, width, height }) => ({ frame, x, y, width, height })).sort((a, b) => a.frame - b.frame);
 }
 
+export type PaintKeyframe = { frame: number; width: number; height: number; runs: number[] };
+
+export function parsePaint(value: unknown): PaintKeyframe[] {
+  if (value === null || value === undefined || value === "") return [];
+  if (typeof value === "string" && value.length > 512 * 1024) throw new Error("Paint keyframes must total no more than 512 KB.");
+  const points = typeof value === "string" ? JSON.parse(value) : value;
+  if (!Array.isArray(points) || points.length > 64) throw new Error("Use at most 64 painted keyframes.");
+  const frames = new Set<number>();
+  const result = points.map((p): PaintKeyframe => {
+    if (!p || !Number.isInteger(p.frame) || p.frame < 0 || frames.has(p.frame)
+      || ![p.width, p.height].every((n) => Number.isInteger(n) && n >= 1 && n <= 256)
+      || !Array.isArray(p.runs) || p.runs.length % 2 || p.runs.length > p.width * p.height * 2) throw new Error("Invalid painted keyframe.");
+    let end = 0;
+    for (let i = 0; i < p.runs.length; i += 2) {
+      const [start, length] = p.runs.slice(i, i + 2);
+      if (!Number.isInteger(start) || !Number.isInteger(length) || start < end || length <= 0 || start + length > p.width * p.height) throw new Error("Paint runs must be ordered and inside the mask.");
+      end = start + length;
+    }
+    frames.add(p.frame);
+    return { frame: p.frame, width: p.width, height: p.height, runs: [...p.runs] };
+  });
+  if (JSON.stringify(result).length > 512 * 1024) throw new Error("Paint keyframes must total no more than 512 KB.");
+  return result.sort((a, b) => a.frame - b.frame);
+}
+
 export function placementAt(points: PlacementKeyframe[], frame: number) {
   if (!points.length) return null;
   const next = points.findIndex((p) => p.frame > frame);
@@ -44,6 +69,7 @@ export type ObjectSettings = {
   seed: number;
   clipSeconds: number;
   placement?: PlacementKeyframe[];
+  paint?: PaintKeyframe[];
   action?: string; // add: what the new thing does over the clip; empty for a still object
 };
 
@@ -111,6 +137,28 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     seed: settings.seed,
     clip_seconds: settings.clipSeconds,
   });
+  if (settings.mode === "change" && settings.paint?.length) {
+    const paint = JSON.stringify(parsePaint(settings.paint));
+    plan.paint = paint;
+    // Track the full section once: later clips still need the bbox at each painted frame.
+    graph[id("SAM 3.1 track it")].inputs.images = [id("SAM video (1008 px, SAM's own size)"), 0];
+    graph[id("Tracked area")].inputs.hold_frames = 0;
+    graph.object_paint = { class_type: "H3PaintedEditArea", inputs: {
+      tracked: [id("Tracked area"), 0], paint, start_frame: 0,
+      width: [id("Object Swap Plan (what to change)"), 1], height: [id("Object Swap Plan (what to change)"), 2],
+    }, _meta: { title: "Painted edit area (follows tracked mask)" } };
+    const slice = (mask: [string, number]) => ({ class_type: "MiniMaxH3ContexLoopMaskSlice", inputs: {
+      mask, state: [id("Current Clip"), 0], source_fps: 24,
+    } });
+    graph.object_paint_clip = slice(["object_paint", 0]);
+    grow.mask = ["object_paint_clip", 0];
+    // The grey reference also consumes this clip's interval, rather than the full SAM timeline.
+    for (const [input, output] of [["mask", 0], ["size", 1]] as const) {
+      const key = `object_tight_${input}`;
+      graph[key] = slice([id("Tracked area, tight (for the grey shape)"), output]);
+      grey[input] = [key, 0];
+    }
+  }
   if (settings.mode === "add") {
     const placement = JSON.stringify(parsePlacement(settings.placement));
     plan.placement = placement;

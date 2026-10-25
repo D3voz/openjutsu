@@ -7,7 +7,7 @@ import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
-import { EDIT_MODES, OBJECT_MARGINS, parsePlacement, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
+import { EDIT_MODES, OBJECT_MARGINS, parsePaint, parsePlacement, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, type Margin, type MotionSize, type Preset, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
 export const runtime = "nodejs";
@@ -84,6 +84,7 @@ function parseObject(form: FormData) {
   const settings: ObjectSettings = {
     mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", keepOutline: form.get("keep_outline") === "true",
     margin: margin as ObjectMargin, ...parseRun(form),
+    ...(mode === "change" ? { paint: parsePaint(form.get("paint")) } : {}),
     ...(mode === "add" ? { placement: parsePlacement(form.get("placement")), action: String(form.get("action") ?? "").replace(/\s+/g, " ").trim().slice(0, 300) } : {}),
   };
   return { picture, settings };

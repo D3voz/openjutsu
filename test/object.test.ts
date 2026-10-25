@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { nodeByTitle } from "../lib/advanced.ts";
 import { applyModel, DEFAULT_MODEL } from "../lib/model.ts";
-import { OBJECT_PICTURE, OBJECT_VIDEO, parsePlacement, placementAt, pruneObject, type ObjectSettings } from "../lib/object.ts";
+import { OBJECT_PICTURE, OBJECT_VIDEO, parsePaint, parsePlacement, placementAt, pruneObject, type ObjectSettings } from "../lib/object.ts";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
 
 const graph: ApiGraph = JSON.parse(readFileSync(new URL("../workflows/object.api.json", import.meta.url), "utf8"));
@@ -133,4 +133,38 @@ test("placement validation rejects missing or invalid geometry and sorts valid k
   const middle = placementAt(sorted, 24)!;
   assert.ok(Math.abs(middle.x - 0.4) < 1e-6 && Math.abs(middle.y - 0.3) < 1e-6);
   assert.deepEqual(placementAt(sorted, 96), { x: 0.6, y: 0.2, width: 0.2, height: 0.2 });
+});
+
+
+test("paint follows the full SAM timeline and is sliced per clip before growing", () => {
+  const paint = [{ frame: 0, width: 8, height: 8, runs: [18, 4, 26, 4] }];
+  for (const keepOutline of [false, true]) {
+    const pruned = pruneObject(graph, false, { ...settings("change"), keepOutline, paint });
+    assert.deepEqual(dangling(pruned), []);
+    assert.equal(pruned.object_paint.class_type, "H3PaintedEditArea");
+    assert.equal(pruned.object_paint.inputs.paint, JSON.stringify(paint));
+    assert.equal(node(pruned, "Object Swap Plan (what to change)").inputs.paint, JSON.stringify(paint));
+    assert.deepEqual(node(pruned, "SAM 3.1 track it").inputs.images, [nodeByTitle(pruned, "SAM video (1008 px, SAM's own size)"), 0]);
+    assert.equal(node(pruned, "Tracked area").inputs.hold_frames, 0);
+    assert.deepEqual(node(pruned, "Grow mask").inputs.mask, ["object_paint_clip", 0]);
+    assert.equal(pruned.object_paint_clip.class_type, "MiniMaxH3ContexLoopMaskSlice");
+    assert.equal(node(pruned, "Grow mask").inputs.expand, 40);
+    assert.deepEqual(node(pruned, "Turn it grey (shape and movement only)").inputs.mask, ["object_tight_mask", 0]);
+  }
+});
+
+test("empty paint leaves Change identical, and other modes ignore paint", () => {
+  const paint = [{ frame: 0, width: 8, height: 8, runs: [18, 4] }];
+  assert.deepEqual(pruneObject(graph, false, { ...settings("change"), paint: [] }), pruneObject(graph, false, settings("change")));
+  for (const mode of ["remove", "background"] as const) assert.deepEqual(pruneObject(graph, false, { ...settings(mode), paint }), pruneObject(graph, false, settings(mode)));
+});
+
+test("paint rejects malformed and oversized runs at the boundary", () => {
+  assert.deepEqual(parsePaint(null), []);
+  assert.deepEqual(parsePaint("[]"), []);
+  const valid = { frame: 24, width: 8, height: 8, runs: [10, 4, 20, 4] };
+  assert.deepEqual(parsePaint(JSON.stringify([valid, { ...valid, frame: 0 }])).map((p) => p.frame), [0, 24]);
+  for (const value of ["{", {}, [{ ...valid, frame: -1 }], [valid, valid], [{ ...valid, width: 257 }],
+    [{ ...valid, runs: [63, 2] }], [{ ...valid, runs: [-1, 2] }], [{ ...valid, runs: [10, 5, 12, 2] }],
+    [{ ...valid, runs: [10, 1.5] }], [{ ...valid, runs: [10] }], Array(65).fill(valid), " ".repeat(512 * 1024 + 1)]) assert.throws(() => parsePaint(value));
 });
