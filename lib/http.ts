@@ -1,5 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { openAsBlob } from "node:fs";
+import { mkdir, mkdtemp, open as openFile, rm, type FileHandle } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 export class HttpError extends Error {
   status: number;
@@ -116,23 +120,141 @@ export function apiAccess(request: Request) {
 
 // Total multipart body, including reference pictures and boundaries; the proxy separately caps each file at 500 MB.
 export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+const MAX_FIELD_BYTES = 1024 * 1024;
+const MAX_HEADER_BYTES = 16 * 1024;
+const MAX_FILES = 16;
+const HEAD_BYTES = 12;
 
-export async function readFormData(request: Request, limit = MAX_UPLOAD_BYTES) {
+// Leading bytes of what ComfyUI's loaders read: MP4/MOV, MKV/WebM and AVI; PNG, JPEG and WebP.
+export const VIDEO_SIGNATURE = /^(?:[^]{4}ftyp|\x1a\x45\xdf\xa3|RIFF[^]{4}AVI )/;
+export const IMAGE_SIGNATURE = /^(?:\x89PNG\r\n\x1a\n|\xff\xd8\xff|RIFF[^]{4}WEBP)/;
+export type FileCheck = { signature: RegExp; error: string };
+
+// A file part already on disk, so it can be uploaded without reading it into memory.
+export class StoredFile extends File {
+  readonly path: string;
+
+  constructor(blob: Blob, name: string, type: string, path: string) {
+    super([blob], name, { type });
+    this.path = path;
+  }
+}
+
+// ComfyUI keeps the upload under its temp file's name, and Windows reserves device names even with an extension.
+export function uploadName(name: string) {
+  const safe = name.replace(/[^\w.\- ]+/g, "_").slice(-100).replace(/[. ]+$/, "") || "upload";
+  return /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(safe) ? `_${safe}` : safe;
+}
+
+type Part = { name: string; text?: Buffer[]; file?: { name: string; type: string; path: string; handle: FileHandle; head: Buffer; size: number; check?: FileCheck } };
+
+// Streams a multipart body to temp files, checking each file's first bytes as they arrive. Call dispose() when done.
+export async function readFormData(request: Request, checks: Record<string, FileCheck> = {}, limit = MAX_UPLOAD_BYTES) {
   const tooLarge = () => new HttpError(413, `Uploads must total no more than ${Math.round(limit / 1024 / 1024)} MB.`);
   if (Number(request.headers.get("Content-Length")) > limit) throw tooLarge();
+  const boundary = request.headers.get("Content-Type")?.match(/^multipart\/form-data\s*;.*?\bboundary=(?:"([^"]+)"|([^\s;]+))/i);
+  if (!boundary || !request.body) throw new HttpError(400, "Send the upload as multipart/form-data.");
+  const malformed = () => new HttpError(400, "The upload is not a valid multipart form.");
+  const delimiter = Buffer.from(`\r\n--${boundary[1] ?? boundary[2]}`);
+  const dir = await mkdtemp(join(tmpdir(), "openjutsu-"));
+  const dispose = () => rm(dir, { recursive: true, force: true });
+  const reader = request.body.getReader();
+  const form = new FormData();
+  let part: Part | null = null;
   let size = 0;
-  const body = request.body?.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      size += chunk.byteLength;
-      if (size > limit) throw tooLarge();
-      controller.enqueue(chunk);
-    },
-  }), { signal: request.signal });
+  let fieldBytes = 0;
+  let files = 0;
+
+  const open = async (headers: string): Promise<Part> => {
+    const disposition = headers.match(/^content-disposition:[ \t]*form-data(.*)$/im)?.[1] ?? "";
+    const param = (key: string) => disposition.match(new RegExp(`;\\s*${key}=(?:"([^"]*)"|([^;\\s]+))`, "i"))?.slice(1).find((value) => value !== undefined);
+    const name = param("name") ?? "";
+    const filename = param("filename");
+    if (filename === undefined) return { name, text: [] };
+    if (++files > MAX_FILES) throw new HttpError(400, `Send no more than ${MAX_FILES} files.`);
+    const path = join(dir, String(files), uploadName(filename));
+    await mkdir(dirname(path));
+    const type = headers.match(/^content-type:[ \t]*([^\r\n]*)$/im)?.[1].trim() ?? "";
+    return { name, file: { name: filename, type, path, handle: await openFile(path, "wx"), head: Buffer.alloc(0), size: 0, check: Object.hasOwn(checks, name) ? checks[name] : undefined } };
+  };
+  const sniff = (file: NonNullable<Part["file"]>) => {
+    if (file.check && !file.check.signature.test(file.head.toString("latin1"))) throw new HttpError(400, file.check.error);
+    file.check = undefined;
+  };
+  const write = async ({ text, file }: Part, chunk: Buffer) => {
+    if (text) {
+      fieldBytes += chunk.length;
+      if (fieldBytes > MAX_FIELD_BYTES) throw new HttpError(413, `Form fields must total no more than ${MAX_FIELD_BYTES / 1024 / 1024} MB.`);
+      text.push(Buffer.from(chunk));
+    } else if (file && chunk.length > 0) {
+      if (file.head.length < HEAD_BYTES) file.head = Buffer.concat([file.head, chunk.subarray(0, HEAD_BYTES - file.head.length)]);
+      if (file.head.length === HEAD_BYTES) sniff(file);
+      file.size += chunk.length;
+      await file.handle.write(chunk);
+    }
+  };
+  const finish = async ({ name, text, file }: Part) => {
+    if (text) form.append(name, Buffer.concat(text).toString("utf8"));
+    if (!file) return;
+    await file.handle.close();
+    if (file.size > 0) sniff(file);
+    form.append(name, new StoredFile(await openAsBlob(file.path), file.name, file.type, file.path));
+  };
+
   try {
-    return await new Response(body, { headers: request.headers }).formData();
+    // The leading line break lets the first boundary match the delimiter that ends every part.
+    let buffer = Buffer.from("\r\n");
+    let state: "preamble" | "next" | "headers" | "body" | "end" = "preamble";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) throw tooLarge();
+      buffer = Buffer.concat([buffer, value]);
+      for (let more = true; more;) {
+        if (state === "preamble" || state === "body") {
+          const at = buffer.indexOf(delimiter);
+          // Without a delimiter, keep only the tail that could still start one.
+          const end = at === -1 ? Math.max(0, buffer.length - delimiter.length + 1) : at;
+          if (part) await write(part, buffer.subarray(0, end));
+          buffer = buffer.subarray(at === -1 ? end : at + delimiter.length);
+          if (at === -1) more = false;
+          else {
+            if (part) await finish(part);
+            part = null;
+            state = "next";
+          }
+        } else if (state === "next") {
+          const mark = buffer.toString("latin1", 0, 2);
+          if (mark.length < 2) more = false;
+          else if (mark === "--") state = "end";
+          else if (mark !== "\r\n") throw malformed();
+          else {
+            buffer = buffer.subarray(2);
+            state = "headers";
+          }
+        } else if (state === "headers") {
+          const at = buffer.indexOf("\r\n\r\n");
+          if (at === -1) {
+            if (buffer.length > MAX_HEADER_BYTES) throw malformed();
+            more = false;
+          } else {
+            part = await open(buffer.toString("utf8", 0, at));
+            buffer = buffer.subarray(at + 4);
+            state = "body";
+          }
+        } else {
+          buffer = Buffer.alloc(0);
+          more = false;
+        }
+      }
+    }
+    if (state !== "end") throw malformed();
+    return { form, dispose };
   } catch (error) {
-    // Multipart parsers may wrap the stream error in a TypeError.
-    if (size > limit) throw tooLarge();
+    await reader.cancel().catch(() => {});
+    await part?.file?.handle.close().catch(() => {});
+    await dispose();
     throw error;
   }
 }

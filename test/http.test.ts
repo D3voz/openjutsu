@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:net";
 import test from "node:test";
-import { apiAccess, authorize, HttpError, loopbackOnly, PASSWORD_REQUIRED, PASSWORD_TOO_SHORT, readFormData, validateJobId } from "../lib/http.ts";
+import { existsSync } from "node:fs";
+import { apiAccess, authorize, HttpError, IMAGE_SIGNATURE, loopbackOnly, PASSWORD_REQUIRED, PASSWORD_TOO_SHORT, readFormData, StoredFile, uploadName, validateJobId, VIDEO_SIGNATURE } from "../lib/http.ts";
 import { getJob } from "../lib/comfy.ts";
 import { register } from "../instrumentation.ts";
 
@@ -139,17 +140,18 @@ test("bounded multipart parsing preserves video bytes, duplicate pictures and ro
     form.append("picture", new File([name], `${name}.png`, { type: "image/png" }));
     form.append("role", name);
   }
-  const parsed = await readFormData(new Request("http://localhost/api/jobs", { method: "POST", body: form }), 4096);
+  const { form: parsed, dispose } = await readFormData(new Request("http://localhost/api/jobs", { method: "POST", body: form }), {}, 4096);
   assert.deepEqual(parsed.getAll("role"), ["one", "two"]);
   assert.deepEqual(parsed.getAll("picture").map((file) => (file as File).name), ["one.png", "two.png"]);
   assert.deepEqual(new Uint8Array(await (parsed.get("video") as File).arrayBuffer()), new Uint8Array([0, 1, 255]));
+  await dispose();
 });
 
 test("declared oversize bodies are rejected without reading them", async () => {
   let read = false;
   const body = new ReadableStream({ pull() { read = true; } }, { highWaterMark: 0 });
   const init = { method: "POST", body, duplex: "half", headers: { "Content-Length": "2048" } };
-  await assert.rejects(readFormData(new Request("http://localhost/api/jobs", init), 1024), (e: unknown) => e instanceof HttpError && e.status === 413);
+  await assert.rejects(readFormData(new Request("http://localhost/api/jobs", init), {}, 1024), (e: unknown) => e instanceof HttpError && e.status === 413);
   assert.equal(read, false);
 });
 
@@ -164,9 +166,107 @@ test("chunked uploads cannot bypass the limit with a missing or false Content-Le
     const headers = new Headers({ "Content-Type": "multipart/form-data; boundary=test" });
     if (length !== null) headers.set("Content-Length", length);
     const init = { method: "POST", body, duplex: "half", headers };
-    await assert.rejects(readFormData(new Request("http://localhost/api/jobs", init), 1024), (e: unknown) => e instanceof HttpError && e.status === 413);
+    await assert.rejects(readFormData(new Request("http://localhost/api/jobs", init), {}, 1024), (e: unknown) => e instanceof HttpError && e.status === 413);
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(canceled, true);
     assert.equal(pulls, 3);
   }
+});
+
+async function multipart(form: FormData) {
+  const response = new Response(form);
+  return { body: new Uint8Array(await response.arrayBuffer()), type: response.headers.get("Content-Type")! };
+}
+
+function chunked(body: Uint8Array, type: string, size: number) {
+  let offset = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= body.length) return controller.close();
+      controller.enqueue(body.slice(offset, offset += size));
+    },
+  });
+  return new Request("http://localhost/api/jobs", { method: "POST", body: stream, duplex: "half", headers: { "Content-Type": type } } as RequestInit);
+}
+
+test("multipart parts split at any byte come back whole, with files on disk until disposed", async () => {
+  const video = new Uint8Array(3000).map((_, i) => i % 251);
+  video.set([13, 10, 45, 45], 1000);
+  const form = new FormData();
+  form.set("mode", "simple");
+  form.set("video", new File([video], "my clip?.mp4", { type: "video/mp4" }));
+  form.set("role", "the dancer — white polo");
+  form.append("picture", new File(["a"], "same.png", { type: "image/png" }));
+  form.append("picture", new File(["b"], "same.png", { type: "image/png" }));
+  const { body, type } = await multipart(form);
+  for (const size of [1, 2, 7, 64, 1000, body.length]) {
+    const { form: parsed, dispose } = await readFormData(chunked(body, type, size));
+    assert.equal(parsed.get("mode"), "simple");
+    assert.equal(parsed.get("role"), "the dancer — white polo");
+    const file = parsed.get("video") as StoredFile;
+    assert.ok(file instanceof StoredFile);
+    assert.equal(file.name, "my clip?.mp4");
+    assert.equal(file.type, "video/mp4");
+    assert.match(file.path, /my clip_\.mp4$/);
+    assert.deepEqual(new Uint8Array(await file.arrayBuffer()), video);
+    const pictures = parsed.getAll("picture") as StoredFile[];
+    assert.deepEqual(await Promise.all(pictures.map((picture) => picture.text())), ["a", "b"]);
+    assert.notEqual(pictures[0].path, pictures[1].path);
+    await dispose();
+    assert.equal(existsSync(file.path), false);
+  }
+});
+
+test("truncated or malformed multipart bodies are refused and leave no temp files", async () => {
+  const form = new FormData();
+  form.set("video", new File(["0123456789abcdef"], "clip.mp4"));
+  const { body, type } = await multipart(form);
+  const refuse = (bytes: Uint8Array, contentType = type) => assert.rejects(readFormData(chunked(bytes, contentType, 5)), (e: unknown) => e instanceof HttpError && e.status === 400);
+  await refuse(body.slice(0, body.length - 10));
+  await refuse(body.slice(0, 60));
+  await refuse(body, "application/x-www-form-urlencoded");
+  await refuse(new TextEncoder().encode(`--${type.split("boundary=")[1]}\r\n${"x".repeat(20000)}`));
+});
+
+test("file checks read the first bytes as they arrive and stop the upload there", async () => {
+  const checks = { video: { signature: VIDEO_SIGNATURE, error: "Not a video." }, picture: { signature: IMAGE_SIGNATURE, error: "Not a picture." } };
+  const form = new FormData();
+  form.set("video", new File(["#!/bin/sh", "x".repeat(100_000)], "clip.mp4", { type: "video/mp4" }));
+  const { body, type } = await multipart(form);
+  let read = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.enqueue(body.slice(read, read += 1000));
+      if (read >= body.length) controller.close();
+    },
+  }, { highWaterMark: 0 });
+  const request = new Request("http://localhost/api/jobs", { method: "POST", body: stream, duplex: "half", headers: { "Content-Type": type } } as RequestInit);
+  await assert.rejects(readFormData(request, checks), (e: unknown) => e instanceof HttpError && e.status === 400 && e.message === "Not a video.");
+  assert.ok(read <= 1000);
+
+  const short = new FormData();
+  short.set("picture", new File([new Uint8Array([0xff, 0xd8, 0xff])], "tiny.jpg", { type: "image/jpeg" }));
+  short.set("video", new File([], "none.mp4"));
+  const { form: parsed, dispose } = await readFormData(new Request("http://localhost/api/jobs", { method: "POST", body: short }), checks);
+  assert.equal((parsed.get("picture") as File).size, 3);
+  await dispose();
+});
+
+test("signatures accept the containers ComfyUI reads and nothing else", () => {
+  const bytes = (...parts: (string | number[])[]) => Buffer.concat(parts.map((part) => Buffer.from(part as string, typeof part === "string" ? "latin1" : undefined))).toString("latin1");
+  for (const head of [bytes([0, 0, 0, 0x20], "ftypisom"), bytes([0, 0, 0, 0x14], "ftypqt  "), bytes([0x1a, 0x45, 0xdf, 0xa3, 0x9f]), bytes("RIFF", [1, 2, 3, 4], "AVI LIST")]) assert.ok(VIDEO_SIGNATURE.test(head), head);
+  for (const head of [bytes("RIFF", [1, 2, 3, 4], "WAVE"), bytes("ftypisom...."), bytes("<html>"), bytes([0x89], "PNG\r\n\x1a\n")]) assert.ok(!VIDEO_SIGNATURE.test(head), head);
+  for (const head of [bytes([0x89], "PNG\r\n\x1a\n"), bytes([0xff, 0xd8, 0xff, 0xe0]), bytes("RIFF", [1, 2, 3, 4], "WEBPVP8 ")]) assert.ok(IMAGE_SIGNATURE.test(head), head);
+  for (const head of [bytes("GIF89a"), bytes("<svg>"), bytes("RIFF", [1, 2, 3, 4], "AVI "), bytes([0xff, 0xd8])]) assert.ok(!IMAGE_SIGNATURE.test(head), head);
+});
+
+test("upload names are safe as file names everywhere", () => {
+  assert.equal(uploadName("../../etc/passwd"), ".._.._etc_passwd");
+  assert.equal(uploadName("C:\\Users\\me\\clip.mp4"), "C_Users_me_clip.mp4");
+  assert.equal(uploadName("CON.mp4"), "_CON.mp4");
+  assert.equal(uploadName("lpt1"), "_lpt1");
+  assert.equal(uploadName("console.mp4"), "console.mp4");
+  assert.equal(uploadName("..."), "upload");
+  assert.equal(uploadName("clip.mp4. "), "clip.mp4");
+  assert.equal(uploadName(""), "upload");
 });

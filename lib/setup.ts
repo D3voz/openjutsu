@@ -1,4 +1,5 @@
 import { pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
+import { comfyUi } from "./comfy.ts";
 import { pruneColor, type ColorSettings } from "./color.ts";
 import { pruneControl, type ControlSettings } from "./control.ts";
 import { pruneFace, type FaceSettings } from "./face.ts";
@@ -98,10 +99,7 @@ export function inspectSetup(graph: ApiGraph, registry: NodeRegistry): SetupResu
 
 export async function checkSetup(graph: ApiGraph): Promise<SetupResult> {
   try {
-    const url = process.env.COMFYUI_URL || "http://127.0.0.1:8188";
-    const response = await fetch(`${url.replace(/\/+$/, "")}/object_info`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error("Node list unavailable");
-    const registry = await response.json();
+    const registry = await comfyUi("/object_info", 8000);
     if (!registry || typeof registry !== "object" || Array.isArray(registry)) throw new Error("Invalid node list");
     return inspectSetup(graph, registry);
   } catch {

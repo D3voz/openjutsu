@@ -3,6 +3,9 @@ import { getOutput } from "../../../../../../lib/comfy.ts";
 
 export const runtime = "nodejs";
 
+// SVG is left out: it can carry script.
+const SERVED_TYPES = /^(video\/[\w.+-]+|image\/(png|jpeg|webp|gif)|application\/json)$/;
+
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; outputId: string }> }) {
   const denied = apiAccess(request);
   if (denied) return denied;
@@ -11,8 +14,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { name, response } = await getOutput(id, outputId, request.headers.get("Range"));
     if (!response.ok || !response.body) return Response.json({ error: "The output is not ready." }, { status: 502 });
 
-    const headers = new Headers({ "Cache-Control": "private, max-age=300" });
-    for (const header of ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"]) {
+    const type = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() ?? "";
+    if (!SERVED_TYPES.test(type)) {
+      await response.body.cancel();
+      return Response.json({ error: "Openjutsu only serves video, image and JSON outputs." }, { status: 502 });
+    }
+
+    const headers = new Headers({ "Cache-Control": "private, max-age=300", "Content-Type": type, "X-Content-Type-Options": "nosniff" });
+    for (const header of ["Content-Length", "Content-Range", "Accept-Ranges"]) {
       const value = response.headers.get(header);
       if (value) headers.set(header, value);
     }

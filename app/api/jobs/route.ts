@@ -1,4 +1,4 @@
-import { apiAccess, HttpError, readFormData } from "../../../lib/http.ts";
+import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { NextResponse } from "next/server";
 import { listModels, submitAdvanced, submitColor, submitControl, submitFace, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
 import type { ControlSettings } from "../../../lib/control.ts";
@@ -12,9 +12,14 @@ import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, M
 
 export const runtime = "nodejs";
 
+const FILE_CHECKS = {
+  video: { signature: VIDEO_SIGNATURE, error: "The source must be an MP4, MOV, MKV, WebM or AVI video." },
+  picture: { signature: IMAGE_SIGNATURE, error: "Photos must be PNG, JPEG or WebP images." },
+};
+
 function parseVideo(form: FormData) {
   const video = form.get("video");
-  if (!(video instanceof File) || video.size === 0) throw new Error("Drop a source video.");
+  if (!(video instanceof StoredFile) || video.size === 0) throw new Error("Drop a source video.");
   if (!video.type.startsWith("video/") && !/\.(mp4|mov|mkv|webm|avi)$/i.test(video.name)) throw new Error("The source must be a video file.");
   return video;
 }
@@ -36,7 +41,7 @@ function parseMask(form: FormData) {
 }
 
 function parsePicture(picture: FormDataEntryValue | null) {
-  if (!(picture instanceof File) || picture.size === 0) throw new Error("Add a character photo.");
+  if (!(picture instanceof StoredFile) || picture.size === 0) throw new Error("Add a character photo.");
   if (!picture.type.startsWith("image/")) throw new Error("The character photo must be an image.");
   return picture;
 }
@@ -74,7 +79,7 @@ function parseObject(form: FormData) {
   if (!target) throw new Error(mode === "add" ? "Say where the object goes, for example on the table." : mode === "background" ? "Say what stays, for example person." : "Say what to change, for example hair.");
   const changeTo = String(form.get("change_to") ?? "").replace(/\s+/g, " ").trim().slice(0, 300);
   const entry = form.get("picture");
-  const picture = entry instanceof File && entry.size > 0 && mode !== "remove" ? parsePicture(entry) : null;
+  const picture = entry instanceof StoredFile && entry.size > 0 && mode !== "remove" ? parsePicture(entry) : null;
   if (mode !== "remove" && !changeTo && !picture) throw new Error(mode === "add" ? "Describe the object to add, or add a picture." : "Say what it becomes, or add a picture.");
   const settings: ObjectSettings = {
     mode: mode as EditMode, target, changeTo, biggestOnly: form.get("biggest_only") === "true", keepOutline: form.get("keep_outline") === "true",
@@ -84,16 +89,16 @@ function parseObject(form: FormData) {
   return { picture, settings };
 }
 
-function parseModel(form: FormData, available: { models: string[]; loras: string[] } | null): ModelSettings {
+function parseModel(form: FormData, available: { models: string[]; loras: string[] }): ModelSettings {
   const steps = Number(form.get("steps"));
   if (!Number.isInteger(steps) || steps < STEPS.min || steps > STEPS.max) throw new Error(`Steps must be a whole number from ${STEPS.min} to ${STEPS.max}.`);
   const model = String(form.get("model") ?? "").trim();
-  if (!model || (available && !available.models.includes(model))) throw new Error("Choose a base model ComfyUI has.");
+  if (!model || !available.models.includes(model)) throw new Error("Choose a base model ComfyUI has.");
   const names = form.getAll("lora").map((name) => String(name).trim());
   const strengths = form.getAll("lora_strength").map(Number);
   if (names.length > MAX_LORAS || strengths.length !== names.length) throw new Error(`Use at most ${MAX_LORAS} LoRAs, each with a strength.`);
   const loras = names.map((name, i) => {
-    if (!name || (available && !available.loras.includes(name))) throw new Error("Choose LoRAs ComfyUI has.");
+    if (!name || !available.loras.includes(name)) throw new Error("Choose LoRAs ComfyUI has.");
     if (!(strengths[i] >= STRENGTH.min && strengths[i] <= STRENGTH.max)) throw new Error(`LoRA strength must be ${STRENGTH.min} to ${STRENGTH.max}.`);
     return { name, strength: strengths[i] };
   });
@@ -186,24 +191,43 @@ function parseMontage(form: FormData) {
   return { pictures, settings, review: { tracks: String(tracks), labels: parseLabels(form.get("labels"), pictures.length) } };
 }
 
-let submitting = false;
+// Uploads stream to temp files, so the cap bounds disk use rather than memory.
+const MAX_UPLOADS = 3;
+let uploads = 0;
 
 export async function POST(request: Request) {
   const denied = apiAccess(request);
   if (denied) return denied;
-  if (submitting) return NextResponse.json({ error: "Another upload is in progress. Try again shortly." }, { status: 429, headers: { "Retry-After": "5" } });
-  submitting = true;
+  if (uploads >= MAX_UPLOADS) return NextResponse.json({ error: "Another upload is in progress. Try again shortly." }, { status: 429, headers: { "Retry-After": "5" } });
+  uploads++;
   try {
     return await submitJob(request);
   } finally {
-    submitting = false;
+    uploads--;
   }
 }
 
+function invalid(error: unknown) {
+  return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: error instanceof HttpError ? error.status : 400 });
+}
+
 async function submitJob(request: Request) {
+  let upload: Awaited<ReturnType<typeof readFormData>>;
+  try {
+    upload = await readFormData(request, FILE_CHECKS);
+  } catch (error) {
+    return invalid(error);
+  }
+  try {
+    return await submitForm(upload.form);
+  } finally {
+    await upload.dispose();
+  }
+}
+
+async function submitForm(form: FormData) {
   let submit: () => ReturnType<typeof submitSimple>;
   try {
-    const form = await readFormData(request);
     const mode = form.get("mode");
     const video = parseVideo(form);
     const section = parseSection(form);
@@ -244,7 +268,7 @@ async function submitJob(request: Request) {
       throw new Error("Unknown mode.");
     }
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid request." }, { status: error instanceof HttpError ? error.status : 400 });
+    return invalid(error);
   }
 
   try {
