@@ -52,7 +52,7 @@ const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
   mouth: { label: "Follow the mouth", hint: "The face follows the video's expressions and mouth movements; a little less like the photo." },
 };
 
-// "From picture" is the Simple person swap with the picture as the character; "ControlNet" takes the person and the setting from it.
+// "From picture" recreates the whole scene with a grey motion reference.
 type EditTab = EditMode | "picture" | "controlnet";
 const EDITS: { id: EditTab; label: string; target: string; what: string; to: string; toHint: string }[] = [
   { id: "change", label: "Change", target: "hair, top", what: "What to change", to: "short bright pink hair and a black leather jacket", toHint: "What it becomes" },
@@ -500,6 +500,7 @@ export function Openjutsu() {
     if (kind === "simple" && fromPicture && look) {
       form.set("picture", look.file);
       form.set("role", "");
+      form.set("scene_from_picture", "true");
     } else if (kind === "simple" && character) {
       form.set("picture", character.file);
       form.set("role", character.role);
@@ -584,7 +585,7 @@ export function Openjutsu() {
     const shared = { resolution, motion, hatFix, noLipSync, margin, seed, clipSeconds };
     const selectedModel = { model, loras, steps };
     let selection: SetupRequest;
-    if (kind === "simple") selection = { kind, settings: { ...shared, role: fromPicture ? "" : character?.role ?? "", target: String(form.get("target")) }, model: selectedModel };
+    if (kind === "simple") selection = { kind, settings: { ...shared, sceneFromPicture: fromPicture, role: fromPicture ? "" : character?.role ?? "", target: String(form.get("target")) }, model: selectedModel };
     else if (kind === "advanced" || kind === "advanced_maxq") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, model: selectedModel };
     else if (kind === "montage") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, review: review ?? null, model: selectedModel };
     else if (kind === "object") selection = { kind, settings: { ...shared, mode: editMode as EditMode, target: String(form.get("target")), changeTo, biggestOnly, keepOutline,
@@ -863,7 +864,7 @@ export function Openjutsu() {
                     {editMode === "add" && "A new object is generated inside your placement area while the scene continues. Keep the supporting surface visible and describe where the object rests."}
                     {editMode === "remove" && "What SAM tracks is erased and filled with what is around it. The camera, people and sound stay."}
                     {editMode === "background" && "Everything except what SAM tracks becomes the new place; the camera movement stays."}
-                    {fromPicture && "The person in the video becomes the person in the picture: face, hair and outfit. The background, motion, camera and sound stay."}
+                    {fromPicture && "The person, background and lighting come from the picture. The video guides the motion and timing; its soundtrack stays. For relighting, upload an edited frame from the selected video section."}
                     {controlNet && `The person and the place both come from the picture. A depth map of the person in the video keeps their framing, camera and motion; the sound stays. Everyone else in the video is replaced by the picture's setting. Runs as one clip of up to ${CONTROL_MAX_SECONDS} s.`}
                   </p>
                   {editMode === "change" && video && canvas && <details>
@@ -1000,7 +1001,7 @@ export function Openjutsu() {
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>}
-            {(mode === "simple" || mode === "advanced" || controlNet) && <label className="setting toggle">
+            {(mode === "simple" || mode === "advanced" || pictureOnly) && <label className="setting toggle">
               <span>No lip-sync <small>For songs the people in the video do not sing or talk along to, so the new {mode === "advanced" ? "people" : "person"} do{mode === "advanced" ? "" : "es"} not lip-sync them{controlNet ? "" : " (about 30 s more per clip)"}.</small></span>
               <input type="checkbox" checked={noLipSync} onChange={(event) => setNoLipSync(event.target.checked)} />
               <i aria-hidden />
@@ -1012,7 +1013,7 @@ export function Openjutsu() {
                 <i aria-hidden />
               </label>
             )}
-            {mode !== "post" && !controlNet && <div className="setting">
+            {mode !== "post" && !pictureOnly && <div className="setting">
               <span>Mask margin <small>{mode === "object"
                 ? editMode === "background" ? "How far the new place reaches into the edge of what stays." : "Room around it for a bigger new shape and its shadow."
                 : <>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</>}</small></span>

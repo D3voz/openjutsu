@@ -141,7 +141,7 @@ function parseColor(form: FormData): ColorSettings {
 
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
-  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) };
+  const settings: SimpleSettings = { sceneFromPicture: form.get("scene_from_picture") === "true", role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) };
   return { picture, settings };
 }
 

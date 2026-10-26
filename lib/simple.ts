@@ -61,6 +61,7 @@ export function setSection(graph: ApiGraph, video: string, section: Section) {
 export const DEFAULT_TARGET = "person";
 
 export type SimpleSettings = {
+  sceneFromPicture?: boolean;
   role: string; // who the character replaces, "" to let the describer name the main person
   resolution: Resolution;
   motion: MotionSize;
@@ -159,10 +160,16 @@ export function suffixRunName(graph: ApiGraph, id: string, suffix: string, title
 }
 
 export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGraph {
-  const graph = maskSettings(source, settings.hatFix, settings.margin, settings.target, NODES);
+  const graph = maskSettings(source, settings.sceneFromPicture ? false : settings.hatFix, settings.margin, settings.target, NODES);
   if (!settings.noLipSync) dropNoLipSync(graph);
   setMotionSize(graph, settings.motion);
   const plan = graph[NODES.plan].inputs;
+  if (settings.sceneFromPicture) {
+    graph[NODES.plan].class_type = "H3SceneSwapPlan";
+    graph[NODES.growMask] = { class_type: "SolidMask", inputs: { value: 1, width: 64, height: 64 }, _meta: { title: "Edit the whole frame" } };
+    const mannequin = Object.values(graph).find((node) => node.class_type === "H3GreyMannequins")!;
+    mannequin.inputs.neutral_background = true;
+  }
   setResolution(graph, NODES.plan, NODES.video, settings.resolution);
   plan.seed = settings.seed;
   plan.clip_seconds = settings.clipSeconds;
