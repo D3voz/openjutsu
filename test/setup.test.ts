@@ -55,7 +55,7 @@ test("missing pack nodes also point to an old ComfyUI or a pack that failed to l
 });
 
 test("all custom node types in the exports have a pack mapping", () => {
-  const custom = /^(H3|MiniMaxH3(?!ReferenceToVideo|SigmaShift|FunControlNetApply)|VHS_|GrowMaskWithBlur$|ImageAndMaskPreview$|ImageDetailContrast$|Orion4D_|SAMLoader$)/;
+  const custom = /^(H3|MiniMaxH3(?!ReferenceToVideo|SigmaShift)|VHS_|GrowMaskWithBlur$|ImageAndMaskPreview$|ImageDetailContrast$|Orion4D_|SAMLoader$)/;
   const graphs = JOB_KINDS.map(load);
   const missing = inspectSetup(Object.fromEntries(graphs.flatMap((g, i) => Object.entries(g).map(([id, node]) => [`${i}_${id}`, node]))), {});
   const core = missing.packs.find((p) => p.url === "https://github.com/Comfy-Org/ComfyUI")!;

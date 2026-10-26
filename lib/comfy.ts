@@ -10,7 +10,6 @@ import { applyModel, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneFit, pruneObject, type ObjectSettings, type PlacementKeyframe } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
-import { CONTROL_PICTURE, CONTROL_VIDEO, pruneControl, setControlSection, type ControlSettings } from "./control.ts";
 import { PEOPLE_NODES, peopleRoles, pruneMontage, type Review } from "./montage.ts";
 
 export type PublicJob = {
@@ -45,7 +44,7 @@ export function rawJobEvents(job: Job, signal: AbortSignal) {
   return low().getJobEvents(job.urls.events || job.id, { signal });
 }
 
-export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "fit", "control", "face", "color", "people", "montage"] as const;
+export const JOB_KINDS = ["simple", "mask", "advanced", "advanced_maxq", "object", "fit", "face", "color", "people", "montage"] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 export async function loadGraph(kind: JobKind): Promise<ApiGraph> {
@@ -192,17 +191,6 @@ export async function submitFit(video: StoredFile, section: Section, placement: 
   setSection(graph, nodeByTitle(graph, OBJECT_VIDEO), section);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, OBJECT_VIDEO), "video", upload(comfy, video));
-  return submit(comfy, workflow);
-}
-
-export async function submitControl(video: StoredFile, section: Section, picture: StoredFile, settings: ControlSettings, model: ModelSettings) {
-  const comfy = client();
-  const graph = pruneControl(await loadGraph("control"), settings);
-  applyModel(graph, model);
-  setControlSection(graph, section);
-  const workflow = comfy.workflows.fromJson(graph);
-  workflow.setInput(nodeByTitle(graph, CONTROL_VIDEO), "video", upload(comfy, video));
-  workflow.setInput(nodeByTitle(graph, CONTROL_PICTURE), "image", upload(comfy, picture));
   return submit(comfy, workflow);
 }
 

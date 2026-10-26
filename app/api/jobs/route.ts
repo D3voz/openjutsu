@@ -1,7 +1,6 @@
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { NextResponse } from "next/server";
-import { listModels, submitAdvanced, submitColor, submitControl, submitFace, submitFit, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
-import type { ControlSettings } from "../../../lib/control.ts";
+import { listModels, submitAdvanced, submitColor, submitFace, submitFit, submitMask, submitMontage, submitObject, submitPeople, submitSimple } from "../../../lib/comfy.ts";
 import { TRACKS_FILE, type Label } from "../../../lib/montage.ts";
 import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type ToneMode, type ToneSettings, type ToneValue } from "../../../lib/color.ts";
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
@@ -141,14 +140,7 @@ function parseColor(form: FormData): ColorSettings {
 
 function parseSimple(form: FormData) {
   const picture = parsePicture(form.get("picture"));
-  const settings: SimpleSettings = { sceneFromPicture: form.get("scene_from_picture") === "true", role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) };
-  return { picture, settings };
-}
-
-function parseControl(form: FormData) {
-  const picture = parsePicture(form.get("picture"));
-  const { resolution, seed } = parseRun(form);
-  const settings: ControlSettings = { target: parseMask(form).target, noLipSync: form.get("no_lip_sync") === "true", resolution, seed };
+  const settings: SimpleSettings = { role: String(form.get("role") ?? "").slice(0, 200), noLipSync: form.get("no_lip_sync") === "true", ...parseRun(form), ...parseMask(form) };
   return { picture, settings };
 }
 
@@ -259,10 +251,6 @@ async function submitForm(form: FormData) {
       const { picture, settings } = parseObject(form);
       const model = parseModel(form, await listModels());
       submit = () => submitObject(video, section, picture, settings, model);
-    } else if (mode === "control") {
-      const { picture, settings } = parseControl(form);
-      const model = parseModel(form, await listModels());
-      submit = () => submitControl(video, section, picture, settings, model);
     } else if (mode === "face") {
       const { picture, settings } = parseFace(form);
       const model = parseModel(form, await listModels());
