@@ -5,7 +5,7 @@ import { TRACKS_FILE, type Label } from "../../../lib/montage.ts";
 import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type ToneMode, type ToneSettings, type ToneValue } from "../../../lib/color.ts";
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
-import { MAX_LORAS, STEPS, STRENGTH, type ModelSettings } from "../../../lib/model.ts";
+import { checkAcceleration, MAX_LORAS, STEPS, STRENGTH, type Acceleration, type ModelFiles, type ModelSettings } from "../../../lib/model.ts";
 import { EDIT_MODES, OBJECT_MARGINS, parsePaint, parsePlacement, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, type Margin, type MotionSize, type Preset, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
@@ -89,20 +89,40 @@ function parseObject(form: FormData) {
   return { picture, settings };
 }
 
-function parseModel(form: FormData, available: { models: string[]; loras: string[] }): ModelSettings {
+function parseDescriber(form: FormData, available: ModelFiles) {
+  if (!form.has("describer")) return undefined;
+  const name = String(form.get("describer")).trim();
+  if (!available.textEncoders.includes(name)) throw new Error("Choose a visual describer ComfyUI has in models/text_encoders.");
+  return name;
+}
+
+function parseModel(form: FormData, available: ModelFiles): ModelSettings {
   const steps = Number(form.get("steps"));
   if (!Number.isInteger(steps) || steps < STEPS.min || steps > STEPS.max) throw new Error(`Steps must be a whole number from ${STEPS.min} to ${STEPS.max}.`);
   const model = String(form.get("model") ?? "").trim();
   if (!model || !available.models.includes(model)) throw new Error("Choose a base model ComfyUI has.");
   const names = form.getAll("lora").map((name) => String(name).trim());
   const strengths = form.getAll("lora_strength").map(Number);
+  const speed = form.getAll("lora_speed");
   if (names.length > MAX_LORAS || strengths.length !== names.length) throw new Error(`Use at most ${MAX_LORAS} LoRAs, each with a strength.`);
   const loras = names.map((name, i) => {
     if (!name || !available.loras.includes(name)) throw new Error("Choose LoRAs ComfyUI has.");
     if (!(strengths[i] >= STRENGTH.min && strengths[i] <= STRENGTH.max)) throw new Error(`LoRA strength must be ${STRENGTH.min} to ${STRENGTH.max}.`);
-    return { name, strength: strengths[i] };
+    return { name, strength: strengths[i], speed: speed[i] === "true" };
   });
-  return { steps, model, loras };
+  const selected: ModelSettings = { steps, model, loras, describer: parseDescriber(form, available), acceleration: String(form.get("acceleration") ?? "none") as Acceleration };
+  for (const [field, key, names, label] of [
+    ["text_encoder", "textEncoder", available.textEncoders, "H3 text encoder"],
+    ["video_vae", "videoVae", available.vaes, "video VAE"],
+    ["audio_vae", "audioVae", available.vaes, "audio VAE"],
+  ] as const) {
+    if (!form.has(field)) continue;
+    const name = String(form.get(field)).trim();
+    if (!names.includes(name)) throw new Error(`Choose a ${label} ComfyUI has.`);
+    selected[key] = name;
+  }
+  checkAcceleration(selected);
+  return selected;
 }
 
 function parseFace(form: FormData) {
@@ -234,7 +254,8 @@ async function submitForm(form: FormData) {
       submit = () => submitFit(video, section, placement, resolution, action);
     } else if (mode === "people") {
       const { roles, resolution } = parsePeople(form);
-      submit = () => submitPeople(video, section, roles, resolution);
+      const describer = form.has("describer") ? parseDescriber(form, await listModels()) : undefined;
+      submit = () => submitPeople(video, section, roles, resolution, describer);
     } else if (mode === "montage") {
       const { pictures, settings, review } = parseMontage(form);
       const model = parseModel(form, await listModels());

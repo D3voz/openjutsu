@@ -188,3 +188,31 @@ test("painted Change checks the paint and loop-mask nodes only when needed", () 
   assert.ok(missing.packs.some((p) => p.url === "https://github.com/D3voz/comfyui-h3-oneclick-swap" && p.nodes.includes("H3PaintedEditArea")));
   assert.ok(missing.packs.some((p) => p.nodes.includes("MiniMaxH3ContexLoopMaskSlice")));
 });
+
+test("selected encoder, VAEs and Spectrum participate in the setup check", () => {
+  const graph = setupGraph(load("simple"), { ...simple, model: {
+    ...DEFAULT_MODEL, loras: [], textEncoder: "encoder.safetensors", videoVae: "video.safetensors", audioVae: "audio.safetensors", acceleration: "spectrum",
+  } });
+  const registry = registryFor(graph);
+  assert.equal(inspectSetup(graph, registry).ok, true);
+  delete registry.SpectrumApplyMiniMaxH3;
+  registry.CLIPLoader.input!.required!.clip_name = [["qwen3vl_8b_int8_convrot.safetensors"]];
+  registry.VAELoader.input!.required!.vae_name = [[]];
+  const missing = inspectSetup(graph, registry);
+  assert.equal(missing.packs[0].url, "https://github.com/xmarre/ComfyUI-Spectrum-MiniMax-H3");
+  assert.deepEqual(missing.models, [
+    { name: "encoder.safetensors", folder: "text_encoders" },
+    { name: "video.safetensors", folder: "vae" },
+    { name: "audio.safetensors", folder: "vae" },
+  ]);
+});
+
+
+test("Find people checks the selected visual describer", () => {
+  const graph = setupGraph(load("people"), { kind: "people", resolution: "480p", describer: "gemma.safetensors" });
+  const registry = registryFor(graph);
+  registry.CLIPLoader.input!.required!.clip_name = [["qwen.safetensors"]];
+  assert.deepEqual(inspectSetup(graph, registry).models, [{ name: "gemma.safetensors", folder: "text_encoders" }]);
+  registry.CLIPLoader.input!.required!.clip_name = [["gemma.safetensors"]];
+  assert.equal(inspectSetup(graph, registry).ok, true);
+});

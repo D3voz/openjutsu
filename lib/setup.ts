@@ -2,7 +2,7 @@ import { pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { comfyUi } from "./comfy.ts";
 import { pruneColor, type ColorSettings } from "./color.ts";
 import { pruneFace, type FaceSettings } from "./face.ts";
-import { applyModel, type ModelSettings } from "./model.ts";
+import { applyDescriber, applyModel, type ModelSettings } from "./model.ts";
 import { PEOPLE_NODES, pruneMontage, type Review } from "./montage.ts";
 import { pruneObject, type ObjectSettings } from "./object.ts";
 import { cropSource, pruneMask, pruneSimple, type ApiGraph, type Margin, type Resolution, type SimpleSettings } from "./simple.ts";
@@ -14,7 +14,7 @@ export type SetupRequest =
   | { kind: "face"; settings: FaceSettings; model: ModelSettings }
   | { kind: "color"; settings: ColorSettings }
   | { kind: "mask"; hatFix: boolean; margin: Margin; target: string }
-  | { kind: "people"; resolution: Resolution }
+  | { kind: "people"; resolution: Resolution; describer?: string }
   | { kind: "fit"; resolution: Resolution }
   | { kind: "montage"; settings: AdvancedSettings; pictures: number; review: Review | null; model: ModelSettings };
 
@@ -29,6 +29,7 @@ type NodeInfo = { input?: { required?: Record<string, unknown[]>; optional?: Rec
 export type NodeRegistry = Record<string, NodeInfo>;
 
 const PACKS = [
+  { name: "ComfyUI-Spectrum-MiniMax-H3", url: "https://github.com/xmarre/ComfyUI-Spectrum-MiniMax-H3", nodes: ["SpectrumApplyMiniMaxH3"] },
   { name: "ComfyUI-MiniMaxH3-Context-Loop (0.7.3+)", url: "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Context-Loop", nodes: ["MiniMaxH3GenerationProfile", "MiniMaxH3SourceTimeline", "MiniMaxH3ChainPlanModern", "MiniMaxH3ChainLoopStart", "MiniMaxH3ChainCurrent", "MiniMaxH3ChainContext", "MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainReview", "MiniMaxH3ChainLoopEnd", "MiniMaxH3ChainAssemble", "MiniMaxH3ContexLoopSourceSlice", "MiniMaxH3ContexLoopMaskSlice", "MiniMaxH3ContexMaskedTarget", "MiniMaxH3ContexMaskGridPreview", "MiniMaxH3LoopTrim"] },
   { name: "comfyui-h3-oneclick-swap", url: "https://github.com/D3voz/comfyui-h3-oneclick-swap", nodes: ["H3OneClickSwapPlan", "H3AdvancedSwapPlan", "H3ObjectSwapPlan", "H3ObjectPlacementMask", "H3AddFitCheck", "H3AddMovingArea", "H3PaintedEditArea", "H3SoundtrackOrSilence", "H3PeopleMask", "H3GreyMannequins", "H3ClipShots", "H3FillShots", "H3TrackCrops", "H3TrackRoles", "H3RoleMask", "H3SubjectPrompt", "H3MontagePeople", "H3MontageTracks", "H3MontagePicks", "H3MontagePlan", "H3MontagePass", "H3FaceChunks", "H3FaceJoin"] },
   { name: "ComfyUI-Fantastic-MiniMaxH3-PromptBuilder", url: "https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder", nodes: ["MiniMaxH3FantasticVideoEditLatent"] },
@@ -64,6 +65,7 @@ export function setupGraph(source: ApiGraph, selection: SetupRequest): ApiGraph 
     if (typeof selection.resolution === "object") cropSource(graph, PEOPLE_NODES.video, selection.resolution);
   } else graph = pruneAdvanced(source, selection.pictures, selection.settings);
   if ("model" in selection) applyModel(graph, selection.model);
+  else if (selection.kind === "people") applyDescriber(graph, selection.describer);
   return graph;
 }
 

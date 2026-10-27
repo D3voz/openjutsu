@@ -6,7 +6,7 @@ import { Asset, Comfy, COMFY_CLOUD_BASE_URL, NotFound, resolveCredentials, type 
 import { ComfyLow } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, cropSource, isLink, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Resolution, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
-import { applyModel, type ModelSettings } from "./model.ts";
+import { applyDescriber, applyModel, type ModelFiles, type ModelSettings } from "./model.ts";
 import { OBJECT_PICTURE, OBJECT_VIDEO, pruneFit, pruneObject, type ObjectSettings, type PlacementKeyframe } from "./object.ts";
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
@@ -234,9 +234,10 @@ export async function submitMontage(video: StoredFile, section: Section, picture
   return submit(comfy, workflow);
 }
 
-export async function submitPeople(video: StoredFile, section: Section, roles: string[], resolution: Resolution) {
+export async function submitPeople(video: StoredFile, section: Section, roles: string[], resolution: Resolution, describer?: string) {
   const comfy = client();
   const graph = await loadGraph("people");
+  applyDescriber(graph, describer);
   graph[PEOPLE_NODES.crops].inputs.people = peopleRoles(roles);
   if (typeof resolution === "object") cropSource(graph, PEOPLE_NODES.video, resolution);
   setSection(graph, PEOPLE_NODES.video, section);
@@ -256,15 +257,18 @@ export async function comfyUi(path: string, timeout: number) {
 export const MODELS_UNAVAILABLE = "Could not read the model lists from ComfyUI. Make sure it is running and COMFYUI_URL points to it, then try again.";
 
 // The pickers read ComfyUI's own node info; when that fails, the page falls back to typed file names.
-export async function listModels(): Promise<{ models: string[]; loras: string[] }> {
+export async function listModels(): Promise<ModelFiles> {
   const options = async (node: string, input: string) => {
     const names = (await comfyUi(`/object_info/${node}`, 5000))?.[node]?.input?.required?.[input]?.[0];
     if (!Array.isArray(names) || names.some((name) => typeof name !== "string")) throw new Error(`ComfyUI sent no ${input} list.`);
     return names as string[];
   };
   try {
-    const [models, loras] = await Promise.all([options("UNETLoader", "unet_name"), options("LoraLoaderModelOnly", "lora_name")]);
-    return { models, loras };
+    const [models, loras, textEncoders, vaes] = await Promise.all([
+      options("UNETLoader", "unet_name"), options("LoraLoaderModelOnly", "lora_name"),
+      options("CLIPLoader", "clip_name"), options("VAELoader", "vae_name"),
+    ]);
+    return { models, loras, textEncoders, vaes };
   } catch (error) {
     console.warn(`${MODELS_UNAVAILABLE} ${error instanceof Error ? error.message : ""}`.trim());
     throw new HttpError(502, MODELS_UNAVAILABLE);

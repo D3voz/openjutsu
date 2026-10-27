@@ -12,6 +12,6 @@ export async function GET(request: Request) {
     return NextResponse.json(await listModels());
   } catch {
     // Empty lists turn the pickers into text fields.
-    return NextResponse.json({ models: [], loras: [], error: MODELS_UNAVAILABLE }, { status: 502 });
+    return NextResponse.json({ models: [], loras: [], textEncoders: [], vaes: [], error: MODELS_UNAVAILABLE }, { status: 502 });
   }
 }

@@ -7,8 +7,9 @@ import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
-import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
+import { ACCELERATIONS, DEFAULT_DESCRIBER, DEFAULT_MODEL, hasSpeedLora, isSpeedLora, MAX_LORAS, STEPS, STRENGTH, type Acceleration, type Lora, type ModelFiles } from "../lib/model.ts";
 import type { EditMode, FitSummary, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
+import { Welcome } from "./welcome.tsx";
 import { ObjectPlacement } from "./object-placement.tsx";
 import { FromPicture } from "./from-picture.tsx";
 import { CHUNK_SECONDS, FACE_STYLES, faceChunkCount, type FaceStyle } from "../lib/face.ts";
@@ -29,6 +30,7 @@ type Progress = NodeInfo & { step: number | null; steps: number | null; pass: nu
 const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
 const RUN_KEY = "openjutsu.run";
 const SETTINGS_KEY = "openjutsu.settings";
+const WELCOME_KEY = "openjutsu.welcome";
 const HISTORY_KEY = "openjutsu.history";
 const HISTORY_LENGTH = 20;
 
@@ -93,6 +95,7 @@ type Settings = {
   margin: Margin; target: string; editMode: EditTab; editTarget: string; biggestOnly: boolean; keepOutline: boolean; post: Post;
   detailOn: boolean; detail: number; toneOn: boolean; tone: ToneSettings; tonePreset: string; faceStyle: FaceStyle;
   chunkSeconds: number; seed: number; clipSeconds: number; motion: MotionSize; steps: number; model: string; loras: Lora[];
+  useLoras: boolean; describer: string; textEncoder: string; videoVae: string; audioVae: string; acceleration: Acceleration;
 };
 
 const isBoolean = (value: unknown) => typeof value === "boolean";
@@ -113,7 +116,8 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   tonePreset: isString, faceStyle: oneOf(FACE_STYLES), chunkSeconds: inRange(CHUNK_SECONDS),
   seed: (value) => Number.isInteger(value) && inRange({ min: 0, max: MAX_SEED })(value), clipSeconds: inRange(CLIP_SECONDS),
   motion: oneOf(MOTION_SIZES), steps: (value) => Number.isInteger(value) && inRange(STEPS)(value), model: isString,
-  loras: (value) => Array.isArray(value) && value.length <= MAX_LORAS && value.every((l) => !!l && isString(l.name) && inRange(STRENGTH)(l.strength)),
+  loras: (value) => Array.isArray(value) && value.length <= MAX_LORAS && value.every((l) => !!l && isString(l.name) && inRange(STRENGTH)(l.strength) && (l.speed === undefined || isBoolean(l.speed)) && (l.enabled === undefined || isBoolean(l.enabled))),
+  useLoras: isBoolean, describer: isString, textEncoder: isString, videoVae: isString, audioVae: isString, acceleration: oneOf(ACCELERATIONS),
 };
 
 function readSettings(defaults: Settings): Settings {
@@ -271,7 +275,19 @@ export function Openjutsu() {
   const [steps, setSteps] = useState(DEFAULT_MODEL.steps);
   const [model, setModel] = useState(DEFAULT_MODEL.model);
   const [loras, setLoras] = useState<Lora[]>(DEFAULT_MODEL.loras);
-  const [files, setFiles] = useState<{ models: string[]; loras: string[] }>({ models: [], loras: [] });
+  const [useLoras, setUseLoras] = useState(true);
+  const [describer, setDescriber] = useState(DEFAULT_DESCRIBER);
+  const [welcome, setWelcome] = useState(false);
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState("");
+  const [textEncoder, setTextEncoder] = useState(DEFAULT_MODEL.textEncoder);
+  const [videoVae, setVideoVae] = useState(DEFAULT_MODEL.videoVae);
+  const [audioVae, setAudioVae] = useState(DEFAULT_MODEL.audioVae);
+  const [acceleration, setAcceleration] = useState<Acceleration>(DEFAULT_MODEL.acceleration);
+  const enabledLoras = useLoras ? loras.filter((lora) => lora.enabled !== false) : [];
+  const speedLora = hasSpeedLora(enabledLoras);
+  const selectedAcceleration = speedLora ? "none" : acceleration;
+  const [files, setFiles] = useState<ModelFiles>({ models: [], loras: [], textEncoders: [], vaes: [] });
   const [submitting, setSubmitting] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(false);
   const [setup, setSetup] = useState<SetupResult | null>(null);
@@ -294,6 +310,7 @@ export function Openjutsu() {
   const settings: Settings = {
     mode, maxQuality, montage, resolution, customSize, hatFix, noLipSync, margin, target, editMode, editTarget, biggestOnly, keepOutline, post,
     detailOn, detail, toneOn, tone, tonePreset, faceStyle, chunkSeconds, seed, clipSeconds, motion, steps, model, loras,
+    useLoras, describer, textEncoder, videoVae, audioVae, acceleration,
   };
   const savedSettings = JSON.stringify(settings);
 
@@ -304,6 +321,9 @@ export function Openjutsu() {
     setBiggestOnly(s.biggestOnly); setKeepOutline(s.keepOutline); setPost(s.post); setDetailOn(s.detailOn); setDetail(s.detail); setToneOn(s.toneOn);
     setTone(s.tone); setTonePreset(s.tonePreset); setFaceStyle(s.faceStyle); setChunkSeconds(s.chunkSeconds); setSeed(s.seed);
     setClipSeconds(s.clipSeconds); setMotion(s.motion); setSteps(s.steps); setModel(s.model); setLoras(s.loras);
+    try { setWelcome(localStorage.getItem(WELCOME_KEY) !== "1"); } catch { setWelcome(true); }
+    setDescriber(s.describer);
+    setUseLoras(s.useLoras); setTextEncoder(s.textEncoder); setVideoVae(s.videoVae); setAudioVae(s.audioVae); setAcceleration(s.acceleration);
     setRestored(true);
   }, []);
 
@@ -327,10 +347,30 @@ export function Openjutsu() {
     setHistory((list) => list.map((p) => p.id !== job.id || (p.status && job.status === "expired") ? p : { ...p, status: job.status, result: job.video?.name }));
   }, [job?.id, job?.status]);
 
-  useEffect(() => setSetup(null), [mode, post, montage, maxQuality, resolution, motion, hatFix, noLipSync, model, loras, detailOn, toneOn, faceStyle, editMode, characters.length, !!look]);
+  useEffect(() => setSetup(null), [mode, post, montage, maxQuality, resolution, motion, hatFix, noLipSync, model, loras, useLoras, describer, textEncoder, videoVae, audioVae, acceleration, detailOn, toneOn, faceStyle, editMode, characters.length, !!look]);
+
+  async function refreshModels() {
+    setModelsLoading(true);
+    setModelsError("");
+    try {
+      const response = await fetch("/api/models");
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not read models from ComfyUI.");
+      setFiles(result);
+    } catch (error) {
+      setModelsError(error instanceof Error ? error.message : "Could not read models from ComfyUI.");
+    } finally {
+      setModelsLoading(false);
+    }
+  }
+
+  function finishWelcome() {
+    try { localStorage.setItem(WELCOME_KEY, "1"); } catch {}
+    setWelcome(false);
+  }
 
   useEffect(() => {
-    fetch("/api/models").then((response) => response.json()).then(setFiles, () => {});
+    void refreshModels();
     fetch("/api/presets").then((response) => response.json()).then(({ tone }: { tone: TonePreset[] }) => setPresets(tone), () => {});
   }, []);
 
@@ -567,13 +607,19 @@ export function Openjutsu() {
       form.set("motion", String(motion));
       form.set("steps", String(steps));
       form.set("model", model);
-      for (const l of loras) {
+      form.set("text_encoder", textEncoder);
+      form.set("video_vae", videoVae);
+      form.set("audio_vae", audioVae);
+      form.set("acceleration", selectedAcceleration);
+      for (const l of enabledLoras) {
         form.append("lora", l.name);
         form.append("lora_strength", String(l.strength));
+        form.append("lora_speed", String(isSpeedLora(l)));
       }
     }
+    if (kind !== "mask" && kind !== "color" && kind !== "fit") form.set("describer", describer);
     const shared = { resolution, motion, hatFix, noLipSync, margin, seed, clipSeconds };
-    const selectedModel = { model, loras, steps };
+    const selectedModel = { model, loras: enabledLoras, steps, describer, textEncoder, videoVae, audioVae, acceleration: selectedAcceleration };
     let selection: SetupRequest;
     if (kind === "simple") selection = { kind, settings: { ...shared, role: character?.role ?? "", target: String(form.get("target")) }, model: selectedModel };
     else if (kind === "advanced" || kind === "advanced_maxq") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, model: selectedModel };
@@ -584,7 +630,7 @@ export function Openjutsu() {
     else if (kind === "face") selection = { kind, settings: { style: faceStyle, seed, chunkSeconds }, model: selectedModel };
     else if (kind === "color") selection = { kind, settings: { detail: detailOn ? detail : null, tone: toneOn ? tone : null } };
     else if (kind === "mask") selection = { kind, hatFix, margin, target: String(form.get("target")) };
-    else selection = { kind, resolution };
+    else selection = kind === "people" ? { kind, resolution, describer } : { kind, resolution };
 
     try {
       const checked = await fetch("/api/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection) });
@@ -660,9 +706,13 @@ export function Openjutsu() {
     setPost(next);
   }
 
+  if (!restored) return <main className="shell"><p className="hint" role="status">Loading Openjutsu…</p></main>;
+  if (welcome && !run) return <Welcome value={describer} options={files.textEncoders} onChange={setDescriber}
+    loading={modelsLoading} error={modelsError} onRefresh={refreshModels} onContinue={finishWelcome} />;
+
   return (
     <main className="shell">
-      <header className="top">
+      <header className="top row">
         <div className="brand">
           <span className="mark" aria-hidden>忍</span>
           <div>
@@ -670,6 +720,7 @@ export function Openjutsu() {
             <p>Swap the people or things in any video. Open weights, on your own GPU.</p>
           </div>
         </div>
+        <button className="secondary" disabled={!!run || submitting} onClick={() => setWelcome(true)}>Welcome &amp; models</button>
       </header>
 
       <nav className="modes" aria-label="Mode">
@@ -702,7 +753,8 @@ export function Openjutsu() {
           <h2>Setup needs attention</h2>
           {setup.error && <p className="error">{setup.error}</p>}
           {setup.packs.length > 0 && <>
-            <p className="hint">Install or update the items below, then restart ComfyUI and try again.</p>
+            <p className="hint">Install or update each custom node pack in the <code>custom_nodes</code> folder of the ComfyUI installation Openjutsu connects to, with one subfolder per pack (for example, <code>ComfyUI/custom_nodes/ComfyUI-KJNodes</code>).</p>
+            <p className="hint">Use ComfyUI Manager or follow the links below for installation and Python dependency instructions. If ComfyUI itself is listed, update ComfyUI. Then restart ComfyUI and try again.</p>
             <ul>{setup.packs.map((pack) => <li key={pack.url}>
               <a href={pack.url} target="_blank" rel="noopener noreferrer">{pack.name} ↗</a>
               <small>Missing nodes: {pack.nodes.join(", ")}</small>
@@ -1042,23 +1094,65 @@ export function Openjutsu() {
                 <span>Base model <small>The H3 diffusion model in ComfyUI&apos;s models/diffusion_models.</small></span>
                 <FilePicker label="Base model" value={model} options={files.models} onChange={setModel} />
               </div>
-              <div className="setting loras">
-                <span>LoRAs <small>Applied in order to the base model. Remove the DMAD LoRA only together with more steps.</small></span>
+              <div className="setting">
+                <span>Visual describer <small>Reads pictures and video frames to write prompts. Use a vision-language model in models/text_encoders.</small></span>
+                <FilePicker label="Visual describer" value={describer} options={files.textEncoders} onChange={setDescriber} />
+              </div>
+              <div className="setting">
+                <span>H3 text encoder <small>Choose your MiniMax H3 Qwen3-VL 32B quantization from models/text_encoders.</small></span>
+                <FilePicker label="H3 text encoder" value={textEncoder} options={files.textEncoders} onChange={setTextEncoder} />
+              </div>
+              <div className="setting">
+                <span>Video VAE <small>Choose a MiniMax H3 video VAE from models/vae.</small></span>
+                <FilePicker label="Video VAE" value={videoVae} options={files.vaes} onChange={setVideoVae} />
+              </div>
+              <div className="setting">
+                <span>Audio VAE <small>Choose a MiniMax H3 audio VAE from models/vae.</small></span>
+                <FilePicker label="Audio VAE" value={audioVae} options={files.vaes} onChange={setAudioVae} />
+              </div>
+              <label className="setting toggle">
+                <span>Use LoRAs <small>Turn off to use the base model alone. Without a speed LoRA, use 20 or more steps.</small></span>
+                <input type="checkbox" checked={useLoras} onChange={(event) => setUseLoras(event.target.checked)} />
+                <i />
+              </label>
+              {useLoras && <div className="setting loras">
+                <span>LoRAs <small>Applied in order to the base model.</small></span>
                 <div className="lora-list">
                   {loras.map((l, i) => (
-                    <div className="lora" key={i}>
-                      <FilePicker label={`LoRA ${i + 1}`} value={l.name} options={files.loras} onChange={(name) => setLoras(loras.map((x, j) => (j === i ? { ...x, name } : x)))} />
-                      <input
-                        type="number" aria-label={`LoRA ${i + 1} strength`} min={STRENGTH.min} max={STRENGTH.max} step={0.05} value={l.strength}
-                        onChange={(event) => setLoras(loras.map((x, j) => (j === i ? { ...x, strength: Math.min(STRENGTH.max, Math.max(STRENGTH.min, Number(event.target.value) || 0)) } : x)))}
-                      />
-                      <button className="secondary" onClick={() => setLoras(loras.filter((_, j) => j !== i))} aria-label={`Remove LoRA ${i + 1}`}>×</button>
+                    <div className="lora-entry" key={i}>
+                      <div className="lora">
+                        <FilePicker label={`LoRA ${i + 1}`} value={l.name} options={files.loras} onChange={(name) => setLoras(loras.map((x, j) => (j === i ? { ...x, name } : x)))} />
+                        <input
+                          type="number" aria-label={`LoRA ${i + 1} strength`} min={STRENGTH.min} max={STRENGTH.max} step={0.05} value={l.strength}
+                          onChange={(event) => setLoras(loras.map((x, j) => (j === i ? { ...x, strength: Math.min(STRENGTH.max, Math.max(STRENGTH.min, Number(event.target.value) || 0)) } : x)))}
+                        />
+                        <button className="secondary" onClick={() => setLoras(loras.filter((_, j) => j !== i))} aria-label={`Remove LoRA ${i + 1}`}>×</button>
+                      </div>
+                      <label className="setting toggle">
+                        <span>{isSpeedLora(l) ? "Use speed LoRA" : "Use this LoRA"}<small>Turn off to skip this LoRA and keep its settings.</small></span>
+                        <input type="checkbox" aria-label={`Use LoRA ${i + 1}`} checked={l.enabled !== false}
+                          onChange={(event) => setLoras(loras.map((x, j) => j === i ? { ...x, enabled: event.target.checked } : x))} />
+                        <i />
+                      </label>
+                      {!isSpeedLora({ ...l, speed: false }) && <label className="setting toggle">
+                        <span>Speed LoRA <small>Mark renamed or other few-step LoRAs here.</small></span>
+                        <input type="checkbox" aria-label={`LoRA ${i + 1} is a speed LoRA`} checked={l.speed === true}
+                          onChange={(event) => setLoras(loras.map((x, j) => j === i ? { ...x, speed: event.target.checked } : x))} />
+                        <i />
+                      </label>}
                     </div>
                   ))}
                   {loras.length < MAX_LORAS && (
                     <button className="secondary" onClick={() => setLoras([...loras, { name: files.loras[0] ?? "", strength: 1 }])}>Add LoRA</button>
                   )}
                 </div>
+              </div>}
+              <div className="setting">
+                <span>Acceleration <small>{speedLora ? "Turn off the speed LoRA to use Spectrum." : "Spectrum skips some H3 evaluations and can change the result. Requires ComfyUI-Spectrum-MiniMax-H3; use 20 or more steps."}</small></span>
+                <select className="file-name" aria-label="Acceleration" value={selectedAcceleration} disabled={speedLora} onChange={(event) => setAcceleration(event.target.value as Acceleration)}>
+                  <option value="none">Off</option>
+                  <option value="spectrum">Spectrum</option>
+                </select>
               </div>
             </details>
           </section>

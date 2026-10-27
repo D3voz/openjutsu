@@ -5,14 +5,17 @@ import type { AddressInfo } from "node:net";
 // Just enough of comfy-api-proxy 0.1.6 for the upload, job, output and delete paths. Like the proxy, identical bytes
 // map to one asset id, and uploads are counted rather than kept.
 type FakeAsset = { id: string; hash: string; size: number; contentType: string; filePath: string; jobId?: string; body?: string };
-type FakeJob = { id: string; status: string; inputs: string[]; outputs: FakeAsset[] };
+type FakeJob = { workflow: unknown; id: string; status: string; inputs: string[]; outputs: FakeAsset[] };
 
 export async function fakeProxy() {
   const assets = new Map<string, FakeAsset>();
   const jobs = new Map<string, FakeJob>();
   const deleted: string[] = [];
   const uploads: FakeAsset[] = [];
-  const models = { UNETLoader: ["base.safetensors"], LoraLoaderModelOnly: ["style.safetensors"] };
+  const models = {
+    UNETLoader: ["base.safetensors"], LoraLoaderModelOnly: ["style.safetensors", "minimax_h3_DMAD.safetensors"],
+    CLIPLoader: ["encoder.safetensors"], VAELoader: ["video.safetensors", "audio.safetensors"],
+  };
   const state = { rejectJobs: false };
   let base = "";
 
@@ -56,7 +59,7 @@ export async function fakeProxy() {
     let match: RegExpMatchArray | null;
     if ((match = path.match(/^\/object_info\/(\w+)$/))) {
       const node = match[1] as keyof typeof models;
-      const input = node === "UNETLoader" ? "unet_name" : "lora_name";
+      const input = { UNETLoader: "unet_name", LoraLoaderModelOnly: "lora_name", CLIPLoader: "clip_name", VAELoader: "vae_name" }[node];
       return models[node] ? json(response, 200, { [node]: { input: { required: { [input]: [models[node]] } } } }) : missing(response);
     }
     if (request.method === "HEAD" && (match = path.match(/^\/api\/v2\/assets\/by-hash\/(.+)$/))) {
@@ -90,7 +93,7 @@ export async function fakeProxy() {
       const refs = [...JSON.stringify(workflow).matchAll(/"__type":"core\/ASSET","info":\{"id":"([^"]+)"/g)].map((ref) => ref[1]);
       if (state.rejectJobs) return json(response, 422, { error: { code: "invalid_workflow", message: "Workflow rejected." } });
       if (refs.some((id) => !assets.has(id))) return json(response, 422, { error: { code: "missing_asset", message: "Unresolvable core/ASSET reference(s)." } });
-      const job = { id: randomUUID(), status: "queued", inputs: refs, outputs: [] };
+      const job = { workflow, id: randomUUID(), status: "queued", inputs: refs, outputs: [] };
       jobs.set(job.id, job);
       return json(response, 201, jobJson(job));
     }

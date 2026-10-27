@@ -176,6 +176,7 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 .target-input { width: 12rem; }
 .setting.loras { align-items: flex-start; }
 .lora-list { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 1 1 100%; }
+.lora-entry { width: 100%; }
 .lora { display: grid; grid-template-columns: minmax(0, 1fr) 4.5rem auto; gap: 8px; width: 100%; }
 .lora .file-name { width: 100%; }
 
@@ -219,4 +220,35 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 .history .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) {
   .history li button { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+
+.welcome { max-width: 940px; gap: 26px; }
+.welcome-intro { padding: 22px 0 4px; }
+.eyebrow { margin: 0 0 9px; color: var(--accent); font-size: 0.73rem; font-weight: 700; letter-spacing: 0.12em; }
+.welcome-intro h2 { margin: 0; font-size: clamp(2rem, 5vw, 3.1rem); letter-spacing: -0.04em; line-height: 1.12; }
+.welcome-intro > p:last-of-type { color: var(--muted); max-width: 650px; font-size: 1.05rem; }
+.welcome-flow { list-style: none; padding: 0; margin: 26px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; counter-reset: welcome; }
+.welcome-flow li { border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 7px; counter-increment: welcome; }
+.welcome-flow strong::before { content: "0" counter(welcome) " / "; color: var(--accent); }
+.welcome-flow span { color: var(--muted); font-size: 0.85rem; }
+.welcome .panel { padding: 24px; gap: 12px; }
+.welcome .panel h2 { font-size: 1.25rem; margin-bottom: 6px; }
+.welcome-picker { border-color: #657931; }
+.welcome-picker > label { font-size: 0.88rem; font-weight: 600; margin-top: 4px; }
+.welcome-picker > select { width: 100%; min-width: 0; }
+.welcome-install { padding: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 10px; margin-top: 6px; }
+.welcome-install code { color: var(--accent); overflow-wrap: anywhere; }
+.welcome-table { overflow-x: auto; }
+.welcome table { width: 100%; border-collapse: collapse; font-size: 0.88rem; text-align: left; }
+.welcome caption { text-align: left; color: var(--muted); font-size: 0.8rem; padding-bottom: 8px; }
+.welcome th, .welcome td { border-bottom: 1px solid var(--line); padding: 12px 10px; }
+.welcome thead th { color: var(--muted); font-weight: 500; }
+.welcome a { color: var(--accent); text-underline-offset: 3px; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 20px; justify-content: space-between; align-items: center; }
+@media (max-width: 640px) {
+  .welcome-flow { grid-template-columns: 1fr; }
+  .welcome .panel { padding: 18px; }
+  .welcome-actions > .row { width: 100%; }
+  .welcome-actions button { flex: 1; }
 }

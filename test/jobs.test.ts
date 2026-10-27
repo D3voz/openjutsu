@@ -143,7 +143,7 @@ test("outputs are served only for their own job, as video, image or JSON, with n
 });
 
 test("COMFYUI_URL may end in a slash, and a failed model list is reported instead of skipping the check", async () => {
-  assert.deepEqual(await (await getModels(new Request("http://127.0.0.1:3000/api/models"))).json(), { models: ["base.safetensors"], loras: ["style.safetensors"] });
+  assert.deepEqual(await (await getModels(new Request("http://127.0.0.1:3000/api/models"))).json(), { models: ["base.safetensors"], loras: ["style.safetensors", "minimax_h3_DMAD.safetensors"], textEncoders: ["encoder.safetensors"], vaes: ["video.safetensors", "audio.safetensors"] });
   let response = await post({ ...SIMPLE, model: "other.safetensors", video: mp4(), picture: png() });
   assert.equal((await response.json()).error, "Choose a base model ComfyUI has.");
 
@@ -152,7 +152,7 @@ test("COMFYUI_URL may end in a slash, and a failed model list is reported instea
   try {
     response = await getModels(new Request("http://127.0.0.1:3000/api/models"));
     assert.equal(response.status, 502);
-    assert.deepEqual({ ...(await response.json()), error: undefined }, { models: [], loras: [], error: undefined });
+    assert.deepEqual({ ...(await response.json()), error: undefined }, { models: [], loras: [], textEncoders: [], vaes: [], error: undefined });
     response = await post({ ...SIMPLE, video: mp4(), picture: png() });
     assert.equal(response.status, 502);
     assert.match((await response.json()).error, /COMFYUI_URL/);
@@ -174,4 +174,50 @@ test("three uploads can arrive at once, and a fourth is asked to wait", async ()
   for (const { response } of stalled) assert.equal((await response).status, 400);
   assert.equal((await post({ mode: "mask", video: mp4() })).status, 202);
   assert.deepEqual(await leftovers(), []);
+});
+
+test("encoder and VAE selections are validated against ComfyUI before uploads", async () => {
+  const uploads = proxy.uploads.length;
+  for (const field of ["text_encoder", "video_vae", "audio_vae"]) {
+    const response = await post({ ...SIMPLE, [field]: "missing.safetensors", video: mp4(), picture: png() });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /ComfyUI has/);
+  }
+  assert.equal(proxy.uploads.length, uploads);
+  const response = await post({ ...SIMPLE, text_encoder: "encoder.safetensors", video_vae: "video.safetensors", audio_vae: "audio.safetensors", acceleration: "spectrum", video: mp4(), picture: png() });
+  assert.equal(response.status, 202, JSON.stringify(await response.clone().json()));
+});
+
+test("the submission API rejects Spectrum with known or manually marked speed LoRAs", async () => {
+  const uploads = proxy.uploads.length;
+  for (const fields of [
+    { lora: "minimax_h3_DMAD.safetensors", lora_speed: "false" },
+    { lora: "style.safetensors", lora_speed: "true" },
+  ]) {
+    const response = await post({ ...SIMPLE, ...fields, lora_strength: "1", acceleration: "spectrum", video: mp4(), picture: png() });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /speed LoRA/);
+  }
+  const invalid = await post({ ...SIMPLE, acceleration: "unknown", video: mp4(), picture: png() });
+  assert.equal(invalid.status, 400);
+  assert.equal(proxy.uploads.length, uploads);
+  const response = await post({ ...SIMPLE, lora: "style.safetensors", lora_strength: "1", acceleration: "spectrum", video: mp4(), picture: png() });
+  assert.equal(response.status, 202);
+});
+
+
+test("visual describers are validated before upload and reach swaps and Find people", async () => {
+  for (const mode of ["simple", "people"]) {
+    const uploads = proxy.uploads.length;
+    const invalid = await post({ ...SIMPLE, mode, role: "the dancer - white polo, jeans", describer: "../missing.safetensors", video: mp4(), picture: png() });
+    assert.equal(invalid.status, 400);
+    assert.match((await invalid.json()).error, /visual describer/);
+    assert.equal(proxy.uploads.length, uploads);
+    const response = await post({ ...SIMPLE, mode, role: "the dancer - white polo, jeans", describer: "encoder.safetensors", video: mp4(), picture: png() });
+    assert.equal(response.status, 202, JSON.stringify(await response.clone().json()));
+    const job = await response.json();
+    const workflow = JSON.stringify(proxy.jobs.get(job.id)!.workflow);
+    assert.match(workflow, /encoder\.safetensors/);
+    assert.doesNotMatch(workflow, /qwen3vl_8b_int8_convrot/);
+  }
 });
