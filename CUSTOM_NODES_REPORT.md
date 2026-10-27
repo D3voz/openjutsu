@@ -4,7 +4,7 @@ Updated 25 October 2026. The README lists the packs, their links and the model f
 
 ## 1. Packs by workflow
 
-Openjutsu uses ten custom-node packs: the ten in the README's Custom nodes table, `comfyui_controlnet_aux` included. Install them under `ComfyUI/custom_nodes/`.
+Openjutsu uses the custom-node packs in the README's Custom nodes table. Install them under `ComfyUI/custom_nodes/`.
 
 | Feature / shipped workflow | Required custom packs |
 | --- | --- |
@@ -20,6 +20,8 @@ Openjutsu uses ten custom-node packs: the ten in the README's Custom nodes table
 | Fix colours: `color.api.json` | VideoHelperSuite, Image Detail Contrast, Orion4D_FXMax |
 
 Fix colours removes the detail or tone node when that step is off, so each of its two packs is needed only for its own step. Turning off hat fix or No lip-sync does not remove any pack from swapping.
+
+Every workflow also needs [comfyui-websocket-reconnect-fix](https://github.com/D3voz/comfyui-websocket-reconnect-fix). It adds no nodes, so the setup check looks for its `/websocket_reconnect_fix` route instead of `/object_info`. Without it, when comfy-api-proxy reconnects to ComfyUI (a page reload, for example), ComfyUI drops the new connection and the page stops showing progress while the job keeps running.
 
 Release notes worth knowing:
 

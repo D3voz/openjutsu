@@ -757,7 +757,7 @@ export function Openjutsu() {
             <p className="hint">Use ComfyUI Manager or follow the links below for installation and Python dependency instructions. If ComfyUI itself is listed, update ComfyUI. Then restart ComfyUI and try again.</p>
             <ul>{setup.packs.map((pack) => <li key={pack.url}>
               <a href={pack.url} target="_blank" rel="noopener noreferrer">{pack.name} ↗</a>
-              <small>Missing nodes: {pack.nodes.join(", ")}</small>
+              {pack.nodes.length > 0 && <small>Missing nodes: {pack.nodes.join(", ")}</small>}
             </li>)}</ul>
           </>}
           {setup.models.length > 0 && <>
@@ -767,7 +767,7 @@ export function Openjutsu() {
             </li>)}</ul>
           </>}
           <CopyDetails lines={[tab, "Setup check failed", setup.error ? `Error: ${setup.error}` : "",
-            ...setup.packs.map((pack) => `Missing pack: ${pack.name} ${pack.url} (nodes: ${pack.nodes.join(", ")})`),
+            ...setup.packs.map((pack) => `Missing pack: ${pack.name} ${pack.url}${pack.nodes.length ? ` (nodes: ${pack.nodes.join(", ")})` : ""}`),
             ...setup.models.map((item) => `Missing model: ComfyUI/models/${item.folder}/${item.name}`)]} />
         </section>
       )}

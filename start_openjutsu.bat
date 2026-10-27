@@ -11,6 +11,7 @@ if not exist ".venv-proxy\Scripts\python.exe" (
     python -m venv .venv-proxy || goto :fail
 )
 ".venv-proxy\Scripts\python.exe" -m pip install -q --disable-pip-version-check comfy-api-proxy==%PROXY_VERSION% || goto :fail
+".venv-proxy\Scripts\python.exe" patch_proxy.py || goto :fail
 if not exist "node_modules" (
     echo Installing the app...
     call npm ci || goto :fail

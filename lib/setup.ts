@@ -41,6 +41,8 @@ const PACKS = [
   { name: "Orion4D_FXMax", url: "https://github.com/orion4d/Orion4D_FXMax", nodes: ["Orion4D_FXMax_DCTLToneMapper"] },
 ];
 const CORE = { name: "ComfyUI (update required)", url: "https://github.com/Comfy-Org/ComfyUI", nodes: [] as string[] };
+// Adds no nodes, so it is found by its route instead. Without it, live progress stops when the proxy reconnects.
+const WEBSOCKET_FIX = { name: "comfyui-websocket-reconnect-fix", url: "https://github.com/D3voz/comfyui-websocket-reconnect-fix", nodes: [] as string[] };
 const PACK_HINT = "Already installed? ComfyUI may be too old for the pack, or the pack failed to load. Update ComfyUI, restart it and check its console for import errors.";
 const MODEL_INPUTS: Record<string, Record<string, string>> = {
   UNETLoader: { unet_name: "diffusion_models" },
@@ -97,9 +99,14 @@ export function inspectSetup(graph: ApiGraph, registry: NodeRegistry): SetupResu
 
 export async function checkSetup(graph: ApiGraph): Promise<SetupResult> {
   try {
-    const registry = await comfyUi("/object_info", 8000);
+    const [registry, websocketFix] = await Promise.all([
+      comfyUi("/object_info", 8000),
+      comfyUi("/websocket_reconnect_fix", 8000).then(() => true, () => false),
+    ]);
     if (!registry || typeof registry !== "object" || Array.isArray(registry)) throw new Error("Invalid node list");
-    return inspectSetup(graph, registry);
+    const result = inspectSetup(graph, registry);
+    if (!websocketFix) Object.assign(result, { ok: false, error: PACK_HINT, packs: [...result.packs, WEBSOCKET_FIX] });
+    return result;
   } catch {
     return { ok: false, error: "Could not check ComfyUI. Make sure it is running and COMFYUI_URL points to it, then try again.", packs: [], models: [] };
   }

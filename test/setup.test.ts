@@ -125,16 +125,24 @@ test("model checks deduplicate files, normalize path separators, and ignore uplo
   assert.deepEqual(inspectSetup(graph, registry).models, [{ name: "missing.safetensors", folder: "text_encoders" }]);
 });
 
-test("setup reads the registry once and never uploads or submits a job", async (t) => {
+test("setup reads the registry and the websocket fix route, and never uploads or submits a job", async (t) => {
   const graph = setupGraph(load("simple"), simple);
   const urls: string[] = [];
   t.mock.method(globalThis, "fetch", async (url: string) => {
     urls.push(url);
-    return Response.json(registryFor(graph));
+    return Response.json(url.endsWith("/websocket_reconnect_fix") ? {} : registryFor(graph));
   });
   assert.equal((await checkSetup(graph)).ok, true);
-  assert.equal(urls.length, 1);
-  assert.ok(urls[0].endsWith("/object_info"));
+  assert.deepEqual(urls.map((url) => new URL(url).pathname).sort(), ["/object_info", "/websocket_reconnect_fix"]);
+});
+
+test("setup lists the websocket fix when ComfyUI does not have it", async (t) => {
+  const graph = setupGraph(load("simple"), simple);
+  t.mock.method(globalThis, "fetch", async (url: string) => url.endsWith("/websocket_reconnect_fix")
+    ? new Response("404: Not Found", { status: 404 }) : Response.json(registryFor(graph)));
+  const result = await checkSetup(graph);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.packs, [{ name: "comfyui-websocket-reconnect-fix", url: "https://github.com/D3voz/comfyui-websocket-reconnect-fix", nodes: [] }]);
 });
 
 test("offline, HTTP failure and invalid registry responses give an actionable error", async (t) => {

@@ -39,6 +39,7 @@ Install these into `ComfyUI/custom_nodes` (ComfyUI Manager finds the first three
 | [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) | Fix faces: SAM loader |
 | [comfyui-image-detail-contrast](https://github.com/D3voz/comfyui-image-detail-contrast) | Fix colours: Image Detail Contrast |
 | [Orion4D_FXMax](https://github.com/orion4d/Orion4D_FXMax) | Fix colours: DCTL Tone Mapper and its presets |
+| [comfyui-websocket-reconnect-fix](https://github.com/D3voz/comfyui-websocket-reconnect-fix) | every job: keeps live progress coming after the proxy reconnects to ComfyUI (adds no nodes) |
 
 Restart ComfyUI after installing them.
 
@@ -60,13 +61,14 @@ Before uploading a job, Openjutsu checks the selected workflow against ComfyUI's
 
 ## Run it locally
 
-On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or started while it waits). The first run installs `comfy-api-proxy` 0.1.6 into `.venv-proxy` and the node packages. Each run builds the app, then opens the proxy and the app (`npm start`, the production server) in two windows and the page in your browser. Close those two windows to stop Openjutsu. The manual steps:
+On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or started while it waits). The first run installs `comfy-api-proxy` 0.1.6 into `.venv-proxy` and the node packages, and `patch_proxy.py` fixes the proxy's live progress (node changes and mid-job previews). Each run builds the app, then opens the proxy and the app (`npm start`, the production server) in two windows and the page in your browser. Close those two windows to stop Openjutsu. The manual steps:
 
 1. Start ComfyUI on `127.0.0.1:8188`. On Windows, set `AIOHTTP_NOSENDFILE=1` first (PowerShell: `$env:AIOHTTP_NOSENDFILE = "1"`). Without it, the first partial-file request (the video player sends one when you seek) can stall ComfyUI's `/view`, and every later file download hangs until ComfyUI restarts.
-2. Install and start the proxy, which serves the Comfy API v2 on `127.0.0.1:8189`. Raise the upload cap for longer videos (the default is 100 MB):
+2. Install the proxy, fix its live progress with this repo's `patch_proxy.py` (run it with the same Python), and start it. It serves the Comfy API v2 on `127.0.0.1:8189`. Raise the upload cap for longer videos (the default is 100 MB):
 
    ```sh
    pip install comfy-api-proxy==0.1.6
+   python openjutsu/patch_proxy.py
    comfy-api-proxy run --max-upload-mb 500
    ```
 
