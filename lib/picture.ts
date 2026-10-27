@@ -64,5 +64,5 @@ export function applyPictureVideoSettings(graph: ApiGraph, settings: PictureVide
     graph[id] = { class_type: "LoraLoaderModelOnly", inputs: { model, lora_name: lora.name, strength_model: lora.strength }, _meta: { title: `LoRA ${index + 1}` } };
     model = [id, 0];
   });
-  graph["52"].inputs.model = model;
+  graph["49"].inputs.model = model;
 }

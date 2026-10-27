@@ -40,3 +40,5 @@ python workflows/build/openjutsu_picture_pipeline.py --video "video.mp4" --pictu
 Names refer to files in ComfyUI's `input` directory. The generated defaults use the current Instagram test clip and original café character picture; choose your own files after importing.
 
 Validated locally: image preparation → review → explicit video render completed in the app. The saved preview and H3's picture input were byte-identical. The result contains 141 frames at 480×864 and 24 fps, with audio, and the app supports video seeking. Temporary server outages and page refreshes preserve pending jobs. Automated tests, TypeScript checking and the production build pass. The café stayed consistent; precise pose and framing remain approximate.
+
+H3 video rendering selects Comfy Kitchen INT8 attention, matching the other video tabs. The backend change applies to newly submitted jobs.

@@ -435,6 +435,19 @@
       "title": "Original soundtrack / silence when absent"
     }
   },
+  "49": {
+    "class_type": "ModelAttentionBackend",
+    "inputs": {
+      "model": [
+        "51",
+        0
+      ],
+      "attention": "comfy kitchen attention"
+    },
+    "_meta": {
+      "title": "Comfy Kitchen Attention"
+    }
+  },
   "50": {
     "class_type": "UNETLoader",
     "inputs": {
@@ -463,7 +476,7 @@
     "class_type": "MiniMaxH3SigmaShift",
     "inputs": {
       "model": [
-        "51",
+        "49",
         0
       ],
       "shift_video": 12.0,

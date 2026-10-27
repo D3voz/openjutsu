@@ -38,11 +38,13 @@ test("LoRAs are applied in order, disabled entries are skipped, and turning them
   assert.deepEqual(value["picture_lora_0"].inputs.model, ["50", 0]);
   assert.deepEqual(value["picture_lora_1"].inputs.model, ["picture_lora_0", 0]);
   assert.equal(value["picture_lora_1"].inputs.lora_name, "last.safetensors");
-  assert.deepEqual(value["52"].inputs.model, ["picture_lora_1", 0]);
+  assert.deepEqual(value["49"].inputs.model, ["picture_lora_1", 0]);
+  assert.deepEqual(value["52"].inputs.model, ["49", 0]);
   assert.ok(!value["51"]); assert.equal(value["60"].inputs.steps, 25);
   const plain = graph();
   applyPictureVideoSettings(plain, { ...settings, useLoras: false }, 768, 1376);
-  assert.deepEqual(plain["52"].inputs.model, ["50", 0]);
+  assert.deepEqual(plain["49"].inputs.model, ["50", 0]);
+  assert.deepEqual(plain["52"].inputs.model, ["49", 0]);
   assert.ok(!Object.values(plain).some((node) => node.class_type === "LoraLoaderModelOnly"));
 });
 
@@ -55,4 +57,17 @@ test("default settings keep the tested canvas, length and DMAD configuration", (
   assert.equal(value["picture_lora_0"].inputs.lora_name, DEFAULT_PICTURE_VIDEO.loras[0].name);
   assert.equal(value["60"].inputs.steps, 6);
   assert.ok(!Object.values(value).some((node) => /Chain|Loop/.test(node.class_type)));
+});
+
+
+test("picture rendering uses the same Comfy Kitchen attention backend as the other tabs", () => {
+  for (const useLoras of [true, false]) {
+    const value = graph();
+    applyPictureVideoSettings(value, parsePictureVideoSettings({ useLoras }), 768, 1376);
+    assert.equal(value["49"].class_type, "ModelAttentionBackend");
+    assert.equal(value["49"].inputs.attention, "comfy kitchen attention");
+    assert.deepEqual(value["52"].inputs.model, ["49", 0]);
+    assert.deepEqual(value["57"].inputs.model, ["52", 0]);
+    assert.deepEqual(value["60"].inputs.model, ["52", 0]);
+  }
 });
