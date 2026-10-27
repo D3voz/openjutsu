@@ -4,9 +4,9 @@ An open-source, Genjutsu-style character and object swap for video. Drop a video
 
 The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyorg/sdk`](https://www.npmjs.com/package/@comfyorg/sdk), following Comfy's [comfy-reshoot](https://github.com/Comfy-Org/comfy-reshoot) reference app.
 
-[![Simple motion transfer: the swapped character next to the original](docs/media/simple_swap.jpg)](docs/media/openjutsu_demo.mp4)
+https://github.com/user-attachments/assets/2d8d763a-1764-49a6-9116-d6d1be661ff6
 
-**[Watch the 2-minute demo](docs/media/openjutsu_demo.mp4)** (MP4, 9.5 MB). Every person in it is AI-generated, including the people in the source videos.
+**[Download the 2-minute demo](docs/media/openjutsu_demo.mp4?raw=true)** (MP4, 9.5 MB). Every person in it is AI-generated, including the people in the source videos.
 
 | Advanced: several people, pick who becomes who | Object swap: paint where it goes |
 | --- | --- |
