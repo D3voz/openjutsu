@@ -48,14 +48,14 @@ test("LoRAs are applied in order, disabled entries are skipped, and turning them
   assert.ok(!Object.values(plain).some((node) => node.class_type === "LoraLoaderModelOnly"));
 });
 
-test("default settings keep the tested canvas, length and DMAD configuration", () => {
+test("default settings keep the tested canvas, length and fleet H3 configuration", () => {
   const value = graph();
-  applyPictureVideoSettings(value, parsePictureVideoSettings({ renderer: "h3", steps: 6 }), 768, 1376);
+  applyPictureVideoSettings(value, parsePictureVideoSettings({ renderer: "h3", steps: 8 }), 768, 1376);
   assert.equal(value["56"].inputs.length, 141); assert.equal(value["1"].inputs.frame_load_cap, 141);
   assert.equal(value["56"].inputs.width, 480); assert.equal(value["56"].inputs.height, 864);
   assert.equal(value["33"].inputs.width, 480); assert.equal(value["33"].inputs.height, 864);
   assert.equal(value["picture_lora_0"].inputs.lora_name, DEFAULT_PICTURE_VIDEO.loras[0].name);
-  assert.equal(value["60"].inputs.steps, 6);
+  assert.equal(value["60"].inputs.steps, 8);
   assert.ok(!Object.values(value).some((node) => /Chain|Loop/.test(node.class_type)));
 });
 

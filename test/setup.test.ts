@@ -204,7 +204,7 @@ test("selected encoder, VAEs and Spectrum participate in the setup check", () =>
   const registry = registryFor(graph);
   assert.equal(inspectSetup(graph, registry).ok, true);
   delete registry.SpectrumApplyMiniMaxH3;
-  registry.CLIPLoader.input!.required!.clip_name = [["qwen3vl_8b_int8_convrot.safetensors"]];
+  registry.CLIPLoader.input!.required!.clip_name = [["qwen3vl_8b_fp8_scaled.safetensors"]];
   registry.VAELoader.input!.required!.vae_name = [[]];
   const missing = inspectSetup(graph, registry);
   assert.equal(missing.packs[0].url, "https://github.com/xmarre/ComfyUI-Spectrum-MiniMax-H3");

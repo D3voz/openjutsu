@@ -1,5 +1,7 @@
 // Base model, LoRAs and steps, shared by every swap and edit workflow. Each export has one "H3 Diffusion Model" UNETLoader
 // feeding one "DMAD LoRA" LoraLoaderModelOnly; the LoRA list replaces that node with a chain (or removes it).
+// KAFEIN fleet defaults use the weights actually present in S3. The LoRA node title stays "DMAD LoRA" because the
+// workflow exports and applyModel() find it by title; its file is the fleet 8-step turbo LoRA.
 import { nodeByTitle } from "./advanced.ts";
 import { isLink, suffixRunName, type ApiGraph } from "./simple.ts";
 
@@ -12,17 +14,38 @@ export type ModelSettings = {
 };
 export type ModelFiles = { models: string[]; loras: string[]; textEncoders: string[]; vaes: string[] };
 
-export const DEFAULT_DESCRIBER = "qwen3vl_8b_int8_convrot.safetensors";
+export const DEFAULT_DESCRIBER = "qwen3vl_8b_fp8_scaled.safetensors";
 
 export const DEFAULT_MODEL = {
   model: "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
-  loras: [{ name: "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors", strength: 1 }],
-  steps: 6,
-  textEncoder: "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+  loras: [{ name: "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors", strength: 1 }],
+  steps: 8,
+  textEncoder: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
   videoVae: "minimax_h3_video_vae_int8_convrot.safetensors",
   audioVae: "minimax_h3_audio_vae_fp32.safetensors",
   acceleration: "none",
 } satisfies ModelSettings;
+
+// Old Openjutsu browser settings that refer to weights the fleet does not have.
+const FLEET_RENAMES: Record<string, string> = {
+  "qwen3vl_8b_int8_convrot.safetensors": DEFAULT_DESCRIBER,
+  "qwen3vl_32b_minimax_h3_int4_convrot.safetensors": DEFAULT_MODEL.textEncoder,
+  "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors": DEFAULT_MODEL.loras[0].name,
+};
+
+// Reads saved browser settings without breaking on the upstream model names.
+export function migrateFleetSettings<T extends ModelSettings>(settings: T): T {
+  const rename = (name?: string) => (name && FLEET_RENAMES[name]) || name;
+  const hadDmad = settings.loras.some((lora) => lora.name.includes("DMAD"));
+  return {
+    ...settings,
+    model: rename(settings.model) ?? settings.model,
+    loras: settings.loras.map((lora) => ({ ...lora, name: rename(lora.name) ?? lora.name })),
+    describer: rename(settings.describer) ?? settings.describer,
+    textEncoder: rename(settings.textEncoder) ?? settings.textEncoder,
+    steps: hadDmad && settings.steps === 6 ? DEFAULT_MODEL.steps : settings.steps,
+  } as T;
+}
 export const MAX_LORAS = 4;
 export const STEPS = { min: 1, max: 100 };
 export const STRENGTH = { min: -4, max: 4 };

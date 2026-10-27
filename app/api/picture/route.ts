@@ -6,6 +6,7 @@ import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, valida
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
 import { listModels } from "../../../lib/comfy.ts";
 import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
+import { researchModesEnabled } from "../../../lib/license.ts";
 
 export const runtime = "nodejs";
 const PREPARED = "OpenJutsu · prepared picture";
@@ -66,6 +67,7 @@ function failure(error: unknown) {
 let uploading = false;
 
 export async function POST(request: Request) {
+  if (!researchModesEnabled()) return Response.json({ error: "From picture is disabled: it uses the non-commercial FLUX 3 Klein model. Set KAFEIN_RESEARCH_MODES=1 only for internal research." }, { status: 403 });
   const denied = apiAccess(request);
   if (denied) return denied;
   if (uploading) return Response.json({ error: "Another picture request is in progress. Try again shortly." }, { status: 429 });

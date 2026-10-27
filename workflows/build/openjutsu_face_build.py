@@ -17,7 +17,7 @@ node("1", "VHS_LoadVideo", "Video to fix", video="", force_rate=24, custom_width
      skip_first_frames=0, select_every_nth=1, format="None")
 node("2", "LoadImage", "Picture 1", image="")
 node("3", "ImageScaleToMaxDimension", "Shrink for the describer", upscale_method="area", largest_size=768, image=["2", 0])
-node("4", "CLIPLoader", "Describer: Qwen3-VL 8B", clip_name="qwen3vl_8b_int8_convrot.safetensors", type="stable_diffusion", device="default")
+node("4", "CLIPLoader", "Describer: Qwen3-VL 8B", clip_name="qwen3vl_8b_fp8_scaled.safetensors", type="stable_diffusion", device="default")
 node("5", "TextGenerate", "Describe the face in picture 1",
      prompt="Describe this person's face for a casting sheet, in one sentence of about 30 words: apparent age and gender, face shape, skin tone, "
             "eyebrows, facial hair and any glasses. No preamble, no clothing, no background.",
@@ -36,9 +36,9 @@ node("11", "ImageBlur", "Blurred face (follow the mouth)", image=["6", 0], blur_
 node("12", "H3FaceChunks", "Face Fix Chunks", crops=["6", 0], masks=["9", 0], audio=["1", 2], transform=["6", 1], chunk_seconds=6.5,
      skip_faces_above=0.2, follow_mouth=["11", 0], picture_text=["5", 0])
 node("13", "UNETLoader", "H3 Diffusion Model", unet_name="minimax_h3_ref2va_pruned_int8_convrot.safetensors", weight_dtype="default")
-node("14", "LoraLoaderModelOnly", "DMAD LoRA", lora_name="minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors", strength_model=1, model=["13", 0])
+node("14", "LoraLoaderModelOnly", "DMAD LoRA", lora_name="minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors", strength_model=1, model=["13", 0])
 node("15", "ModelAttentionBackend", "Comfy Kitchen Attention", attention="comfy kitchen attention", model=["14", 0])
-node("16", "CLIPLoader", "H3 Text Encoder", clip_name="qwen3vl_32b_minimax_h3_int4_convrot.safetensors", type="minimax", device="default")
+node("16", "CLIPLoader", "H3 Text Encoder", clip_name="qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", type="minimax", device="default")
 node("17", "VAELoader", "Video VAE", vae_name="minimax_h3_video_vae_int8_convrot.safetensors")
 node("18", "VAELoader", "Audio VAE", vae_name="minimax_h3_audio_vae_fp32.safetensors")
 node("19", "MiniMaxH3FantasticVideoEditLatent", "Edit latent (face + audio)", grow=0, keep_audio=True, megapixels=0, vae=["17", 0],
@@ -51,7 +51,7 @@ node("21", "MiniMaxH3ReferenceToVideo", "Reference Conditioning", prompt=["12", 
 node("22", "BasicGuider", "Guider", model=["15", 0], conditioning=["21", 0])
 node("23", "KSamplerSelect", "Sampler", sampler_name="euler")
 node("24", "RandomNoise", "Seed", noise_seed=0)
-node("25", "BasicScheduler", "Schedule", scheduler="simple", steps=6, denoise=1, model=["15", 0])
+node("25", "BasicScheduler", "Schedule", scheduler="simple", steps=8, denoise=1, model=["15", 0])
 node("26", "SamplerCustomAdvanced", "Sample face", noise=["24", 0], guider=["22", 0], sampler=["23", 0], sigmas=["25", 0], latent_image=["20", 0])
 node("27", "VAEDecode", "Decode face", samples=["26", 0], vae=["17", 0])
 node("28", "H3FaceJoin", "Face Fix Join", images=["27", 0], plan=["12", 5], crops=["6", 0], transform=["6", 1])

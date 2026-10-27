@@ -12,7 +12,7 @@ export const DEFAULT_PICTURE_VIDEO: PictureVideoSettings = {
   renderer: "solar", solarRank: 384, ...solarLoraFiles(384),
   seconds: 6, resolution: "480p", motion: 0, seed: 0, steps: 4,
   model: DEFAULT_MODEL.model, useLoras: true, loras: DEFAULT_MODEL.loras.map((lora) => ({ ...lora, enabled: true })),
-  textEncoder: "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+  textEncoder: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
   videoVae: "minimax_h3_video_vae_int8_convrot.safetensors", audioVae: "minimax_h3_audio_vae_fp32.safetensors",
 };
 

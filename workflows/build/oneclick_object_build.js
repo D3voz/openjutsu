@@ -50,7 +50,7 @@ const note = add("MarkdownNote", "START HERE", [40, 60], {0:
 3. **Picture** (optional, change and background) - an outfit, hairstyle, product or place to copy. Bypass the Picture group to go without one.
 4. Press **Run**.
 
-Only the tracked area is regenerated (DMAD, 6 steps); everything else, the camera, cuts, motion and soundtrack are kept. The final MP4 lands in **output/h3_oneclick_edit/**.
+Only the tracked area is regenerated (KAFEIN 8-step LoRA); everything else, the camera, cuts, motion and soundtrack are kept. The final MP4 lands in **output/h3_oneclick_edit/**.
 
 **change:** with **keep_outline** on (default) the grey shape keeps the real face, hands and arm motion but also the old outline. To let the outline change (long hair to a bob, pants to a skirt), turn it off and delete the two Reference Conditioning ref video inputs (Openjutsu does this for you).
 **remove:** delete the two ref video inputs too; the grey shape would come back as a grey object.
@@ -79,7 +79,7 @@ const sx = 1460;
 group("SETTINGS", sx - 20, 0, 460, 1300, "#a1309b");
 const objPlan = add("H3ObjectSwapPlan", "Object Swap Plan (what to change)", [sx, 60], {mode: "change", target: "hair", change_to: "short bright pink hair", seed: 0, control_after_generate: "fixed"});
 objPlan.size = [420, 460];
-const qwen = add("CLIPLoader", "Describer: Qwen3-VL 8B", [sx, 800], {clip_name: "qwen3vl_8b_int8_convrot.safetensors", type: "stable_diffusion"});
+const qwen = add("CLIPLoader", "Describer: Qwen3-VL 8B", [sx, 800], {clip_name: "qwen3vl_8b_fp8_scaled.safetensors", type: "stable_diffusion"});
 qwen.size = [420, 110];
 link(video, "IMAGE", objPlan, "source_frames");
 link(pic, 0, objPlan, "picture_1");
@@ -90,10 +90,10 @@ link(qwen, 0, picText, "clip");
 const ex = 2000;
 group("ENGINE - no need to touch", ex - 20, 0, 2900, 1900, "#444");
 const unet = add("UNETLoader", "H3 Diffusion Model", [ex, 60], {unet_name: "minimax_h3_ref2va_pruned_int8_convrot.safetensors"});
-const lora = add("LoraLoaderModelOnly", "DMAD LoRA", [ex, 200], {lora_name: "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors", strength_model: 1.0});
+const lora = add("LoraLoaderModelOnly", "DMAD LoRA", [ex, 200], {lora_name: "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors", strength_model: 1.0});
 const attn = add("ModelAttentionBackend", "Comfy Kitchen Attention", [ex, 340], {0: "comfy kitchen attention"});
 const shift = add("MiniMaxH3SigmaShift", "Sigma Shift", [ex, 440], {0: 12, 1: 2});
-const te = add("CLIPLoader", "H3 Text Encoder", [ex, 560], {clip_name: "qwen3vl_32b_minimax_h3_int4_convrot.safetensors", type: "minimax"});
+const te = add("CLIPLoader", "H3 Text Encoder", [ex, 560], {clip_name: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", type: "minimax"});
 const vae = add("VAELoader", "Video VAE", [ex, 700], {vae_name: "minimax_h3_video_vae_int8_convrot.safetensors"});
 const avae = add("VAELoader", "Audio VAE", [ex, 800], {vae_name: "minimax_h3_audio_vae_fp32.safetensors"});
 const sampler = add("KSamplerSelect", "Sampler", [ex, 900], {sampler_name: "euler"});
@@ -107,7 +107,7 @@ link(sam, 1, samText, "clip");
 
 const lx = ex + 400;
 const profile = add("MiniMaxH3GenerationProfile", "Generation Profile", [lx, 60], {scene_continuity: "Hard picture + protected audio", audio_profile: "Generate audio"});
-const plan = add("MiniMaxH3ChainPlanModern", "Production Plan (filled by Object Swap Plan)", [lx, 220], {crop: "center", default_steps: 6, segment_crf: 16, run_name: ""});
+const plan = add("MiniMaxH3ChainPlanModern", "Production Plan (filled by Object Swap Plan)", [lx, 220], {crop: "center", default_steps: 8, segment_crf: 16, run_name: ""});
 plan.size = [360, 500];
 const timeline = add("MiniMaxH3SourceTimeline", "Source soundtrack", [lx, 760]);
 const start = add("MiniMaxH3ChainLoopStart", "Loop Start", [lx, 960]);

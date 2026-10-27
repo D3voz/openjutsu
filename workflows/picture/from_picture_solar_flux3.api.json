@@ -489,7 +489,7 @@
   "53": {
     "class_type": "CLIPLoader",
     "inputs": {
-      "clip_name": "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
       "type": "minimax",
       "device": "default"
     },

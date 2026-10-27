@@ -50,7 +50,7 @@ const note = add("MarkdownNote", "START HERE", [40, 60], {0:
 That's it. The graph then:
 - describes your pictures and the people in the video, and writes a shot list per clip (Qwen3-VL 8B, local),
 - splits the video into ~6 s clips that overlap by 39 frames,
-- tracks the main person with SAM 3.1 and regenerates only them (DMAD, 6 steps),
+- tracks the main person with SAM 3.1 and regenerates only them (KAFEIN 8-step LoRA),
 - joins the clips with the original audio.
 
 The final MP4 lands in **output/h3_oneclick_swap/**. Each clip is saved as it finishes, so a crash resumes where it stopped when you press Run again with the same inputs.
@@ -102,7 +102,7 @@ swapPlan.size = [420, 420];
 const bypass = add("Fast Groups Bypasser (rgthree)", "ON / OFF SWITCHES", [sx, 560]);
 Object.assign(bypass.properties, {matchTitle: "OPTIONAL", sort: "position"});
 bypass.size = [420, 160];
-const qwen = add("CLIPLoader", "Describer: Qwen3-VL 8B", [sx, 800], {clip_name: "qwen3vl_8b_int8_convrot.safetensors", type: "stable_diffusion"});
+const qwen = add("CLIPLoader", "Describer: Qwen3-VL 8B", [sx, 800], {clip_name: "qwen3vl_8b_fp8_scaled.safetensors", type: "stable_diffusion"});
 qwen.size = [420, 110];
 const qwenFree = add("Note", "", [sx, 960], {0: "The describer reads your pictures and the video once (about 40 s), then writes a shot list for every clip (about 20 s each)."});
 qwenFree.size = [420, 80];
@@ -117,10 +117,10 @@ for (const t of [...picTexts, people]) link(qwen, 0, t, "clip");
 const ex = 3100;
 group("ENGINE - no need to touch", ex - 20, 0, 2900, 1900, "#444");
 const unet = add("UNETLoader", "H3 Diffusion Model", [ex, 60], {unet_name: "minimax_h3_ref2va_pruned_int8_convrot.safetensors"});
-const lora = add("LoraLoaderModelOnly", "DMAD LoRA", [ex, 200], {lora_name: "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors", strength_model: 1.0});
+const lora = add("LoraLoaderModelOnly", "DMAD LoRA", [ex, 200], {lora_name: "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors", strength_model: 1.0});
 const attn = add("ModelAttentionBackend", "Comfy Kitchen Attention", [ex, 340], {0: "comfy kitchen attention"});
 const shift = add("MiniMaxH3SigmaShift", "Sigma Shift", [ex, 440], {0: 12, 1: 2});
-const te = add("CLIPLoader", "H3 Text Encoder", [ex, 560], {clip_name: "qwen3vl_32b_minimax_h3_int4_convrot.safetensors", type: "minimax"});
+const te = add("CLIPLoader", "H3 Text Encoder", [ex, 560], {clip_name: "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors", type: "minimax"});
 const vae = add("VAELoader", "Video VAE", [ex, 700], {vae_name: "minimax_h3_video_vae_int8_convrot.safetensors"});
 const avae = add("VAELoader", "Audio VAE", [ex, 800], {vae_name: "minimax_h3_audio_vae_fp32.safetensors"});
 const sampler = add("KSamplerSelect", "Sampler", [ex, 900], {sampler_name: "euler"});
@@ -134,7 +134,7 @@ link(sam, 1, samText, "clip");
 
 const lx = ex + 400;
 const profile = add("MiniMaxH3GenerationProfile", "Generation Profile", [lx, 60], {scene_continuity: "Hard picture + protected audio", audio_profile: "Generate audio"});
-const plan = add("MiniMaxH3ChainPlanModern", "Production Plan (filled by Swap Plan)", [lx, 220], {crop: "center", default_steps: 6, segment_crf: 16, run_name: ""});
+const plan = add("MiniMaxH3ChainPlanModern", "Production Plan (filled by Swap Plan)", [lx, 220], {crop: "center", default_steps: 8, segment_crf: 16, run_name: ""});
 plan.size = [360, 500];
 const timeline = add("MiniMaxH3SourceTimeline", "Source soundtrack", [lx, 760]);
 const start = add("MiniMaxH3ChainLoopStart", "Loop Start", [lx, 960]);

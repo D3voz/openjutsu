@@ -50,6 +50,8 @@ server.listen(0, "127.0.0.1"); await once(server, "listening");
 process.env.COMFYUI_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
 delete process.env.OPENJUTSU_PASSWORD;
 test.after(() => { server.closeAllConnections(); server.close(); });
+process.env.KAFEIN_RESEARCH_MODES = "1";
+
 const url = "http://127.0.0.1:3000/api/picture";
 function inputs() {
   const form = new FormData();

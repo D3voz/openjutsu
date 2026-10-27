@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { nodeByTitle } from "../lib/advanced.ts";
-import { DEFAULT_MODEL, applyModel, hasSpeedLora } from "../lib/model.ts";
+import { DEFAULT_DESCRIBER, DEFAULT_MODEL, applyModel, hasSpeedLora, migrateFleetSettings } from "../lib/model.ts";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
 
 const load = (name: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/${name}.api.json`, import.meta.url), "utf8"));
@@ -23,6 +23,30 @@ test("the default settings match the exports", () => {
     assert.deepEqual([lora.lora_name, lora.strength_model], [DEFAULT_MODEL.loras[0].name, DEFAULT_MODEL.loras[0].strength], name);
     assert.equal(plan(g).inputs.steps, DEFAULT_MODEL.steps, name);
   }
+});
+
+test("KAFEIN fleet defaults use the weights in S3, including the 8-step turbo LoRA", () => {
+  assert.equal(DEFAULT_MODEL.model, "minimax_h3_ref2va_pruned_int8_convrot.safetensors");
+  assert.equal(DEFAULT_MODEL.loras[0].name, "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors");
+  assert.equal(DEFAULT_MODEL.steps, 8);
+  assert.equal(DEFAULT_MODEL.textEncoder, "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors");
+  assert.equal(DEFAULT_DESCRIBER, "qwen3vl_8b_fp8_scaled.safetensors");
+});
+
+test("saved upstream settings migrate to the fleet profile without losing custom strengths", () => {
+  const old = {
+    ...DEFAULT_MODEL,
+    loras: [{ name: "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors", strength: 0.7 }],
+    steps: 6,
+    describer: "qwen3vl_8b_int8_convrot.safetensors",
+    textEncoder: "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+  };
+  const migrated = migrateFleetSettings(old);
+  assert.equal(migrated.loras[0].name, DEFAULT_MODEL.loras[0].name);
+  assert.equal(migrated.loras[0].strength, 0.7);
+  assert.equal(migrated.steps, 8);
+  assert.equal(migrated.describer, DEFAULT_DESCRIBER);
+  assert.equal(migrated.textEncoder, DEFAULT_MODEL.textEncoder);
 });
 
 test("two LoRAs chain from the base model into the sampler", () => {
