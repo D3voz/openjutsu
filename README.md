@@ -6,8 +6,6 @@ The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyor
 
 https://github.com/user-attachments/assets/2d8d763a-1764-49a6-9116-d6d1be661ff6
 
-**[Download the 2-minute demo](docs/media/openjutsu_demo.mp4?raw=true)** (MP4, 9.5 MB). Every person in it is AI-generated, including the people in the source videos.
-
 | Advanced: several people, pick who becomes who | Object swap: paint where it goes |
 | --- | --- |
 | ![Two people swapped, each from their own photo](docs/media/advanced_swap.jpg) | ![Sunglasses painted onto a person's eyes](docs/media/object_swap.jpg) |
