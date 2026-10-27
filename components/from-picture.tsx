@@ -152,6 +152,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         <h2><span>2</span> Prepare the first frame</h2>
         <p className="hint">Image 1 supplies the character and background. Image 2 supplies the pose and body cut.</p>
         <p className="hint">Missing the FLUX model files? <a href="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy" target="_blank" rel="noopener noreferrer">Download FLUX 3 Image Klein files</a>.</p>
+        <p className="hint"><strong>Prompt upsampler required.</strong> This workflow needs the <a href="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/main/text_encoders/qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors" target="_blank" rel="noopener noreferrer">Qwen3.5 9B FLUX prompt upsampler</a> to expand the edit prompt before image generation. Download it into <code>ComfyUI/models/text_encoders</code>.</p>
         <label>FLUX edit prompt<textarea className="report" rows={6} value={prompt} disabled={busy} onChange={(event) => { invalidate(); setPrompt(event.target.value); }} /></label>
         <label>Seed<input className="target-input" type="number" min={0} max={MAX_SEED} step={1} value={seed} disabled={busy} onChange={(event) => { invalidate(); setSeed(Number(event.target.value)); }} /></label>
         <button className="primary" disabled={busy || !video || !picture || !size} onClick={() => prepare(seed)}>Generate preview image</button>
