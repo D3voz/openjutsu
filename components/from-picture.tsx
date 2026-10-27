@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MAX_SEED } from "../lib/simple.ts";
+import { canvasSize, CUSTOM_SIZE, MAX_SEED, MOTION_SIZES, RESOLUTIONS } from "../lib/simple.ts";
+import { MAX_LORAS, STEPS, STRENGTH } from "../lib/model.ts";
+import { DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureFrames, type PictureVideoSettings } from "../lib/picture.ts";
 
 const PROMPT = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
 const STORAGE = "openjutsu.picture-preview";
+const VIDEO_STORAGE = "openjutsu.picture-video-settings";
 type Job = { id: string; stage: "prepare" | "render" };
 
 export function FromPicture({ initialVideo, initialPicture, start: initialStart = 0 }: { initialVideo?: File; initialPicture?: File; start?: number }) {
@@ -19,6 +22,11 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const [job, setJob] = useState<Job | null>(null);
   const [prepared, setPrepared] = useState("");
   const [preview, setPreview] = useState<{ url: string; frame: string } | null>(null);
+  const [approved, setApproved] = useState(false);
+  const [settings, setSettings] = useState<PictureVideoSettings>(() => structuredClone(DEFAULT_PICTURE_VIDEO));
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [files, setFiles] = useState<{ models: string[]; loras: string[]; textEncoders: string[]; vaes: string[] }>({ models: [], loras: [], textEncoders: [], vaes: [] });
+  const [modelError, setModelError] = useState("");
   const [result, setResult] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -28,6 +36,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE) ?? "null");
       if (typeof saved?.prepared === "string") setPrepared(saved.prepared);
+      setApproved(saved?.approved === true || saved?.job?.stage === "render");
       if (typeof saved?.job?.id === "string" && ["prepare", "render"].includes(saved.job.stage)) {
         setJob(saved.job);
         if (saved.job.stage === "render" && saved.prepared) {
@@ -37,7 +46,17 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       }
       else if (typeof saved?.prepared === "string" && saved.prepared) setJob({ id: saved.prepared, stage: "prepare" });
     } catch {}
+    try { setSettings(parsePictureVideoSettings(JSON.parse(localStorage.getItem(VIDEO_STORAGE) ?? "{}"))); } catch {}
+    setSettingsLoaded(true);
+    fetch("/api/models").then(async (response) => {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      setFiles({ models: data.models ?? [], loras: data.loras ?? [], textEncoders: data.textEncoders ?? [], vaes: data.vaes ?? [] });
+    }).catch((error) => setModelError(error.message));
   }, []);
+  useEffect(() => {
+    if (settingsLoaded) try { localStorage.setItem(VIDEO_STORAGE, JSON.stringify(settings)); } catch {}
+  }, [settings, settingsLoaded]);
   useEffect(() => {
     if (!video) return;
     const url = URL.createObjectURL(video); setVideoUrl(url); setSize(null);
@@ -49,8 +68,8 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     return () => URL.revokeObjectURL(url);
   }, [picture]);
 
-  function remember(next: Job | null, image: string) {
-    try { localStorage.setItem(STORAGE, JSON.stringify({ job: next, prepared: image })); } catch {}
+  function remember(next: Job | null, image: string, accepted: boolean) {
+    try { localStorage.setItem(STORAGE, JSON.stringify({ job: next, prepared: image, approved: accepted })); } catch {}
   }
   useEffect(() => {
     if (!job) return;
@@ -62,15 +81,15 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         const data = await response.json();
         if (!response.ok) {
           setError(data.error ?? "Could not read the job.");
-          if ([400, 404, 422].includes(response.status)) { setJob(null); remember(null, prepared); }
+          if ([400, 404, 422].includes(response.status)) { setJob(null); remember(null, prepared, job!.stage === "render"); }
           else timer = setTimeout(poll, 5000);
           return;
         }
         setError("");
         if (data.status !== "ready") { timer = setTimeout(poll, 2000); return; }
         if (job!.stage === "prepare") {
-          setPrepared(job!.id); setPreview({ url: data.url, frame: data.frame }); remember(null, job!.id);
-        } else { setResult(data.url); remember(job, prepared); }
+          setPrepared(job!.id); setPreview({ url: data.url, frame: data.frame }); setSize([data.width, data.height]); remember(null, job!.id, approved);
+        } else { setResult(data.url); remember(job, prepared, true); }
         setJob(null);
       } catch {
         if (!controller.signal.aborted) { setError("Connection interrupted. Retrying…"); timer = setTimeout(poll, 5000); }
@@ -81,7 +100,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   }, [job, prepared]);
 
   function invalidate() {
-    setPrepared(""); setPreview(null); setResult(""); setError(""); remember(null, "");
+    setPrepared(""); setPreview(null); setApproved(false); setResult(""); setError(""); remember(null, "", false);
   }
   async function prepare(nextSeed: number) {
     if (!video || !picture || !size) return;
@@ -93,25 +112,33 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       const response = await fetch("/api/picture", { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      const next: Job = { id: data.id, stage: "prepare" }; remember(next, ""); setJob(next);
+      const next: Job = { id: data.id, stage: "prepare" }; remember(next, "", false); setJob(next);
     } catch (error) { setError((error as Error).message); }
     finally { setSubmitting(false); }
   }
   async function render() {
-    if (!prepared || !preview) return;
+    if (!prepared || !preview || !approved) return;
     setSubmitting(true); setError(""); setResult("");
     try {
-      const response = await fetch("/api/picture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared }) });
+      const response = await fetch("/api/picture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      const next: Job = { id: data.id, stage: "render" }; remember(next, prepared); setJob(next);
+      const next: Job = { id: data.id, stage: "render" }; remember(next, prepared, true); setJob(next);
     } catch (error) { setError((error as Error).message); }
     finally { setSubmitting(false); }
   }
 
+  function picker(label: string, value: string, options: string[], onChange: (value: string) => void) {
+    return <label><span>{label}</span>{options.length
+      ? <select className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{[...new Set([value, ...options])].map((name) => <option key={name} value={name}>{name || "Choose a file"}</option>)}</select>
+      : <input className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />}</label>;
+  }
+  const canvas = typeof settings.resolution === "string" ? canvasSize(size?.[0] ?? 768, size?.[1] ?? 1376, settings.resolution) : [settings.resolution.width, settings.resolution.height];
+  const frames = pictureFrames(settings.seconds);
+
   return <div className="picture-pipeline">
     <p className="hint">Prepare the character in the video's starting pose with FLUX. Review the image first, then render its motion while keeping the picture's background.</p>
-    <div className="inputs">
+    {!approved && <div className="inputs">
       <section className="panel">
         <h2><span>1</span> Character and source video</h2>
         <label>Source video<input type="file" accept="video/*,.mkv" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setVideo(file); setStart(0); } }} /></label>
@@ -119,7 +146,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         <label>Character picture · image 1<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setPicture(file); } }} /></label>
         {pictureUrl && <img className="picture-reference" src={pictureUrl} alt="Character and background reference" />}
         <label>Start at (seconds)<input className="target-input" type="number" min={0} step={0.1} value={start} disabled={busy} onChange={(event) => { invalidate(); setStart(Number(event.target.value)); }} /></label>
-        <small>The raw frame at this time is image 2. Video test: one 5.875-second clip from here, at a 480 px short edge.</small>
+        <small>The raw frame at this time is image 2. Choose the video length and render settings after reviewing the prepared image.</small>
       </section>
       <section className="panel">
         <h2><span>2</span> Prepare the first frame</h2>
@@ -127,12 +154,12 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         <label>FLUX edit prompt<textarea className="report" rows={6} value={prompt} disabled={busy} onChange={(event) => { invalidate(); setPrompt(event.target.value); }} /></label>
         <label>Seed<input className="target-input" type="number" min={0} max={MAX_SEED} step={1} value={seed} disabled={busy} onChange={(event) => { invalidate(); setSeed(Number(event.target.value)); }} /></label>
         <button className="primary" disabled={busy || !video || !picture || !size} onClick={() => prepare(seed)}>Generate preview image</button>
-        <p className="hint">This step only generates an image. Video rendering starts when you choose to use the preview.</p>
+        <p className="hint">This step only generates an image. After reviewing it, choose the video settings and press Render video.</p>
       </section>
-    </div>
+    </div>}
     {busy && <p role="status">{submitting ? "Submitting…" : job?.stage === "prepare" ? "FLUX is preparing the image…" : "Generating normals and rendering the video…"}</p>}
     {error && <p className="error" role="alert">{error}</p>}
-    {preview && <section className="panel">
+    {preview && !approved && <section className="panel">
       <h2><span>3</span> Review before rendering</h2>
       <div className="inputs picture-comparison">
         <figure><figcaption>Source frame · image 2</figcaption><img src={preview.frame} alt="Raw source video frame used for pose and body cut" /></figure>
@@ -142,8 +169,45 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       <div className="row">
         <a href={preview.url} download="prepared-frame.png">Download image</a>
         <button className="secondary" disabled={busy || !video || !picture || !size} onClick={() => prepare((seed + 1) % (MAX_SEED + 1))}>Generate another image</button>
-        <button className="primary" disabled={busy} onClick={render}>Use this image · render video</button>
+        <button className="primary" disabled={busy} onClick={() => { setApproved(true); remember(null, prepared, true); }}>Use this image</button>
       </div>
+    </section>}
+    {preview && approved && <section className="panel">
+      <h2><span>4</span> Video render settings</h2>
+      <div className="row"><img className="picture-reference" src={preview.url} alt="Approved FLUX image for the video" style={{ width: 120, maxHeight: 180 }} /><button className="secondary" disabled={busy} onClick={() => { setApproved(false); remember(null, prepared, false); }}>Back to image review</button></div>
+      <p className="hint">One clip, up to 15 seconds. No context loop. The approved image is reused without running FLUX again.</p>
+      {modelError && <p className="error" role="alert">{modelError}</p>}
+      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+        <div className="inputs">
+          <div className="panel">
+            <label>Video length (seconds)<input className="steps-input" type="number" min={5 / 24} max={15} step={0.1} value={settings.seconds} onChange={(event) => setSettings({ ...settings, seconds: Number(event.target.value) })} /></label>
+            <small>H3 rounds down to a valid clip length: {frames} frames / {(frames / 24).toFixed(3)} s at 24 fps.</small>
+            <label>Video resolution<select className="file-name" value={typeof settings.resolution === "string" ? settings.resolution : "custom"} onChange={(event) => setSettings({ ...settings, resolution: event.target.value === "custom" ? { width: canvas[0], height: canvas[1] } : event.target.value as PictureVideoSettings["resolution"] })}>{RESOLUTIONS.map((value) => <option key={value}>{value}</option>)}<option value="custom">Custom</option></select></label>
+            {typeof settings.resolution === "object" && <div className="row">{(["width", "height"] as const).map((side) => <label key={side}>Custom {side}<input className="steps-input" type="number" min={CUSTOM_SIZE.min} max={CUSTOM_SIZE.max} step={CUSTOM_SIZE.step} value={typeof settings.resolution === "object" ? settings.resolution[side] : 0} onChange={(event) => setSettings({ ...settings, resolution: { width: canvas[0], height: canvas[1], [side]: Number(event.target.value) } })} /></label>)}</div>}
+            <small>Video canvas: {canvas[0]}×{canvas[1]}.</small>
+            <label>Motion reference resolution<select className="file-name" value={settings.motion} onChange={(event) => setSettings({ ...settings, motion: Number(event.target.value) as PictureVideoSettings["motion"] })}><option value={0}>Match video</option>{MOTION_SIZES.map((value) => <option key={value} value={value}>{value} px</option>)}</select></label>
+            <small>The motion/mask resolution control uses a normal-map guide here. Its size is separate from the output video.</small>
+            <label>Video seed<input className="steps-input" type="number" min={0} max={MAX_SEED} step={1} value={settings.seed} onChange={(event) => setSettings({ ...settings, seed: Number(event.target.value) })} /></label>
+            <label>Steps<input className="steps-input" type="number" min={STEPS.min} max={STEPS.max} value={settings.steps} onChange={(event) => setSettings({ ...settings, steps: Number(event.target.value) })} /></label>
+            <small>Use 6 with DMAD; without a speed LoRA, use 20 or more.</small>
+          </div>
+          <div className="panel">
+            <p className="hint">Choose models and VAEs compatible with MiniMax H3.</p>
+            {picker("Base model", settings.model, files.models, (model) => setSettings({ ...settings, model }))}
+            {picker("H3 text encoder", settings.textEncoder, files.textEncoders, (textEncoder) => setSettings({ ...settings, textEncoder }))}
+            {picker("Video VAE", settings.videoVae, files.vaes, (videoVae) => setSettings({ ...settings, videoVae }))}
+            {picker("Audio VAE", settings.audioVae, files.vaes, (audioVae) => setSettings({ ...settings, audioVae }))}
+            <label className="setting toggle"><span>Use LoRAs</span><input type="checkbox" checked={settings.useLoras} onChange={(event) => setSettings({ ...settings, useLoras: event.target.checked })} /><i /></label>
+            {settings.useLoras && <>{settings.loras.map((lora, index) => <div className="panel" key={index}>
+              {picker(`LoRA ${index + 1}`, lora.name, files.loras, (name) => setSettings({ ...settings, loras: settings.loras.map((item, i) => i === index ? { ...item, name } : item) }))}
+              <label>LoRA {index + 1} strength<input className="steps-input" type="number" min={STRENGTH.min} max={STRENGTH.max} step={0.05} value={lora.strength} onChange={(event) => setSettings({ ...settings, loras: settings.loras.map((item, i) => i === index ? { ...item, strength: Number(event.target.value) } : item) })} /></label>
+              <label className="setting toggle"><span>Use LoRA {index + 1}</span><input type="checkbox" checked={lora.enabled} onChange={(event) => setSettings({ ...settings, loras: settings.loras.map((item, i) => i === index ? { ...item, enabled: event.target.checked } : item) })} /><i /></label>
+              <button className="secondary" onClick={() => setSettings({ ...settings, loras: settings.loras.filter((_, i) => i !== index) })}>Remove LoRA {index + 1}</button>
+            </div>)}<button className="secondary" disabled={settings.loras.length >= MAX_LORAS} onClick={() => setSettings({ ...settings, loras: [...settings.loras, { name: files.loras[0] ?? "", strength: 1, enabled: true }] })}>Add LoRA</button></>}
+          </div>
+        </div>
+      </fieldset>
+      <button className="primary" disabled={busy} onClick={render}>Render video</button>
     </section>}
     {result && <section className="panel"><h2>Video result</h2><video src={result} controls /><a href={result} download="picture-motion.mp4">Download video</a></section>}
   </div>;

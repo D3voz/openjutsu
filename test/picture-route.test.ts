@@ -5,6 +5,7 @@ import type { AddressInfo } from "node:net";
 import test from "node:test";
 import { GET, POST } from "../app/api/picture/route.ts";
 import type { ApiGraph } from "../lib/simple.ts";
+import { DEFAULT_PICTURE_VIDEO } from "../lib/picture.ts";
 
 let calls = 0, uploads = 0;
 const prompts: ApiGraph[] = [];
@@ -20,7 +21,16 @@ const server = createServer(async (request, response) => {
     response.end("test"); return;
   }
   let data: unknown;
-  if (request.url === "/upload/image") {
+  if (request.url?.startsWith("/object_info/")) {
+    const node = request.url.split("/").pop()!;
+    const inputs = {
+      UNETLoader: { unet_name: [[DEFAULT_PICTURE_VIDEO.model, "another_h3.safetensors"]] },
+      LoraLoaderModelOnly: { lora_name: [[DEFAULT_PICTURE_VIDEO.loras[0].name, "style.safetensors"]] },
+      CLIPLoader: { clip_name: [[DEFAULT_PICTURE_VIDEO.textEncoder, "another_encoder.safetensors"]] },
+      VAELoader: { vae_name: [[DEFAULT_PICTURE_VIDEO.videoVae, DEFAULT_PICTURE_VIDEO.audioVae, "another_vae.safetensors"]] },
+    };
+    data = { [node]: { input: { required: inputs[node as keyof typeof inputs] } } };
+  } else if (request.url === "/upload/image") {
     for await (const _ of request) {}
     data = { name: `uploaded-${++uploads}.png`, subfolder: "picture" };
   } else if (request.url === "/prompt") {
@@ -47,8 +57,8 @@ function inputs() {
   form.set("width", "1280"); form.set("height", "720"); form.set("start", "2.5"); form.set("seed", "42");
   return form;
 }
-function render(prepared: string) {
-  return POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, filename: "untrusted.png", prompt: { untrusted: true } }) }));
+function render(prepared: string, settings?: unknown) {
+  return POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings, filename: "untrusted.png", prompt: { untrusted: true } }) }));
 }
 function completed() {
   return { prompt: [0, "picture-1", prompts[0]], status: { status_str: "success", completed: true }, outputs: {
@@ -119,6 +129,31 @@ test("render rejects unfinished, unrelated and failed histories instead of accep
   assert.equal((await render("picture-1")).status, 404);
   history = { "picture-1": { ...completed(), status: { status_str: "error" } } };
   assert.equal((await render("picture-1")).status, 422); assert.equal(prompts.length, count);
+});
+
+test("render applies selected length, independent guide resolution, model components, LoRAs and steps", async () => {
+  history = { "picture-1": completed() };
+  const response = await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, seconds: 15, resolution: { width: 640, height: 960 }, motion: 512,
+    model: "another_h3.safetensors", steps: 12, seed: 99, textEncoder: "another_encoder.safetensors", videoVae: "another_vae.safetensors",
+    loras: [{ name: "style.safetensors", strength: 0.6, enabled: true }, { name: "unused.safetensors", strength: 1, enabled: false }] });
+  assert.equal(response.status, 202);
+  const graph = prompts.at(-1)!;
+  assert.equal(graph["1"].inputs.frame_load_cap, 345); assert.equal(graph["56"].inputs.length, 345);
+  assert.equal(graph["56"].inputs.width, 640); assert.equal(graph["56"].inputs.height, 960);
+  assert.equal(graph["33"].inputs.width, 352); assert.equal(graph["33"].inputs.height, 512);
+  assert.equal(graph["50"].inputs.unet_name, "another_h3.safetensors"); assert.equal(graph["60"].inputs.steps, 12);
+  assert.equal(graph["53"].inputs.clip_name, "another_encoder.safetensors"); assert.equal(graph["54"].inputs.vae_name, "another_vae.safetensors");
+  assert.equal(graph["picture_lora_0"].inputs.strength_model, 0.6); assert.ok(!graph["picture_lora_1"]);
+  assert.equal(graph["58"].inputs.noise_seed, 99);
+  assert.ok(!Object.values(graph).some((node) => /Chain|Loop/.test(node.class_type)));
+});
+
+test("invalid render settings are rejected before submitting or copying the prepared image", async () => {
+  const count = prompts.length, copied = uploads;
+  for (const settings of [{ seconds: 16 }, { seconds: 0 }, { steps: 0 }, { model: "missing.safetensors" }, { textEncoder: "missing.safetensors" }, { motion: 999 }]) {
+    assert.equal((await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, ...settings })).status, 400);
+  }
+  assert.equal(prompts.length, count); assert.equal(uploads, copied);
 });
 
 test("video media supports seeking and submission errors identify missing models", async () => {

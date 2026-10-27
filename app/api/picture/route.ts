@@ -4,6 +4,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
+import { listModels } from "../../../lib/comfy.ts";
+import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, type PictureVideoSettings } from "../../../lib/picture.ts";
 
 export const runtime = "nodejs";
 const PREPARED = "OpenJutsu · prepared picture";
@@ -78,14 +80,24 @@ export async function POST(request: Request) {
       const file = item?.outputs?.["21"]?.images?.[0];
       const source = item?.prompt?.[2];
       if (!file || !source || source["21"]?._meta?.title !== PREPARED || source["1"]?.class_type !== "VHS_LoadVideo") throw new HttpError(409, "The prepared picture is not ready. Generate it first.");
+      let settings: PictureVideoSettings;
+      try { settings = parsePictureVideoSettings(body.settings ?? { ...DEFAULT_PICTURE_VIDEO, seed: source["19"].inputs.seed }); }
+      catch (error) { throw new HttpError(400, (error as Error).message); }
+      const available = await listModels();
+      if (!available.models.includes(settings.model)) throw new HttpError(400, "Choose a video model ComfyUI has.");
+      if (settings.useLoras && settings.loras.some((lora) => lora.enabled && !available.loras.includes(lora.name))) throw new HttpError(400, "Choose LoRAs ComfyUI has.");
+      const [clipInfo, vaeInfo] = await Promise.all([comfy("/object_info/CLIPLoader").then((response) => response.json()), comfy("/object_info/VAELoader").then((response) => response.json())]);
+      for (const [name, choices, label] of [
+        [settings.textEncoder, clipInfo.CLIPLoader.input.required.clip_name[0], "H3 text encoder"],
+        [settings.videoVae, vaeInfo.VAELoader.input.required.vae_name[0], "video VAE"],
+        [settings.audioVae, vaeInfo.VAELoader.input.required.vae_name[0], "audio VAE"],
+      ] as const) if (!choices.includes(name)) throw new HttpError(400, `Choose a ${label} ComfyUI has.`);
       const picture = await (await comfy(view(file))).blob();
       graph = await template("motion");
       graph["20"] = { class_type: "LoadImage", inputs: { image: await uploadFile(picture, ".png") } };
       graph["1"].inputs.video = source["1"].inputs.video;
       graph["1"].inputs.skip_first_frames = source["1"].inputs.skip_first_frames;
-      const [width, height] = canvasSize(Number(source["3"].inputs.width), Number(source["3"].inputs.height), "480p");
-      for (const id of ["33", "56"]) Object.assign(graph[id].inputs, { width, height });
-      graph["58"].inputs.noise_seed = source["19"].inputs.seed;
+      applyPictureVideoSettings(graph, settings, Number(source["3"].inputs.width), Number(source["3"].inputs.height));
       graph["63"]._meta = { title: RENDERED };
       const keep = new Set<string>();
       function visit(id: string) {
@@ -145,7 +157,7 @@ export async function GET(request: Request) {
     const file = isVideo ? output?.gifs?.[0] : output?.images?.[0];
     if (!file) throw new HttpError(422, "ComfyUI returned no result. Check its console.");
     const base = `/api/picture?id=${encodeURIComponent(id)}`;
-    if (!media) return Response.json({ status: "ready", url: `${base}&media=result`, ...(!isVideo ? { frame: `${base}&media=frame` } : {}) });
+    if (!media) return Response.json({ status: "ready", url: `${base}&media=result`, ...(!isVideo ? { frame: `${base}&media=frame`, width: item.prompt![2]["3"].inputs.width, height: item.prompt![2]["3"].inputs.height } : {}) });
     const response = await comfy(view(file), { headers: request.headers.has("Range") ? { Range: request.headers.get("Range")! } : {} });
     return new Response(response.body, { status: response.status, headers: {
       "Content-Type": isVideo ? "video/mp4" : "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",

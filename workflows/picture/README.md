@@ -2,7 +2,7 @@
 
 These are ComfyUI API-format workflows. Drop a JSON file onto ComfyUI, or use **File → Open**.
 
-The app uses them under **Object swap → From picture**. Choose the video and character picture, then **Generate preview image**. Compare the FLUX image with the raw frame, adjust the prompt or generate another image if needed, and click **Use this image · render video** when ready. Previewing never starts H3 automatically. The video stage loads the saved preview image and does not rerun FLUX. Both stages use `COMFYUI_URL` directly; comfy-api-proxy is not required for this tab. Pending jobs and the selected preview resume when returning to the tab or refreshing the page.
+The app uses them under **Object swap → From picture**. Choose the video and character picture, then **Generate preview image**. Compare the FLUX image with the raw frame, adjust the prompt or generate another image if needed, and click **Use this image** when ready. Set the video length, video resolution, motion-reference resolution, models, LoRAs, steps and seed, then click **Render video**. Previewing never starts H3 automatically. The video stage loads the saved preview image and does not rerun FLUX. Both stages use `COMFYUI_URL` directly; comfy-api-proxy is not required for this tab. Pending jobs and the selected preview resume when returning to the tab or refreshing the page.
 
 | Workflow | Result |
 | --- | --- |
@@ -21,9 +21,9 @@ The image-aware prompt upsampler sees both references and expands that request i
 
 Preparation defaults to a 768×1376 canvas and saves under `ComfyUI/output/openjutsu_picture/flux3/prepared_frame_*.png`. Compare the prepared picture against the raw first-frame preview before using it for video; a successful execution does not guarantee that the requested pose was followed.
 
-The **motion** variants wire the decoded prepared picture directly into H3. No manual re-upload is needed. They default to **141 frames / 5.875 seconds at 24 fps**, 480×864, six DMAD steps, and the original soundtrack (or silence if absent). They are single-clip workflows; they do not process a whole longer video or add context-loop continuation. Change `frame_load_cap` and H3's `length` together to select another valid H3 clip length.
+The **motion** variants wire the decoded prepared picture directly into H3. No manual re-upload is needed. They default to **141 frames / 5.875 seconds at 24 fps**, 480×864, six DMAD steps, and the original soundtrack (or silence if absent). The app lets you select up to 15 seconds, with no context loop. It rounds down to the H3 17k+5 frame grid: 6 seconds becomes 141 frames / 5.875 seconds; 15 seconds becomes 345 frames / 14.375 seconds. The duration shown in the settings is the actual render length. Models, LoRAs (including individual switches and strengths), H3 text encoder, VAEs, steps and seed can be changed before rendering. These settings persist across refreshes. Change `frame_load_cap` and H3's `length` together to select another valid H3 clip length.
 
-Normals are resized directly to the H3 output canvas. If changing that canvas, change both **Normals match the output canvas** and **Prepared picture + normal motion reference**. Normals are soft reference-video conditioning, not a trained normal ControlNet. The VRAM cleanup node runs after the image edit and before Metric3D to make room for its model.
+By default normals match the H3 output canvas. The app also offers independent 512, 768 and 1376 px motion-reference sizes, rounded to multiples of 32; native H3 can cap large reference canvases. This is the motion/mask resolution control for this mode; no SAM edit mask is used. If changing that canvas, change both **Normals match the output canvas** and **Prepared picture + normal motion reference**. Normals are soft reference-video conditioning, not a trained normal ControlNet. The VRAM cleanup node runs after the image edit and before Metric3D to make room for its model.
 
 Required installed models are selected in the loader nodes. Defaults match this installation:
 
