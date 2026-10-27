@@ -6,7 +6,7 @@ The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyor
 
 [![Simple motion transfer: the swapped character next to the original](docs/media/simple_swap.jpg)](docs/media/openjutsu_demo.mp4)
 
-**[Watch the 2-minute demo](docs/media/openjutsu_demo.mp4)** (MP4, 58 MB). Every person in it is AI-generated, including the people in the source videos.
+**[Watch the 2-minute demo](docs/media/openjutsu_demo.mp4)** (MP4, 9.5 MB). Every person in it is AI-generated, including the people in the source videos.
 
 | Advanced: several people, pick who becomes who | Object swap: paint where it goes |
 | --- | --- |
