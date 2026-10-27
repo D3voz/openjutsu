@@ -4,6 +4,16 @@ An open-source, Genjutsu-style character and object swap for video. Drop a video
 
 The app is a small Next.js front end over a ComfyUI workflow. It uses [`@comfyorg/sdk`](https://www.npmjs.com/package/@comfyorg/sdk), following Comfy's [comfy-reshoot](https://github.com/Comfy-Org/comfy-reshoot) reference app.
 
+[![Simple motion transfer: the swapped character next to the original](docs/media/simple_swap.jpg)](docs/media/openjutsu_demo.mp4)
+
+**[Watch the 2-minute demo](docs/media/openjutsu_demo.mp4)** (MP4, 58 MB). Every person in it is AI-generated, including the people in the source videos.
+
+| Advanced: several people, pick who becomes who | Object swap: paint where it goes |
+| --- | --- |
+| ![Two people swapped, each from their own photo](docs/media/advanced_swap.jpg) | ![Sunglasses painted onto a person's eyes](docs/media/object_swap.jpg) |
+| **From picture: a new look and place from one picture** | **Post-processing: fix faces** |
+| ![A video frame and a picture combined into a posed picture, then a video](docs/media/from_picture.jpg) | ![A small face redrawn at close-up size](docs/media/fix_faces.jpg) |
+
 ## First visit: visual describer
 
 The welcome page lets you choose the vision-language model that describes pictures and video frames and writes prompts. Qwen3-VL 8B INT8 remains the default; Qwen3-VL 4B FP8 and Gemma 4 E2B INT8 are smaller alternatives. Install a compatible single-file model including its vision weights in `ComfyUI/models/text_encoders`, then press **Refresh models**. Other installed models can be selected if they support image/video input and text generation through ComfyUI's CLIPLoader and Generate Text nodes. Text-only models and files requiring a different loader are unsuitable.
