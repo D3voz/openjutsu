@@ -42,7 +42,7 @@ test("the motion workflow consumes the prepared picture directly and resizes nor
 });
 
 test("picture pipelines have valid links and no disconnected processing nodes", () => {
-  for (const stage of ["prepare", "motion"]) {
+  for (const stage of ["prepare", "motion", "solar"]) {
     const graph = load(stage);
     const reached = new Set<string>();
     function visit(id: string) {

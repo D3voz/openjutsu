@@ -10,7 +10,7 @@ import { DEFAULT_PICTURE_VIDEO } from "../lib/picture.ts";
 let calls = 0, uploads = 0;
 const prompts: ApiGraph[] = [];
 let history: Record<string, unknown> = {};
-let queued = false, rejectPrompt = false;
+let queued = false, rejectPrompt = false, solarInstalled = true;
 let range: string | undefined;
 let viewed = "";
 const server = createServer(async (request, response) => {
@@ -25,11 +25,12 @@ const server = createServer(async (request, response) => {
     const node = request.url.split("/").pop()!;
     const inputs = {
       UNETLoader: { unet_name: [[DEFAULT_PICTURE_VIDEO.model, "another_h3.safetensors"]] },
-      LoraLoaderModelOnly: { lora_name: [[DEFAULT_PICTURE_VIDEO.loras[0].name, "style.safetensors"]] },
+      LoraLoaderModelOnly: { lora_name: [[DEFAULT_PICTURE_VIDEO.loras[0].name, "style.safetensors", "solarrenderer_4step_lora.safetensors", "solarrenderer_control_lora.safetensors", "solar\\solarrenderer_4step_lora_rank64.safetensors", "solar\\solarrenderer_control_lora_rank64.safetensors"]] },
       CLIPLoader: { clip_name: [[DEFAULT_PICTURE_VIDEO.textEncoder, "another_encoder.safetensors"]] },
       VAELoader: { vae_name: [[DEFAULT_PICTURE_VIDEO.videoVae, DEFAULT_PICTURE_VIDEO.audioVae, "another_vae.safetensors"]] },
     };
-    data = { [node]: { input: { required: inputs[node as keyof typeof inputs] } } };
+    if (node === "SolarRendererLoraLoader" && !solarInstalled) data = {};
+    else data = { [node]: { input: { required: inputs[node as keyof typeof inputs] } } };
   } else if (request.url === "/upload/image") {
     for await (const _ of request) {}
     data = { name: `uploaded-${++uploads}.png`, subfolder: "picture" };
@@ -58,7 +59,7 @@ function inputs() {
   return form;
 }
 function render(prepared: string, settings?: unknown) {
-  return POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings, filename: "untrusted.png", prompt: { untrusted: true } }) }));
+  return POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings: settings ?? { ...DEFAULT_PICTURE_VIDEO, renderer: "h3", steps: 6, seed: 42 }, filename: "untrusted.png", prompt: { untrusted: true } }) }));
 }
 function completed() {
   return { prompt: [0, "picture-1", prompts[0]], status: { status_str: "success", completed: true }, outputs: {
@@ -133,7 +134,7 @@ test("render rejects unfinished, unrelated and failed histories instead of accep
 
 test("render applies selected length, independent guide resolution, model components, LoRAs and steps", async () => {
   history = { "picture-1": completed() };
-  const response = await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, seconds: 15, resolution: { width: 640, height: 960 }, motion: 512,
+  const response = await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, renderer: "h3", seconds: 15, resolution: { width: 640, height: 960 }, motion: 512,
     model: "another_h3.safetensors", steps: 12, seed: 99, textEncoder: "another_encoder.safetensors", videoVae: "another_vae.safetensors",
     loras: [{ name: "style.safetensors", strength: 0.6, enabled: true }, { name: "unused.safetensors", strength: 1, enabled: false }] });
   assert.equal(response.status, 202);
@@ -154,6 +155,41 @@ test("invalid render settings are rejected before submitting or copying the prep
     assert.equal((await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, ...settings })).status, 400);
   }
   assert.equal(prompts.length, count); assert.equal(uploads, copied);
+});
+
+test("SolarRenderer submits the saved preview with the chosen pair from root or nested folders", async () => {
+  history = { "picture-1": completed() };
+  for (const solarRank of [384, 64]) {
+    const suffix = solarRank === 64 ? "_rank64" : "";
+    const seconds = solarRank === 384 ? 9 : 15;
+    const response = await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, solarRank, seconds,
+      solarFourStep: `solarrenderer_4step_lora${suffix}.safetensors`, solarControl: `solarrenderer_control_lora${suffix}.safetensors` });
+    assert.equal(response.status, 202);
+    const graph = prompts.at(-1)!;
+    assert.equal(graph["56"].class_type, "SolarRendererConditioning");
+    assert.deepEqual(graph["56"].inputs.first_frame, ["20", 0]);
+    assert.deepEqual(graph["64"].inputs.model, ["51", 0]);
+    assert.equal(graph["51"].inputs.lora_name, `${solarRank === 64 ? "solar\\" : ""}solarrenderer_4step_lora${suffix}.safetensors`);
+    assert.equal(graph["64"].inputs.lora_name, `${solarRank === 64 ? "solar\\" : ""}solarrenderer_control_lora${suffix}.safetensors`);
+    assert.equal(graph["59"].inputs.sampler_name, "lcm");
+    assert.equal(graph["60"].inputs.steps, 4);
+    assert.equal(graph["56"].inputs.length, solarRank === 384 ? 209 : 345);
+    assert.equal(graph["1"].inputs.frame_load_cap, graph["56"].inputs.length);
+    assert.equal(graph["1"].inputs.skip_first_frames, 60);
+    assert.ok(!graph["55"]);
+    assert.ok(!Object.values(graph).some((node) => /TextGenerate|ReferenceMultiLatent/.test(node.class_type)));
+    assert.ok(!Object.values(graph).some((node) => /Chain|Loop/.test(node.class_type)));
+  }
+});
+
+test("missing SolarRenderer nodes and unlisted paths fail before copying the image or submitting", async () => {
+  const count = prompts.length, copied = uploads;
+  solarInstalled = false;
+  const missing = await render("picture-1", DEFAULT_PICTURE_VIDEO);
+  assert.equal(missing.status, 400); assert.match((await missing.json()).error, /Install the SolarRenderer/);
+  solarInstalled = true;
+  assert.equal((await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, solarControl: "../outside.safetensors" })).status, 400);
+  assert.equal(uploads, copied); assert.equal(prompts.length, count);
 });
 
 test("video media supports seeking and submission errors identify missing models", async () => {

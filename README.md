@@ -15,7 +15,7 @@ Choose according to available VRAM and leave room for image/video context and wo
 - **Simple motion transfer**: available. One character replaces the main person (the one who fills the most of the frame). Runs `workflows/simple.api.json`, exported from `H3 One-Click Single Swap (DMAD 6 step).json`.
 - **Advanced motion transfer**: available. 1–4 characters, each with an optional role; every tracked person is matched to a role per shot, and people without a character stay untouched. Runs `workflows/advanced.api.json`, exported from `H3 One-Click Advanced Swap (DMAD 6 step).json`; **One pass per person** (two characters) runs `workflows/advanced_maxq.api.json`.
 - **Object swap**: available. **Change** what SAM tracks (hair, a jacket, a car) into what you describe or show in a picture; **Remove** it; or change the **Background** around it (`person` stays). Only that area is regenerated. Runs `workflows/object.api.json`, exported from `H3 One-Click Object Swap (DMAD 6 step).json`.
-- **From picture** (under Object swap): FLUX prepares the character in the raw video frame's pose and body cut while keeping the character picture's background. Review or regenerate the image, then choose **Use this image** to set the video length (up to 15 seconds), video and motion-reference resolutions, models, LoRAs, steps and seed. **Render video** reuses the saved preview with normal-map motion guidance and the source soundtrack, in one clip without a context loop. H3 rounds the requested length down to its valid frame grid. See [the workflow requirements](workflows/picture/README.md).
+- **From picture** (under Object swap): FLUX prepares the character in the raw video frame's pose and body cut while keeping the character picture's background. Review or regenerate the image, then choose **Use this image** to set the video length, video and motion-reference resolutions, models, LoRAs, steps and seed. SolarRenderer defaults to four steps with a selectable rank-384 or rank-64 four-step/control pair and supports up to 15 seconds, like the native H3 renderer. SolarRenderer clips longer than six seconds can take considerably longer to render, especially at higher resolutions; see the workflow requirements for the extended-silence node fix. Both LoRA file pickers support `models/loras` and its subfolders. **Render video** reuses the saved preview with normal-map motion guidance and the source soundtrack, in one clip without a context loop. H3 rounds the requested length down to its valid frame grid. See [the workflow requirements](workflows/picture/README.md).
 - **Post-processing**: available, for a finished video. **Fix faces**: H3 draws faces poorly when the person is small in the frame, so this redraws the face of the person in a photo at close-up size and pastes it back. Runs `workflows/face.api.json`, written by `workflows/build/openjutsu_face_build.py`. **Fix colours** softens H3's harsh look without an H3 run: Image Detail Contrast takes some fine detail contrast out, then Orion4D's DCTL Tone Mapper grades every frame. Runs `workflows/color.api.json`.
 
 ## Requirements
@@ -30,6 +30,7 @@ Install these into `ComfyUI/custom_nodes` (ComfyUI Manager finds the first three
 
 | Pack | Used for |
 | --- | --- |
+| [SolarRenderer](https://github.com/Enderfga/SolarRenderer/tree/main/comfyui) | From picture: SolarRenderer LoRA loading, conditioning and four-step sampling |
 | [ComfyUI-MiniMaxH3-Context-Loop](https://github.com/ethanfel/ComfyUI-MiniMaxH3-Context-Loop) 0.7.3+ | clip loop, checkpoints, final assembly |
 | [ComfyUI-Fantastic-MiniMaxH3-PromptBuilder](https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder) | masked video-edit latent |
 | [ComfyUI-KJNodes](https://github.com/kijai/ComfyUI-KJNodes) | Grow Mask With Blur |
@@ -46,6 +47,8 @@ Restart ComfyUI after installing them.
 Before uploading a job, Openjutsu checks the selected workflow against ComfyUI's node and model lists. Missing packs appear with installation links; missing model files appear with their destination folders. Disabled steps are excluded from the check. This checks registered nodes and listed model files, not Python dependencies, model integrity or available VRAM. `COMFYUI_URL` must point at ComfyUI itself (normally `http://127.0.0.1:8188`).
 
 ### Models
+
+For **From picture → SolarRenderer**, download [solarrenderer_4step_lora.safetensors](https://huggingface.co/Enderfga/SolarRenderer/blob/main/solarrenderer_4step_lora.safetensors) and [solarrenderer_control_lora.safetensors](https://huggingface.co/Enderfga/SolarRenderer/blob/main/solarrenderer_control_lora.safetensors) from [Enderfga/SolarRenderer](https://huggingface.co/Enderfga/SolarRenderer), or the corresponding rank-64 pair from [mdevoz/SolarRendererRank64](https://huggingface.co/mdevoz/SolarRendererRank64). Put both in `ComfyUI/models/loras` or a subfolder, reload the app and choose their paths in the render settings.
 
 | Folder in `ComfyUI/models` | File |
 | --- | --- |

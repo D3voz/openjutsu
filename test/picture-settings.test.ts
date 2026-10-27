@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureFrames } from "../lib/picture.ts";
+import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureFrames, solarLoraFiles, pictureLoras } from "../lib/picture.ts";
 import type { ApiGraph } from "../lib/simple.ts";
 
-const graph = (): ApiGraph => JSON.parse(readFileSync(new URL("../workflows/picture/from_picture_motion_flux3.api.json", import.meta.url), "utf8"));
+const graph = (renderer = "motion"): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/picture/from_picture_${renderer}_flux3.api.json`, import.meta.url), "utf8"));
 
 test("single-clip length is aligned down without exceeding the selected duration or 15 seconds", () => {
   assert.equal(pictureFrames(6), 141);
@@ -50,7 +50,7 @@ test("LoRAs are applied in order, disabled entries are skipped, and turning them
 
 test("default settings keep the tested canvas, length and DMAD configuration", () => {
   const value = graph();
-  applyPictureVideoSettings(value, parsePictureVideoSettings(undefined), 768, 1376);
+  applyPictureVideoSettings(value, parsePictureVideoSettings({ renderer: "h3", steps: 6 }), 768, 1376);
   assert.equal(value["56"].inputs.length, 141); assert.equal(value["1"].inputs.frame_load_cap, 141);
   assert.equal(value["56"].inputs.width, 480); assert.equal(value["56"].inputs.height, 864);
   assert.equal(value["33"].inputs.width, 480); assert.equal(value["33"].inputs.height, 864);
@@ -70,4 +70,44 @@ test("picture rendering uses the same Comfy Kitchen attention backend as the oth
     assert.deepEqual(value["57"].inputs.model, ["52", 0]);
     assert.deepEqual(value["60"].inputs.model, ["52", 0]);
   }
+});
+
+test("SolarRenderer selects both ranks in root or nested LoRA folders without changing custom paths", () => {
+  const root = solarLoraFiles(384);
+  assert.deepEqual(solarLoraFiles(384, Object.values(root)), root);
+  const nested = Object.values(solarLoraFiles(64)).map((name) => `solar\\${name}`);
+  assert.deepEqual(Object.values(solarLoraFiles(64, nested)), nested);
+  assert.equal(solarLoraFiles(384, [`other/${root.solarFourStep}`, root.solarFourStep]).solarFourStep, root.solarFourStep);
+  const custom = parsePictureVideoSettings({ ...DEFAULT_PICTURE_VIDEO, solarFourStep: "my/four.safetensors", solarControl: "renamed/control.safetensors" });
+  assert.deepEqual(pictureLoras(custom), ["my/four.safetensors", "renamed/control.safetensors"]);
+});
+
+test("SolarRenderer preserves the tested loader order, silent sampling, LCM and frame-aligned conditioning", () => {
+  for (const solarRank of [384, 64] as const) {
+    const value = graph("solar");
+    const settings = parsePictureVideoSettings({ ...DEFAULT_PICTURE_VIDEO, solarRank, ...solarLoraFiles(solarRank), resolution: "768p", seed: 123 });
+    applyPictureVideoSettings(value, settings, 1080, 1920);
+    assert.equal(value["51"].class_type, "SolarRendererLoraLoader");
+    assert.equal(value["64"].inputs.lora_name, settings.solarControl);
+    assert.equal(value["51"].inputs.lora_name, settings.solarFourStep);
+    assert.deepEqual(value["64"].inputs.model, ["51", 0]);
+    assert.deepEqual(value["49"].inputs.model, ["64", 0]);
+    assert.equal(value["52"].inputs.shift_audio, 3);
+    assert.equal(value["65"].inputs.seed, 123);
+    assert.equal(value["56"].class_type, "SolarRendererConditioning");
+    assert.deepEqual(value["56"].inputs.first_frame, ["20", 0]);
+    assert.deepEqual(value["56"].inputs.structure, ["33", 0]);
+    assert.equal(value["56"].inputs.width, 768); assert.equal(value["56"].inputs.height, 1376);
+    assert.equal(value["56"].inputs.length, 141);
+    assert.equal(value["59"].inputs.sampler_name, "lcm");
+    assert.equal(value["60"].class_type, "SolarRendererSigmas"); assert.equal(value["60"].inputs.steps, 4);
+    assert.deepEqual(value["62"].inputs.samples, ["66", 0]);
+    assert.deepEqual(value["63"].inputs.audio, ["36", 0]);
+    assert.ok(!value["55"]);
+  }
+  assert.equal(parsePictureVideoSettings(undefined).renderer, "solar");
+  assert.equal(parsePictureVideoSettings({ seconds: 15 }).renderer, "h3");
+  assert.equal(parsePictureVideoSettings({ ...DEFAULT_PICTURE_VIDEO, seconds: 15 }).seconds, 15);
+  assert.throws(() => parsePictureVideoSettings({ ...DEFAULT_PICTURE_VIDEO, seconds: 0.5 }), /at least 22 frames/);
+  assert.throws(() => parsePictureVideoSettings({ ...DEFAULT_PICTURE_VIDEO, solarRank: 12 }), /rank/);
 });

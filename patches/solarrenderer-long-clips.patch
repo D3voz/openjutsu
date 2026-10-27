@@ -1,0 +1,18 @@
+--- a/comfyui/nodes.py
++++ b/comfyui/nodes.py
+@@ -201,10 +201,11 @@
+     def __call__(self, executor, x, timestep, context, transformer_options={}, **kwargs):
+         video, audio = x[0], x[1]
+         t = audio.shape[-1]
+-        if self.silence.shape[-1] < t:
+-            raise ValueError(f"the held silence covers 170 frames ({self.silence.shape[-1]} audio latents); "
+-                             f"this clip needs {t}")
+-        clean = self.silence[..., :t].to(audio.device, torch.float32)
++        silence = self.silence
++        if silence.shape[-1] < t:
++            middle = silence[..., silence.shape[-1] // 2: silence.shape[-1] // 2 + 1].expand(*silence.shape[:-1], t - 40)
++            silence = torch.cat((silence[..., :20], middle, silence[..., -20:]), dim=-1)
++        clean = silence[..., :t].to(audio.device, torch.float32)
+         if self.noise is None or self.noise.shape != clean.shape:
+             generator = torch.Generator("cpu").manual_seed(self.seed)
+             self.noise = torch.randn(clean.shape, generator=generator, dtype=torch.float32)

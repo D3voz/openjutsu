@@ -24,6 +24,27 @@ overall_soundscape:
 Reuse <Audio 1> unchanged. Add no new voices, music or sound effects."""
 
 
+SOLAR_PROMPT = """subject_definitions:
+<Video 1> is a false-color surface-normal motion guide at 24 fps. It supplies the moving subject's body geometry, poses, gestures, head direction and timing.
+<Video 2> is the first frame of the target shot, held still. It supplies the character, outfit, background, materials, colors and lighting.
+
+summary:
+[keyframe completion + reference generation] Begin from <Video 2> and animate its character with the frame-by-frame poses and motion of <Video 1>. Keep the identity, clothing and environment of <Video 2> throughout.
+
+retention_analysis:
+<Video 1> (frame-by-frame subject pose, motion and framing): attribute_transfer - follow the subject's body position, size, gestures and head direction. Its false colors, source appearance, labels and graphics are not shown.
+<Video 2> (first frame): fully_preserved - preserve its character, outfit, background, colors, materials and lighting as the character moves.
+
+detailed_description:
+[Shot 1] The shot begins from <Video 2>. The same character performs the changing poses, hand gestures and head movements from <Video 1>, through the final frame. Match the reference performance's timing, framing and camera motion. Keep the character's face, hair and complete outfit consistent, with coherent arms, hands and fingers. Preserve the setting and lighting from <Video 2>, including natural contact shadows. Do not hold the initial pose as the motion guide changes. Do not copy the normal-map colors, source outfit or source setting. Do not add text, comparison dividers, labels or slider graphics.
+
+overall_soundscape:
+N/A
+
+non_diegetic_music:
+N/A"""
+
+
 def node(kind, title, **inputs):
     return {"class_type": kind, "inputs": inputs, "_meta": {"title": title}}
 
@@ -100,6 +121,28 @@ def motion(prepared, width=480, height=864, frames=141):
     return graph
 
 
+def solar(prepared, width=480, height=864, frames=141):
+    graph = motion(prepared, width, height, frames)
+    del graph["55"]
+    graph["51"] = node("SolarRendererLoraLoader", "SolarRenderer four-step LoRA", model=["50", 0],
+                       lora_name="solarrenderer_4step_lora.safetensors", strength=1.0)
+    graph["64"] = node("SolarRendererLoraLoader", "SolarRenderer control LoRA", model=["51", 0],
+                       lora_name="solarrenderer_control_lora.safetensors", strength=1.0)
+    graph["49"]["inputs"]["model"] = ["64", 0]
+    graph["52"]["inputs"]["shift_audio"] = 3.0
+    graph["65"] = node("SolarRendererModel", "SolarRenderer silent sampling", model=["52", 0], seed=2577489884)
+    graph["56"] = node("SolarRendererConditioning", "Prepared picture + frame-aligned normal motion", clip=["53", 0],
+                       vae=["54", 0], structure=["33", 0], first_frame=["20", 0], prompt=SOLAR_PROMPT,
+                       width=width, height=height, length=frames)
+    graph["57"]["inputs"]["model"] = ["65", 0]
+    graph["59"]["inputs"]["sampler_name"] = "lcm"
+    graph["60"] = node("SolarRendererSigmas", "SolarRenderer four-step schedule", steps=4)
+    graph["66"] = node("LTXVSeparateAVLatent", "Separate sampled video", av_latent=["61", 0])
+    graph["62"]["inputs"]["samples"] = ["66", 0]
+    graph["63"]["inputs"]["filename_prefix"] = "openjutsu_picture/solar/normal_motion"
+    return graph
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", default="instagram1_normal_source_20261027.mp4", help="Filename in ComfyUI input/")
@@ -108,7 +151,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     first = prepare(args.video, args.picture)
-    for name, graph in [("prepare", first), ("motion", motion(first))]:
+    for name, graph in [("prepare", first), ("motion", motion(first)), ("solar", solar(first))]:
         path = args.output_dir/f"from_picture_{name}_flux3.api.json"
         path.write_text(json.dumps(dict(sorted(graph.items(), key=lambda item: int(item[0]))), indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
         print(path)

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
 import { listModels } from "../../../lib/comfy.ts";
-import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, type PictureVideoSettings } from "../../../lib/picture.ts";
+import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
 
 export const runtime = "nodejs";
 const PREPARED = "OpenJutsu · prepared picture";
@@ -29,7 +29,7 @@ async function comfy(path: string, init?: RequestInit) {
   return response;
 }
 
-async function template(stage: "prepare" | "motion"): Promise<ApiGraph> {
+async function template(stage: "prepare" | "motion" | "solar"): Promise<ApiGraph> {
   return JSON.parse(await readFile(join(process.cwd(), "workflows", "picture", `from_picture_${stage}_flux3.api.json`), "utf8"));
 }
 
@@ -85,15 +85,22 @@ export async function POST(request: Request) {
       catch (error) { throw new HttpError(400, (error as Error).message); }
       const available = await listModels();
       if (!available.models.includes(settings.model)) throw new HttpError(400, "Choose a video model ComfyUI has.");
-      if (settings.useLoras && settings.loras.some((lora) => lora.enabled && !available.loras.includes(lora.name))) throw new HttpError(400, "Choose LoRAs ComfyUI has.");
+      if (settings.renderer === "solar") {
+        const installed = solarLoraFiles(settings.solarRank, available.loras);
+        const defaults = solarLoraFiles(settings.solarRank);
+        for (const key of ["solarFourStep", "solarControl"] as const) if (settings[key] === defaults[key]) settings[key] = installed[key];
+        const nodes = await (await comfy("/object_info/SolarRendererLoraLoader")).json();
+        if (!nodes.SolarRendererLoraLoader) throw new HttpError(400, "Install the SolarRenderer custom nodes and restart ComfyUI: https://github.com/Enderfga/SolarRenderer");
+      }
+      if (pictureLoras(settings).some((name) => !available.loras.includes(name))) throw new HttpError(400, "Choose LoRA files installed in ComfyUI/models/loras (subfolders are supported).");
       const [clipInfo, vaeInfo] = await Promise.all([comfy("/object_info/CLIPLoader").then((response) => response.json()), comfy("/object_info/VAELoader").then((response) => response.json())]);
       for (const [name, choices, label] of [
         [settings.textEncoder, clipInfo.CLIPLoader.input.required.clip_name[0], "H3 text encoder"],
         [settings.videoVae, vaeInfo.VAELoader.input.required.vae_name[0], "video VAE"],
-        [settings.audioVae, vaeInfo.VAELoader.input.required.vae_name[0], "audio VAE"],
+        ...(settings.renderer === "h3" ? [[settings.audioVae, vaeInfo.VAELoader.input.required.vae_name[0], "audio VAE"] as const] : []),
       ] as const) if (!choices.includes(name)) throw new HttpError(400, `Choose a ${label} ComfyUI has.`);
       const picture = await (await comfy(view(file))).blob();
-      graph = await template("motion");
+      graph = await template(settings.renderer === "solar" ? "solar" : "motion");
       graph["20"] = { class_type: "LoadImage", inputs: { image: await uploadFile(picture, ".png") } };
       graph["1"].inputs.video = source["1"].inputs.video;
       graph["1"].inputs.skip_first_frames = source["1"].inputs.skip_first_frames;
