@@ -218,7 +218,7 @@ link(soundtrack, 0, muteClip, "audio");
 link(cur, "source_audio_slice", muteRef, "audio");
 curGroup = engineGroup;
 
-const src = add("MiniMaxH3ContexLoopSourceSlice", "Source clip (frames + audio)", [lx, 1360], {source_fps: 24, crop: "center"});
+const src = add("H3SourceSlice", "Source clip (frames + audio)", [lx, 1360], {source_fps: 24, crop: "center"});
 const noise = add("RandomNoise", "Clip Seed", [lx, 1560], {control_after_generate: "fixed"});
 link(cur, "state", src, "state");
 link(avae, 0, src, "audio_vae");

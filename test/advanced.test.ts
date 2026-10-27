@@ -56,7 +56,7 @@ test("without No lip-sync every pass hears the soundtrack and sees no faces", ()
     assert.equal(Object.keys(pruned).length, Object.keys(g).length - 6);
     for (const node of Object.values(pruned)) {
       if (node.class_type === "MiniMaxH3ReferenceToVideo") assert.equal(pruned[(node.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].class_type, "MiniMaxH3ChainCurrent");
-      if (node.class_type === "MiniMaxH3ContexLoopSourceSlice") assert.equal(pruned[(node.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");
+      if (node.class_type === "H3SourceSlice") assert.equal(pruned[(node.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");
       if (node.class_type === "H3GreyMannequins") assert.ok(!("faces" in node.inputs));
     }
     assert.ok(!("no_lip_sync" in pruned[nodeByTitle(pruned, "Swap Plan (roles, seed, size)")].inputs));

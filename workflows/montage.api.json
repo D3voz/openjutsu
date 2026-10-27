@@ -32,7 +32,7 @@
   "47": {"inputs": {"text": "hat", "clip": ["26", 1]}, "class_type": "CLIPTextEncode", "_meta": {"title": "SAM: hats"}},
   "48": {"inputs": {"detection_threshold": 0.35, "max_objects": 0, "detect_interval": 1, "images": ["37", 0], "model": ["26", 0], "conditioning": ["47", 0]}, "class_type": "SAM3_VideoTrack", "_meta": {"title": "SAM 3.1 track hats"}},
   "49": {"inputs": {"object_indices": "", "track_data": ["48", 0]}, "class_type": "SAM3_TrackToMask", "_meta": {"title": "All hats"}},
-  "50": {"inputs": {"source_fps": 24, "crop": "center", "state": ["32", 0], "latent": ["59", 1], "audio_vae": ["24", 0], "source_frames": ["8", 0], "source_audio": ["101", 0]}, "class_type": "MiniMaxH3ContexLoopSourceSlice", "_meta": {"title": "Source clip (frames + audio)"}},
+  "50": {"inputs": {"source_fps": 24, "crop": "center", "state": ["32", 0], "latent": ["59", 1], "audio_vae": ["24", 0], "source_frames": ["8", 0], "source_audio": ["101", 0]}, "class_type": "H3SourceSlice", "_meta": {"title": "Source clip (frames + audio)"}},
   "51": {"inputs": {"noise_seed": ["32", 5]}, "class_type": "RandomNoise", "_meta": {"title": "Clip Seed"}},
   "52": {"inputs": {"headroom": 0.1, "hold_frames": 2, "subject": 0, "track_data": ["111", 0], "labels": ["111", 1]}, "class_type": "H3RoleMask", "_meta": {"title": "Pass 1: labelled people (+ headroom)"}},
   "53": {"inputs": {"headroom": 0, "hold_frames": 1, "subject": 0, "track_data": ["111", 0], "labels": ["111", 1]}, "class_type": "H3RoleMask", "_meta": {"title": "Pass 1: labelled people, no headroom (mannequin)"}},

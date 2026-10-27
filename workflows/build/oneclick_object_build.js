@@ -125,7 +125,7 @@ link(start, "state", cur, "state");
 const cx = lx + 420;
 const ref = add("MiniMaxH3ReferenceToVideo", "Reference Conditioning", [cx, 60], {ref_image_size: "match"});
 ref.size = [360, 300];
-const src = add("MiniMaxH3ContexLoopSourceSlice", "Source clip (frames + audio)", [cx, 420], {source_fps: 24, crop: "center"});
+const src = add("H3SourceSlice", "Source clip (frames + audio)", [cx, 420], {source_fps: 24, crop: "center"});
 const motionAll = add("ImageScaleToMaxDimension", "Motion reference video (~512 px)", [vx, 1340], {upscale_method: "area", largest_size: 512});
 const clipStart = add("ComfyMathExpression", "Clip start frame", [cx, 640], {0: "round(a * 24)"});
 const motion = add("ImageFromBatch", "Motion reference for this clip", [cx, 740], {batch_index: 0, length: 141});

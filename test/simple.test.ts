@@ -75,7 +75,7 @@ test("without No lip-sync H3 hears the soundtrack and the mannequin gets no face
   assert.deepEqual(byClass(pruned, "AudioAdjustVolume"), []);
   assert.ok(!Object.values(pruned).some((node) => /faces/.test(node._meta?.title ?? "")));
   const [ref] = byClass(pruned, "MiniMaxH3ReferenceToVideo");
-  const [src] = byClass(pruned, "MiniMaxH3ContexLoopSourceSlice");
+  const [src] = byClass(pruned, "H3SourceSlice");
   const [mannequin] = byClass(pruned, "H3GreyMannequins");
   assert.equal(pruned[(ref.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].class_type, "MiniMaxH3ChainCurrent");
   assert.equal(pruned[(src.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");
@@ -86,7 +86,7 @@ test("without No lip-sync H3 hears the soundtrack and the mannequin gets no face
 test("with No lip-sync H3 hears silence and the plan drops the lip-sync line", () => {
   const pruned = pruneSimple(graph, settings(false, true));
   const [ref] = byClass(pruned, "MiniMaxH3ReferenceToVideo");
-  const [src] = byClass(pruned, "MiniMaxH3ContexLoopSourceSlice");
+  const [src] = byClass(pruned, "H3SourceSlice");
   for (const link of [ref.inputs["ref_video_audios.ref_video_audio_0"], src.inputs.source_audio]) {
     assert.deepEqual(pruned[(link as [string, number])[0]].inputs.volume, -100);
   }
