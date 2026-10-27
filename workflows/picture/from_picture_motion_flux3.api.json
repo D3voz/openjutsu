@@ -1,0 +1,661 @@
+{
+  "1": {
+    "class_type": "VHS_LoadVideo",
+    "inputs": {
+      "video": "instagram1_normal_source_20261027.mp4",
+      "force_rate": 24.0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 141,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    },
+    "_meta": {
+      "title": "1 · Source video — selected motion clip"
+    }
+  },
+  "2": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "batch_index": 0,
+      "length": 1
+    },
+    "_meta": {
+      "title": "Raw first frame"
+    }
+  },
+  "3": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "2",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": 768,
+      "height": 1376,
+      "crop": "center"
+    },
+    "_meta": {
+      "title": "Image 2 · First frame / pose and body cut"
+    }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "Stylish%20Blonde%20in%20a%20Warm%20Cafe.png"
+    },
+    "_meta": {
+      "title": "2 · Image 1 / character and background"
+    }
+  },
+  "5": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "4",
+        0
+      ],
+      "upscale_method": "lanczos",
+      "width": 768,
+      "height": 1376,
+      "crop": "center"
+    },
+    "_meta": {
+      "title": "Image 1 · Character / editor canvas"
+    }
+  },
+  "6": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>."
+    },
+    "_meta": {
+      "title": "Edit request · image 1 character / image 2 raw frame"
+    }
+  },
+  "7": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": [
+        "5",
+        0
+      ],
+      "image2": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Character first, raw frame second"
+    }
+  },
+  "8": {
+    "class_type": "ImageScaleToMaxDimension",
+    "inputs": {
+      "image": [
+        "7",
+        0
+      ],
+      "largest_size": 768,
+      "upscale_method": "area"
+    },
+    "_meta": {
+      "title": "Images for the prompt upsampler"
+    }
+  },
+  "9": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors",
+      "type": "flux3",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "FLUX 3 image-edit prompt upsampler"
+    }
+  },
+  "10": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux3_image_klein_sd_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "FLUX 3 Image Klein SD"
+    }
+  },
+  "11": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_4b_fp8_scaled.safetensors",
+      "type": "flux3",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "FLUX 3 text encoder"
+    }
+  },
+  "12": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "_meta": {
+      "title": "FLUX VAE"
+    }
+  },
+  "13": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "clip": [
+        "11",
+        0
+      ],
+      "text": [
+        "23",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Expanded FLUX editing instruction"
+    }
+  },
+  "14": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Empty negative"
+    }
+  },
+  "15": {
+    "class_type": "ReferenceMultiLatent",
+    "inputs": {
+      "positive": [
+        "13",
+        0
+      ],
+      "negative": [
+        "14",
+        0
+      ],
+      "vae": [
+        "12",
+        0
+      ],
+      "resolution": "keep resolution",
+      "images.image0": [
+        "5",
+        0
+      ],
+      "images.image1": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Both raw image references reach FLUX"
+    }
+  },
+  "19": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": [
+        "10",
+        0
+      ],
+      "seed": 0,
+      "steps": 16,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1.0,
+      "positive": [
+        "15",
+        0
+      ],
+      "negative": [
+        "15",
+        1
+      ],
+      "latent_image": [
+        "15",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "Prepare pose · FLUX 3"
+    }
+  },
+  "20": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "19",
+        0
+      ],
+      "vae": [
+        "12",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Prepared first frame"
+    }
+  },
+  "21": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "20",
+        0
+      ],
+      "filename_prefix": "openjutsu_picture/flux3/prepared_frame"
+    },
+    "_meta": {
+      "title": "3 · Save prepared first frame"
+    }
+  },
+  "22": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Raw first frame — compare composition"
+    }
+  },
+  "23": {
+    "class_type": "TextGenerate",
+    "inputs": {
+      "clip": [
+        "9",
+        0
+      ],
+      "image": [
+        "8",
+        0
+      ],
+      "prompt": [
+        "6",
+        0
+      ],
+      "system_prompt": [
+        "25",
+        0
+      ],
+      "max_length": 700,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "off"
+    },
+    "_meta": {
+      "title": "Describe the raw frame's pose for the edit"
+    }
+  },
+  "24": {
+    "class_type": "PreviewAny",
+    "inputs": {
+      "source": [
+        "23",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Expanded editing instruction"
+    }
+  },
+  "25": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "You are an image-editing prompt upsampler. The attached images are ordered: image 1 is the character image and image 2 is the raw first frame from a video. Expand the user's request into one precise editing instruction. Keep every requested constraint. Use gender-neutral wording such as 'the character'; do not add a fixed gender.\n\nImage 1 supplies the identity, hairstyle, complete outfit, background and lighting. Image 2 supplies only the starting body pose, head orientation, arm positions, hand positions, leg positions, camera perspective, relative character size, position within the frame and body cut. Describe those pose and framing changes concretely from image 2. Replace the original pose of image 1 instead of retaining it. Keep the character and the background of image 1; do not copy the identity, hairstyle, clothes, props, setting or colors of image 2, and do not add extra objects. Describe the intended still image, not later video movements. Output only one English editing instruction, without Markdown or explanation."
+    },
+    "_meta": {
+      "title": "Image-edit prompt expansion rules"
+    }
+  },
+  "30": {
+    "class_type": "VRAM_Debug",
+    "inputs": {
+      "empty_cache": true,
+      "gc_collect": true,
+      "unload_all_models": true,
+      "any_input": [
+        "20",
+        0
+      ],
+      "image_pass": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Release editor VRAM before Metric3D"
+    }
+  },
+  "31": {
+    "class_type": "ImageScaleToMaxDimension",
+    "inputs": {
+      "image": [
+        "30",
+        1
+      ],
+      "largest_size": 768,
+      "upscale_method": "area"
+    },
+    "_meta": {
+      "title": "Metric3D input video"
+    }
+  },
+  "32": {
+    "class_type": "Metric3D-NormalMapPreprocessor",
+    "inputs": {
+      "image": [
+        "31",
+        0
+      ],
+      "backbone": "vit-small",
+      "fx": 1000,
+      "fy": 1000,
+      "resolution": 512
+    },
+    "_meta": {
+      "title": "4 · Source motion normals"
+    }
+  },
+  "33": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": [
+        "32",
+        0
+      ],
+      "width": 480,
+      "height": 864,
+      "upscale_method": "lanczos",
+      "crop": "disabled"
+    },
+    "_meta": {
+      "title": "Normals match the output canvas"
+    }
+  },
+  "34": {
+    "class_type": "ImageFromBatch",
+    "inputs": {
+      "image": [
+        "33",
+        0
+      ],
+      "batch_index": 0,
+      "length": 1
+    },
+    "_meta": {
+      "title": "First normal-map frame"
+    }
+  },
+  "35": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "34",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Normal-map preview"
+    }
+  },
+  "36": {
+    "class_type": "H3SoundtrackOrSilence",
+    "inputs": {
+      "audio": [
+        "1",
+        2
+      ],
+      "video_info": [
+        "1",
+        3
+      ]
+    },
+    "_meta": {
+      "title": "Original soundtrack / silence when absent"
+    }
+  },
+  "50": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "H3 Diffusion Model"
+    }
+  },
+  "51": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "model": [
+        "50",
+        0
+      ],
+      "lora_name": "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
+      "strength_model": 1.0
+    },
+    "_meta": {
+      "title": "DMAD LoRA"
+    }
+  },
+  "52": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": [
+        "51",
+        0
+      ],
+      "shift_video": 12.0,
+      "shift_audio": 2.0
+    },
+    "_meta": {
+      "title": "H3 Sigma Shift"
+    }
+  },
+  "53": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+      "type": "minimax",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "H3 Text Encoder"
+    }
+  },
+  "54": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "_meta": {
+      "title": "H3 Video VAE"
+    }
+  },
+  "55": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "_meta": {
+      "title": "H3 Audio VAE"
+    }
+  },
+  "56": {
+    "class_type": "MiniMaxH3ReferenceToVideo",
+    "inputs": {
+      "clip": [
+        "53",
+        0
+      ],
+      "vae": [
+        "54",
+        0
+      ],
+      "audio_vae": [
+        "55",
+        0
+      ],
+      "prompt": "subject_definitions:\n<Picture 1> defines the character, outfit, background, colors, materials and lighting throughout the output.\n<Video 1> is a false-color surface-normal motion guide at 24 fps. Its colors describe surface orientation, not the appearance of the final video. Use the moving character's geometry, body pose, arm and leg movements, head direction, framing and timing as the motion reference.\n<Audio 1> is the original synchronized soundtrack.\n\nsummary:\n[video editing + reference generation + audio reuse] Animate the character from <Picture 1> with the performance and framing of the character in <Video 1>. Keep the identity, outfit, background and lighting of <Picture 1>. The picture is the appearance reference; the normal-map video is the motion reference.\n\ndetailed_description:\nFollow the motion guide's poses and gestures at the corresponding moments, through the last frame. Match its relative character size, camera perspective and any camera movement. Keep the picture's environment coherent throughout the performance. Do not copy the normal-map colors or replace the picture's setting with the source video's setting. Do not hold the reference picture's starting pose as the guide moves. Keep lighting and contact shadows consistent with the picture. Match visible speech to <Audio 1> when present.\n\noverall_soundscape:\nReuse <Audio 1> unchanged. Add no new voices, music or sound effects.",
+      "width": 480,
+      "height": 864,
+      "length": 141,
+      "ref_image_size": "match",
+      "ref_images.ref_image_0": [
+        "20",
+        0
+      ],
+      "ref_videos.ref_video_0": [
+        "33",
+        0
+      ],
+      "ref_video_audios.ref_video_audio_0": [
+        "36",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "5 · Prepared picture + normal motion reference"
+    }
+  },
+  "57": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": [
+        "52",
+        0
+      ],
+      "conditioning": [
+        "56",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "H3 Guider"
+    }
+  },
+  "58": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 2577489884
+    },
+    "_meta": {
+      "title": "Video seed"
+    }
+  },
+  "59": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "_meta": {
+      "title": "Video sampler"
+    }
+  },
+  "60": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "52",
+        0
+      ],
+      "scheduler": "simple",
+      "steps": 6,
+      "denoise": 1.0
+    },
+    "_meta": {
+      "title": "H3 · 6 steps"
+    }
+  },
+  "61": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "58",
+        0
+      ],
+      "guider": [
+        "57",
+        0
+      ],
+      "sampler": [
+        "59",
+        0
+      ],
+      "sigmas": [
+        "60",
+        0
+      ],
+      "latent_image": [
+        "56",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Generate motion"
+    }
+  },
+  "62": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "61",
+        0
+      ],
+      "vae": [
+        "54",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Decode video"
+    }
+  },
+  "63": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": [
+        "62",
+        0
+      ],
+      "audio": [
+        "36",
+        0
+      ],
+      "frame_rate": 24.0,
+      "loop_count": 0,
+      "filename_prefix": "openjutsu_picture/flux3/normal_motion",
+      "format": "video/h264-mp4",
+      "pix_fmt": "yuv420p",
+      "crf": 16,
+      "save_metadata": false,
+      "trim_to_audio": false,
+      "pingpong": false,
+      "save_output": true
+    },
+    "_meta": {
+      "title": "6 · Result with original soundtrack"
+    }
+  }
+}

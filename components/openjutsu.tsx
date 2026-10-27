@@ -10,6 +10,7 @@ import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH, type Lora } from "../lib/model.ts";
 import type { EditMode, FitSummary, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
 import { ObjectPlacement } from "./object-placement.tsx";
+import { FromPicture } from "./from-picture.tsx";
 import { CHUNK_SECONDS, FACE_STYLES, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
 import { appearances, renderLabels, type Appearance, type Kept, type Label, type People, type Review } from "../lib/montage.ts";
@@ -51,11 +52,13 @@ const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
   mouth: { label: "Follow the mouth", hint: "The face follows the video's expressions and mouth movements; a little less like the photo." },
 };
 
-const EDITS: { id: EditMode; label: string; target: string; what: string; to: string; toHint: string }[] = [
+type EditTab = EditMode | "picture";
+const EDITS: { id: EditTab; label: string; target: string; what: string; to: string; toHint: string }[] = [
   { id: "change", label: "Change", target: "hair, top", what: "What to change", to: "short bright pink hair and a black leather jacket", toHint: "What it becomes" },
   { id: "add", label: "Add", target: "on the table", what: "Where it goes", to: "a chocolate cake on a plate", toHint: "Object to add" },
   { id: "remove", label: "Remove", target: "poster", what: "What to remove", to: "a plain wall", toHint: "What shows instead (optional)" },
   { id: "background", label: "Background", target: "person", what: "What stays", to: "a snowy mountain pass at dusk", toHint: "The new place" },
+  { id: "picture", label: "From picture", target: "person", what: "Who is replaced", to: "", toHint: "" },
 ];
 
 const isRun = (run: Run | null) => typeof run?.id === "string" && Object.hasOwn(KIND_LABELS, run.kind);
@@ -87,7 +90,7 @@ function readHistory(): PastRun[] {
 
 type Settings = {
   mode: Mode; maxQuality: boolean; montage: boolean; resolution: Resolution; customSize: Size; hatFix: boolean; noLipSync: boolean;
-  margin: Margin; target: string; editMode: EditMode; editTarget: string; biggestOnly: boolean; keepOutline: boolean; post: Post;
+  margin: Margin; target: string; editMode: EditTab; editTarget: string; biggestOnly: boolean; keepOutline: boolean; post: Post;
   detailOn: boolean; detail: number; toneOn: boolean; tone: ToneSettings; tonePreset: string; faceStyle: FaceStyle;
   chunkSeconds: number; seed: number; clipSeconds: number; motion: MotionSize; steps: number; model: string; loras: Lora[];
 };
@@ -243,7 +246,7 @@ export function Openjutsu() {
   const [noLipSync, setNoLipSync] = useState(false);
   const [margin, setMargin] = useState<Margin>("normal");
   const [target, setTarget] = useState(DEFAULT_TARGET);
-  const [editMode, setEditMode] = useState<EditMode>("change");
+  const [editMode, setEditMode] = useState<EditTab>("change");
   const [editTarget, setEditTarget] = useState(EDITS[0].target);
   const [changeTo, setChangeTo] = useState("");
   const [action, setAction] = useState("");
@@ -682,6 +685,13 @@ export function Openjutsu() {
         ))}
       </nav>
 
+      {mode === "object" && !run && <nav className="segmented" aria-label="Object swap tools">
+        {EDITS.map((e) => <button key={e.id} className={e.id === editMode ? "on" : ""} aria-pressed={e.id === editMode} onClick={() => {
+          if (e.id !== editMode) { setEditTarget(e.target); setChangeTo(""); setAction(""); }
+          setEditMode(e.id);
+        }}>{e.label}</button>)}
+      </nav>}
+
       {formError && <div className="row">
         <p className="error" role="alert">{formError}</p>
         <CopyDetails lines={[tab, run ? jobLine(run, job) : "", `Error: ${formError}`]} />
@@ -720,7 +730,7 @@ export function Openjutsu() {
           onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
           onRetry={video && same && ready && !submitting && run.kind === generateKind && generateKind !== "montage" ? () => { reset(); submit(generateKind); } : null}
         />
-      ) : (
+      ) : mode === "object" && editMode === "picture" ? <FromPicture initialVideo={video?.file} initialPicture={look?.file} start={whole ? 0 : part.start} /> : (
         <>
           <section className="inputs">
             <div className="panel">
@@ -812,16 +822,6 @@ export function Openjutsu() {
                 <p className="hint">No H3 run: the video is only filtered, so it keeps its frames and soundtrack. The detail contrast runs first, then the tone mapper.</p>
               </>) : mode === "object" ? (
                 <div className="edit">
-                  <div className="segmented">
-                    {EDITS.map((e) => (
-                      <button key={e.id} className={e.id === editMode ? "on" : ""} onClick={() => {
-                        // Each tab's fields mean something else: "top, pants" left over from Change made From picture swap only the top.
-                        // The default goes in as a value, not a placeholder, so an untouched box shows what SAM tracks.
-                        if (e.id !== editMode) { setEditTarget(e.target); setChangeTo(""); setAction(""); }
-                        setEditMode(e.id);
-                      }}>{e.label}</button>
-                    ))}
-                  </div>
                   <label>
                     <span>{edit.what} <small>{editMode === "add" ? "Describe the placement, for example on the table in front of the person." : "What SAM tracks, in English."}{(editMode === "change" || editMode === "remove") && " Separate several with commas."}</small></span>
                     <input value={editTarget} maxLength={100} placeholder={edit.target} onChange={(event) => setEditTarget(event.target.value)} />

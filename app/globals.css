@@ -50,6 +50,11 @@ h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
 }
 
 .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.picture-pipeline { display: grid; gap: 20px; }
+.picture-pipeline label { display: grid; gap: 8px; }
+.picture-reference { width: 100%; max-height: 280px; object-fit: contain; border-radius: 12px; }
+.picture-comparison figure { margin: 0; display: grid; gap: 8px; }
+.picture-comparison img { width: 100%; max-height: 480px; object-fit: contain; background: var(--bg); border-radius: 12px; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px; display: grid; gap: 14px; align-content: start; }
 .panel h2 { margin: 0; font-size: 16px; display: flex; align-items: center; gap: 10px; }
 .panel h2 > span {
