@@ -465,7 +465,7 @@
         "50",
         0
       ],
-      "lora_name": "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
+      "lora_name": "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
       "strength_model": 1.0
     },
     "_meta": {
@@ -489,7 +489,7 @@
   "53": {
     "class_type": "CLIPLoader",
     "inputs": {
-      "clip_name": "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+      "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
       "type": "minimax",
       "device": "default"
     },
@@ -594,7 +594,7 @@
         0
       ],
       "scheduler": "simple",
-      "steps": 6,
+      "steps": 8,
       "denoise": 1.0
     },
     "_meta": {

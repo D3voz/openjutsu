@@ -6,6 +6,7 @@ import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
 import { checkAcceleration, MAX_LORAS, STEPS, STRENGTH, type Acceleration, type ModelFiles, type ModelSettings } from "../../../lib/model.ts";
+import { researchModesEnabled } from "../../../lib/license.ts";
 import { EDIT_MODES, OBJECT_MARGINS, parsePaint, parsePlacement, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, type Margin, type MotionSize, type Preset, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
 
@@ -242,6 +243,7 @@ async function submitForm(form: FormData) {
   let submit: () => ReturnType<typeof submitSimple>;
   try {
     const mode = form.get("mode");
+    if (mode === "face" && !researchModesEnabled()) throw new Error("Fix faces is disabled: it uses non-commercial InsightFace weights and AGPL YOLO. Set KAFEIN_RESEARCH_MODES=1 only for internal research.");
     const video = parseVideo(form);
     const section = parseSection(form);
     if (mode === "mask") {

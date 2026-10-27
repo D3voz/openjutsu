@@ -187,7 +187,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="inputs">
           <div className="panel">
-            <label>Video renderer<select className="file-name" value={settings.renderer} onChange={(event) => setSettings({ ...settings, renderer: event.target.value as PictureVideoSettings["renderer"], steps: event.target.value === "solar" ? 4 : 6 })}><option value="solar">SolarRenderer</option><option value="h3">H3 · native</option></select></label>
+            <label>Video renderer<select className="file-name" value={settings.renderer} onChange={(event) => setSettings({ ...settings, renderer: event.target.value as PictureVideoSettings["renderer"], steps: event.target.value === "solar" ? 4 : 8 })}><option value="solar">SolarRenderer</option><option value="h3">H3 · native</option></select></label>
             <label>Video length (seconds)<input className="steps-input" type="number" min={(settings.renderer === "solar" ? 22 : 5) / 24} max={15} step={0.1} value={settings.seconds} onChange={(event) => setSettings({ ...settings, seconds: Number(event.target.value) })} /></label>
             <small>H3 rounds down to a valid clip length: {frames} frames / {(frames / 24).toFixed(3)} s at 24 fps.</small>
             {settings.renderer === "solar" && settings.seconds > 6 && <p className="hint" role="note"><strong>Longer render time:</strong> SolarRenderer clips longer than 6 seconds can take considerably longer to render, especially at higher resolutions.</p>}
@@ -198,7 +198,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
             <small>The motion/mask resolution control uses a normal-map guide here. Its size is separate from the output video.</small>
             <label>Video seed<input className="steps-input" type="number" min={0} max={MAX_SEED} step={1} value={settings.seed} onChange={(event) => setSettings({ ...settings, seed: Number(event.target.value) })} /></label>
             <label>Steps<input className="steps-input" type="number" min={STEPS.min} max={settings.renderer === "solar" ? 50 : STEPS.max} value={settings.steps} onChange={(event) => setSettings({ ...settings, steps: Number(event.target.value) })} /></label>
-            <small>{settings.renderer === "solar" ? "Use 4 with the SolarRenderer four-step and control LoRAs." : "Use 6 with DMAD; without a speed LoRA, use 20 or more."}</small>
+            <small>{settings.renderer === "solar" ? "Use 4 with the SolarRenderer four-step and control LoRAs." : "Use 8 with the KAFEIN speed LoRA; without a speed LoRA, use 20 or more."}</small>
           </div>
           <div className="panel">
             <p className="hint">Choose models and VAEs compatible with MiniMax H3.</p>

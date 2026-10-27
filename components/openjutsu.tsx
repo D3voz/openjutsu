@@ -7,13 +7,14 @@ import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
-import { ACCELERATIONS, DEFAULT_DESCRIBER, DEFAULT_MODEL, hasSpeedLora, isSpeedLora, MAX_LORAS, STEPS, STRENGTH, type Acceleration, type Lora, type ModelFiles } from "../lib/model.ts";
+import { ACCELERATIONS, DEFAULT_DESCRIBER, DEFAULT_MODEL, hasSpeedLora, isSpeedLora, MAX_LORAS, migrateFleetSettings, STEPS, STRENGTH, type Acceleration, type Lora, type ModelFiles } from "../lib/model.ts";
 import type { EditMode, FitSummary, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
 import { Welcome } from "./welcome.tsx";
 import { ObjectPlacement } from "./object-placement.tsx";
 import { FromPicture } from "./from-picture.tsx";
 import { CHUNK_SECONDS, FACE_STYLES, faceChunkCount, type FaceStyle } from "../lib/face.ts";
 import { DEFAULT_PRESET, DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, toneFromPreset, type ToneSettings, type ToneValue } from "../lib/color.ts";
+import { KAFEIN_RESEARCH_MODES } from "../lib/license.ts";
 import { appearances, renderLabels, type Appearance, type Kept, type Label, type People, type Review } from "../lib/montage.ts";
 
 type Character = { file: File; url: string; role: string };
@@ -44,10 +45,13 @@ const MODES = [
   { id: "simple", title: "Simple motion transfer", text: "Swap the main person in a video for your character.", ready: true },
   { id: "advanced", title: "Advanced motion transfer", text: "Several people, pick who becomes who.", ready: true },
   { id: "object", title: "Object swap", text: "Change hair, clothes, a prop or the background, or remove something.", ready: true },
-  { id: "post", title: "Post-processing", text: "Fix the faces or the colours of a finished video.", ready: true },
+  { id: "post", title: "Post-processing", text: KAFEIN_RESEARCH_MODES ? "Fix the faces or the colours of a finished video." : "Fix the colours of a finished video.", ready: true },
 ] as const;
 
-const POSTS: { id: Post; label: string }[] = [{ id: "face", label: "Fix faces" }, { id: "color", label: "Fix colours" }];
+const POSTS: { id: Post; label: string }[] = [
+  ...(KAFEIN_RESEARCH_MODES ? [{ id: "face" as const, label: "Fix faces" }] : []),
+  { id: "color", label: "Fix colours" },
+];
 
 const FACE_STYLE_TEXT: Record<FaceStyle, { label: string; hint: string }> = {
   photo: { label: "Match the photo", hint: "The face is redrawn from the photo: the closest likeness, but H3 makes up its own expressions and mouth movements." },
@@ -60,7 +64,7 @@ const EDITS: { id: EditTab; label: string; target: string; what: string; to: str
   { id: "add", label: "Add", target: "on the table", what: "Where it goes", to: "a chocolate cake on a plate", toHint: "Object to add" },
   { id: "remove", label: "Remove", target: "poster", what: "What to remove", to: "a plain wall", toHint: "What shows instead (optional)" },
   { id: "background", label: "Background", target: "person", what: "What stays", to: "a snowy mountain pass at dusk", toHint: "The new place" },
-  { id: "picture", label: "From picture", target: "person", what: "Who is replaced", to: "", toHint: "" },
+  ...(KAFEIN_RESEARCH_MODES ? [{ id: "picture" as const, label: "From picture", target: "person", what: "Who is replaced", to: "", toHint: "" }] : []),
 ];
 
 const isRun = (run: Run | null) => typeof run?.id === "string" && Object.hasOwn(KIND_LABELS, run.kind);
@@ -259,7 +263,7 @@ export function Openjutsu() {
   const [keepOutline, setKeepOutline] = useState(true);
   const [placement, setPlacement] = useState<PlacementKeyframe[]>([]);
   const [paint, setPaint] = useState<PaintKeyframe[]>([]);
-  const [post, setPost] = useState<Post>("face");
+  const [post, setPost] = useState<Post>(KAFEIN_RESEARCH_MODES ? "face" : "color");
   const [detailOn, setDetailOn] = useState(true);
   const [detail, setDetail] = useState(DETAIL.default);
   const [toneOn, setToneOn] = useState(true);
@@ -288,6 +292,18 @@ export function Openjutsu() {
   const speedLora = hasSpeedLora(enabledLoras);
   const selectedAcceleration = speedLora ? "none" : acceleration;
   const [files, setFiles] = useState<ModelFiles>({ models: [], loras: [], textEncoders: [], vaes: [] });
+
+  function restoreFleetDefaults() {
+    setSteps(DEFAULT_MODEL.steps);
+    setModel(DEFAULT_MODEL.model);
+    setLoras(DEFAULT_MODEL.loras.map((lora) => ({ ...lora, enabled: true })));
+    setUseLoras(true);
+    setDescriber(DEFAULT_DESCRIBER);
+    setTextEncoder(DEFAULT_MODEL.textEncoder);
+    setVideoVae(DEFAULT_MODEL.videoVae);
+    setAudioVae(DEFAULT_MODEL.audioVae);
+    setAcceleration(DEFAULT_MODEL.acceleration);
+  }
   const [submitting, setSubmitting] = useState(false);
   const [checkingSetup, setCheckingSetup] = useState(false);
   const [setup, setSetup] = useState<SetupResult | null>(null);
@@ -315,7 +331,7 @@ export function Openjutsu() {
   const savedSettings = JSON.stringify(settings);
 
   useEffect(() => {
-    const s = readSettings(settings);
+    const s = migrateFleetSettings(readSettings(settings));
     setMode(s.mode); setMaxQuality(s.maxQuality); setMontage(s.montage); setResolution(s.resolution); setCustomSize(s.customSize);
     setHatFix(s.hatFix); setNoLipSync(s.noLipSync); setMargin(s.margin); setTarget(s.target); setEditMode(s.editMode); setEditTarget(s.editTarget);
     setBiggestOnly(s.biggestOnly); setKeepOutline(s.keepOutline); setPost(s.post); setDetailOn(s.detailOn); setDetail(s.detail); setToneOn(s.toneOn);
@@ -1055,6 +1071,10 @@ export function Openjutsu() {
                 : <>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</>}</small></span>
               <MarginPicker value={margin} onChange={setMargin} />
             </div>}
+            <div className="setting fleet-profile">
+              <span>KAFEIN fleet profile <small>H3 ref2va INT8 · Qwen 32B NVFP4 · Qwen 8B FP8 · turbo 8-step. Restore if a saved profile points at upstream weights that the fleet does not have.</small></span>
+              <button className="secondary" onClick={restoreFleetDefaults}>Use fleet defaults</button>
+            </div>
             <details>
               <summary>Advanced</summary>
               <div className="setting">
@@ -1084,7 +1104,7 @@ export function Openjutsu() {
                 </div>
               </div>}
               <div className="setting">
-                <span>Steps <small>6 with the DMAD speed LoRA; without a speed LoRA, 20 or more.</small></span>
+                <span>Steps <small>8 with the KAFEIN speed LoRA; without a speed LoRA, 20 or more.</small></span>
                 <input
                   className="steps-input" type="number" min={STEPS.min} max={STEPS.max} value={steps}
                   onChange={(event) => setSteps(Math.min(STEPS.max, Math.max(STEPS.min, Math.floor(Number(event.target.value) || STEPS.min))))}
@@ -1111,7 +1131,7 @@ export function Openjutsu() {
                 <FilePicker label="Audio VAE" value={audioVae} options={files.vaes} onChange={setAudioVae} />
               </div>
               <label className="setting toggle">
-                <span>Use LoRAs <small>Turn off to use the base model alone. Without a speed LoRA, use 20 or more steps.</small></span>
+                <span>Use LoRAs <small>Turn off to use the base model alone. Without a speed LoRA, use 20 or more steps. KAFEIN default: H3 ref2v turbo 8-step.</small></span>
                 <input type="checkbox" checked={useLoras} onChange={(event) => setUseLoras(event.target.checked)} />
                 <i />
               </label>

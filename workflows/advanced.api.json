@@ -278,7 +278,7 @@
    "clip_seconds": 6,
    "overlap_frames": 39,
    "resolution": "736p",
-   "steps": 6,
+   "steps": 8,
    "seed": 0,
    "roles": "",
    "no_lip_sync": [
@@ -333,7 +333,7 @@
  },
  "22": {
   "inputs": {
-   "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+   "clip_name": "qwen3vl_8b_fp8_scaled.safetensors",
    "type": "stable_diffusion",
    "device": "default"
   },
@@ -354,7 +354,7 @@
  },
  "25": {
   "inputs": {
-   "lora_name": "minimax_h3_DMAD_4step_full_lora_avg_rank_39_bf16.safetensors",
+   "lora_name": "minimax_h3_ref2v_turbo_8step_v1.0_768p_comfyui_bf16.safetensors",
    "strength_model": 1,
    "model": [
     "24",
@@ -395,7 +395,7 @@
  },
  "28": {
   "inputs": {
-   "clip_name": "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+   "clip_name": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
    "type": "minimax",
    "device": "default"
   },
@@ -482,7 +482,7 @@
    "encode_mode": "video",
    "crop": "center",
    "default_duration_seconds": 15,
-   "default_steps": 6,
+   "default_steps": 8,
    "base_seed": 0,
    "segment_crf": 16,
    "video_blend_frames": 0,

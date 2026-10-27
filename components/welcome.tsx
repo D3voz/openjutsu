@@ -3,9 +3,8 @@
 import { DEFAULT_DESCRIBER } from "../lib/model.ts";
 
 const SUGGESTIONS = [
-  { name: "qwen3vl_8b_int8_convrot.safetensors", label: "Qwen3-VL 8B · INT8", size: "9.35 GB", note: "Openjutsu default", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors" },
+  { name: "qwen3vl_8b_fp8_scaled.safetensors", label: "Qwen3-VL 8B · FP8", size: "10.59 GB", note: "KAFEIN fleet default", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_fp8_scaled.safetensors" },
   { name: "qwen3vl_4b_fp8_scaled.safetensors", label: "Qwen3-VL 4B · FP8", size: "5.24 GB", note: "Smaller Qwen alternative", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" },
-  { name: "gemma4_e2b_it_int8_convrot.safetensors", label: "Gemma 4 E2B · INT8", size: "5.2 GB", note: "Smaller vision alternative", url: "https://huggingface.co/Comfy-Org/gemma-4/blob/main/text_encoders/gemma4_e2b_it_int8_convrot.safetensors" },
 ];
 
 export function Welcome({ value, options, onChange, loading, error, onRefresh, onContinue }: {
@@ -63,7 +62,7 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
 
     <section className="panel welcome-memory" aria-labelledby="vram-heading">
       <div><p className="eyebrow">02 / LEAVE ROOM FOR THE WORK</p><h2 id="vram-heading">Choose for your available VRAM.</h2></div>
-      <p className="hint">For limited VRAM, start with a smaller quantized model such as Qwen3-VL 4B FP8 or Gemma 4 E2B INT8. With more headroom, keep the Qwen3-VL 8B INT8 default. Higher precision usually needs more memory.</p>
+      <p className="hint">For limited VRAM, start with Qwen3-VL 4B FP8. With more headroom, keep the KAFEIN Qwen3-VL 8B FP8 default. Higher precision usually needs more memory.</p>
       <div className="welcome-table"><table>
         <caption>Examples available as ComfyUI model files</caption>
         <thead><tr><th scope="col">Model</th><th scope="col">File size</th><th scope="col">Use</th></tr></thead>
@@ -73,7 +72,7 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
         </tr>)}</tbody>
       </table></div>
       <p className="hint">File size is a rough guide to weight storage, not a VRAM requirement. Images, video frames, context and working memory need extra space. ComfyUI may offload to system RAM, which can be slower. H3 video generation has its own, larger memory needs; this choice alone does not guarantee a full swap will fit.</p>
-      <p className="hint">Gemma needs a version with vision support. Alternative models can change prompt quality and how reliably people are matched; Openjutsu’s workflows default to Qwen3-VL 8B.</p>
+      <p className="hint">Alternative models can change prompt quality and how reliably people are matched; the KAFEIN profile defaults to Qwen3-VL 8B FP8.</p>
     </section>
 
     <footer className="welcome-actions">

@@ -5,7 +5,7 @@
   "4": {"class_type": "ImageScaleToMaxDimension", "_meta": {"title": "SAM video (1008 px, as the render)"}, "inputs": {"upscale_method": "area", "largest_size": 1008, "image": ["1", 0]}},
   "5": {"class_type": "SAM3_VideoTrack", "_meta": {"title": "SAM 3.1 track every person"}, "inputs": {"detection_threshold": 0.35, "max_objects": 0, "detect_interval": 1, "images": ["4", 0], "model": ["2", 0], "conditioning": ["3", 0]}},
   "6": {"class_type": "H3TrackCrops", "_meta": {"title": "Show each track per shot"}, "inputs": {"cut_threshold": 40, "max_crops": 32, "people": "<Subject 1>: the main person", "track_data": ["5", 0], "images": ["4", 0]}},
-  "7": {"class_type": "CLIPLoader", "_meta": {"title": "Describer: Qwen3-VL 8B"}, "inputs": {"clip_name": "qwen3vl_8b_int8_convrot.safetensors", "type": "stable_diffusion", "device": "default"}},
+  "7": {"class_type": "CLIPLoader", "_meta": {"title": "Describer: Qwen3-VL 8B"}, "inputs": {"clip_name": "qwen3vl_8b_fp8_scaled.safetensors", "type": "stable_diffusion", "device": "default"}},
   "9": {"class_type": "H3TrackRoles", "_meta": {"title": "Who is each track (Qwen3-VL)"}, "inputs": {"clip": ["7", 0], "crops": ["6", 0], "segments": ["6", 1]}},
   "10": {"class_type": "H3MontagePeople", "_meta": {"title": "People (for the person list)"}, "inputs": {"track_data": ["5", 0], "crops": ["6", 0], "labels": ["9", 0], "source_frames": ["1", 0]}}
 }
