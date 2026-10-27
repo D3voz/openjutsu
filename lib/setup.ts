@@ -33,12 +33,14 @@ const PACKS = [
   { name: "ComfyUI-MiniMaxH3-Context-Loop (0.7.3+)", url: "https://github.com/ethanfel/ComfyUI-MiniMaxH3-Context-Loop", nodes: ["MiniMaxH3GenerationProfile", "MiniMaxH3SourceTimeline", "MiniMaxH3ChainPlanModern", "MiniMaxH3ChainLoopStart", "MiniMaxH3ChainCurrent", "MiniMaxH3ChainContext", "MiniMaxH3ChainSegmentSave", "MiniMaxH3ChainReview", "MiniMaxH3ChainLoopEnd", "MiniMaxH3ChainAssemble", "MiniMaxH3ContexLoopSourceSlice", "MiniMaxH3ContexLoopMaskSlice", "MiniMaxH3ContexMaskedTarget", "MiniMaxH3ContexMaskGridPreview", "MiniMaxH3LoopTrim"] },
   { name: "comfyui-h3-oneclick-swap", url: "https://github.com/D3voz/comfyui-h3-oneclick-swap", nodes: ["H3OneClickSwapPlan", "H3AdvancedSwapPlan", "H3ObjectSwapPlan", "H3ObjectPlacementMask", "H3AddFitCheck", "H3AddMovingArea", "H3PaintedEditArea", "H3SoundtrackOrSilence", "H3PeopleMask", "H3GreyMannequins", "H3ClipShots", "H3FillShots", "H3TrackCrops", "H3TrackRoles", "H3RoleMask", "H3SubjectPrompt", "H3MontagePeople", "H3MontageTracks", "H3MontagePicks", "H3MontagePlan", "H3MontagePass", "H3FaceChunks", "H3FaceJoin"] },
   { name: "ComfyUI-Fantastic-MiniMaxH3-PromptBuilder", url: "https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder", nodes: ["MiniMaxH3FantasticVideoEditLatent"] },
-  { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes", nodes: ["GrowMaskWithBlur", "ImageAndMaskPreview"] },
+  { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes", nodes: ["GrowMaskWithBlur", "ImageAndMaskPreview", "VRAM_Debug"] },
   { name: "ComfyUI-VideoHelperSuite", url: "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite", nodes: ["VHS_LoadVideo", "VHS_SelectEveryNthImage", "VHS_VideoCombine"] },
   { name: "ComfyUI-H3-FaceRefine", url: "https://github.com/Carasibana/ComfyUI-H3-FaceRefine", nodes: ["H3FaceTrackCrop", "H3FaceMaskSAM", "H3FaceStitch"] },
   { name: "ComfyUI-Impact-Pack", url: "https://github.com/ltdrdata/ComfyUI-Impact-Pack", nodes: ["SAMLoader"] },
   { name: "comfyui-image-detail-contrast", url: "https://github.com/D3voz/comfyui-image-detail-contrast", nodes: ["ImageDetailContrast"] },
   { name: "Orion4D_FXMax", url: "https://github.com/orion4d/Orion4D_FXMax", nodes: ["Orion4D_FXMax_DCTLToneMapper"] },
+  { name: "SolarRenderer", url: "https://github.com/Enderfga/SolarRenderer/tree/main/comfyui", nodes: ["SolarRendererModel", "SolarRendererLoraLoader", "SolarRendererConditioning", "SolarRendererSigmas"] },
+  { name: "comfyui_controlnet_aux", url: "https://github.com/Fannovel16/comfyui_controlnet_aux", nodes: ["Metric3D-NormalMapPreprocessor"] },
 ];
 const CORE = { name: "ComfyUI (update required)", url: "https://github.com/Comfy-Org/ComfyUI", nodes: [] as string[] };
 // Adds no nodes, so it is found by its route instead. Without it, live progress stops when the proxy reconnects.
