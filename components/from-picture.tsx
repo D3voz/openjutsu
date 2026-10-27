@@ -151,6 +151,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       <section className="panel">
         <h2><span>2</span> Prepare the first frame</h2>
         <p className="hint">Image 1 supplies the character and background. Image 2 supplies the pose and body cut.</p>
+        <p className="hint">Missing the FLUX model files? <a href="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy" target="_blank" rel="noopener noreferrer">Download FLUX 3 Image Klein files</a>.</p>
         <label>FLUX edit prompt<textarea className="report" rows={6} value={prompt} disabled={busy} onChange={(event) => { invalidate(); setPrompt(event.target.value); }} /></label>
         <label>Seed<input className="target-input" type="number" min={0} max={MAX_SEED} step={1} value={seed} disabled={busy} onChange={(event) => { invalidate(); setSeed(Number(event.target.value)); }} /></label>
         <button className="primary" disabled={busy || !video || !picture || !size} onClick={() => prepare(seed)}>Generate preview image</button>
