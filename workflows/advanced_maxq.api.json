@@ -1,4 +1,15 @@
 {
+ "per_person_run_name": {
+  "inputs": {
+   "string_a": ["14", 3],
+   "string_b": "_per_person",
+   "delimiter": ""
+  },
+  "class_type": "StringConcatenate",
+  "_meta": {
+   "title": "Run name for one pass per person"
+  }
+ },
  "2": {
   "inputs": {
    "image": ""
@@ -360,10 +371,7 @@
  "29": {
   "inputs": {
    "plan_json": "{\n  \"shots\": [\n    {\n      \"id\": \"intro\",\n      \"prompt\": \"Describe the opening shot.\"\n    },\n    {\n      \"id\": \"continuation\",\n      \"prompt\": \"Continue the same take.\"\n    }\n  ]\n}",
-   "run_name": [
-    "14",
-    3
-   ],
+   "run_name": ["per_person_run_name", 0],
    "generation_fingerprint": "",
    "width": [
     "14",
