@@ -1,5 +1,6 @@
 import { apiAccess, validateJobId } from "../../../../../lib/http.ts";
 import { NotFound } from "@comfyorg/sdk";
+import { NotFound as LowNotFound } from "@comfyorg/sdk/low";
 import { getJob, JOB_KINDS, loadGraph, publicJob, rawJobEvents, TERMINAL, type JobKind } from "../../../../../lib/comfy.ts";
 import { nodeDescriber } from "../../../../../lib/progress.ts";
 
@@ -43,7 +44,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         }
       } catch (error) {
         // The proxy forgets jobs when it restarts; the page then shows the job as no longer available.
-        if (error instanceof NotFound) send({ type: "job", job: { id, status: "expired", queuePosition: null, error: null, video: null, data: null } });
+        if (error instanceof NotFound || error instanceof LowNotFound) send({ type: "job", job: { id, status: "expired", queuePosition: null, error: null, video: null, data: null } });
         else if (!request.signal.aborted) send({ type: "error", message: error instanceof Error ? error.message : "Lost the job stream." });
       }
       if (!request.signal.aborted) controller.close();
