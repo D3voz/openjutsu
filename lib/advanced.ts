@@ -2,7 +2,7 @@
 // workflows/advanced.api.json (one pass) and advanced_maxq.api.json (one pass per person, 2 characters) are exported
 // with every picture, the hat fix and No lip-sync enabled; each request prunes what it does not use. Nodes are found by title, as
 // the builder (workflows/build/oneclick_advanced_build.js) names them.
-import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
+import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, suffixRunName, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
 
 export const MAX_CHARACTERS = 4;
 
@@ -40,6 +40,12 @@ export function pruneAdvanced(source: ApiGraph, pictures: number, settings: Adva
   const graph: ApiGraph = structuredClone(source);
   const available = pictureCount(graph);
   if (pictures < 1 || pictures > available) throw new Error(`This mode takes 1-${available} character photos.`);
+
+  // Both exports share the same native Swap Plan, but the per-person graph
+  // samples twice. Its saved clips must not resume a joint-pass generation.
+  if (Object.values(graph).some((node) => node.class_type === "H3SubjectPrompt")) {
+    suffixRunName(graph, "per_person_run_name", "_per_person", "Run name for one pass per person");
+  }
 
   const removed = new Set<string>();
   // Unused pictures: the photo, its shrink and its describer go; inputs that read them are dropped.
