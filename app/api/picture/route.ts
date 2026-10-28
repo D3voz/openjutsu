@@ -17,10 +17,10 @@ const FILE_CHECKS = {
 type OutputFile = { filename: string; subfolder?: string; type?: string };
 type History = { prompt?: [number, string, ApiGraph]; status?: { status_str?: string; completed?: boolean }; outputs?: Record<string, { images?: OutputFile[]; gifs?: OutputFile[] }> };
 
-async function comfy(path: string, init?: RequestInit) {
+async function comfy(path: string, init?: RequestInit, rangeResponse = false) {
   const base = (process.env.COMFYUI_URL?.trim() || "http://127.0.0.1:8188").replace(/\/+$/, "");
   const response = await fetch(`${base}${path}`, { ...init, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) {
+  if (!response.ok && !(rangeResponse && response.status === 416)) {
     const data = await response.json().catch(() => null);
     const details = Object.values(data?.node_errors ?? {}).flatMap((node) => (node as { errors?: { message: string; details?: string }[] }).errors ?? [])
       .map((error) => `${error.message}${error.details ? `: ${error.details}` : ""}`).join("; ");
@@ -165,7 +165,14 @@ export async function GET(request: Request) {
     if (!file) throw new HttpError(422, "ComfyUI returned no result. Check its console.");
     const base = `/api/picture?id=${encodeURIComponent(id)}`;
     if (!media) return Response.json({ status: "ready", url: `${base}&media=result`, ...(!isVideo ? { frame: `${base}&media=frame`, width: item.prompt![2]["3"].inputs.width, height: item.prompt![2]["3"].inputs.height } : {}) });
-    const response = await comfy(view(file), { headers: request.headers.has("Range") ? { Range: request.headers.get("Range")! } : {} });
+    const response = await comfy(view(file), { headers: request.headers.has("Range") ? { Range: request.headers.get("Range")! } : {} }, true);
+    if (response.status === 416) {
+      await response.body?.cancel();
+      const headers = new Headers({ "Cache-Control": "private, no-store" });
+      const range = response.headers.get("Content-Range");
+      if (range) headers.set("Content-Range", range);
+      return new Response(null, { status: 416, headers });
+    }
     return new Response(response.body, { status: response.status, headers: {
       "Content-Type": isVideo ? "video/mp4" : "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
       ...Object.fromEntries(["Content-Length", "Content-Range", "Accept-Ranges"].flatMap((key) => response.headers.has(key) ? [[key, response.headers.get(key)!]] : [])),
