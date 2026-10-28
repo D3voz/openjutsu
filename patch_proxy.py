@@ -105,6 +105,8 @@ NodeOutputsFn = Callable[[str, dict[str, Any]], list[dict[str, Any]]]
 }
 
 package = pathlib.Path(importlib.util.find_spec("comfy_api_proxy").origin).parent
+# Validate the entire package before changing either side of the bridge contract.
+updates = []
 for name, fixes in FIXES.items():
     path = package / name
     text = path.read_text(encoding="utf-8")
@@ -114,5 +116,8 @@ for name, fixes in FIXES.items():
         if text.count(old) != 1:
             sys.exit(f"Could not fix live progress in {path}. patch_proxy.py is written for comfy-api-proxy 0.1.6.")
         text = text.replace(old, new)
+    updates.append((path, text))
+
+for path, text in updates:
     path.write_text(text, encoding="utf-8", newline="\n")
     print(f"Fixed live progress in {path}")
