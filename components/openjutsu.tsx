@@ -488,7 +488,7 @@ export function Openjutsu() {
   useEffect(() => { setPlacement([]); setPaint([]); }, [video?.url, resolutionField, whole, part.start, part.length]);
   useEffect(() => setPaint([]), [editTarget]);
   // A montage render masks with the tracks Find people saved, so it must use the frames Find people saw.
-  const frames = video ? `${video.file.name}:${video.file.size} ${whole ? "whole" : `${part.start.toFixed(2)}+${part.length.toFixed(2)}`} ${typeof resolution === "object" ? resolutionField : ""}` : "";
+  const frames = video ? `${video.url} ${video.file.name}:${video.file.size} ${whole ? "whole" : `${part.start.toFixed(2)}+${part.length.toFixed(2)}`} ${typeof resolution === "object" ? resolutionField : ""}` : "";
   // A job reopened from Recent jobs may have used another video, part or size than the one loaded now.
   const same = run?.frames === frames;
 
