@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 
 register(new URL("./tsx-loader.mjs", import.meta.url));
 
-export async function mountEditor() {
+export async function mountEditor(options: { storage?: Record<string, unknown>; fetch?: typeof globalThis.fetch } = {}) {
   const dom = new JSDOM("<!doctype html><div id='app'></div>", { url: "http://127.0.0.1:3000" });
   const originals = new Map<string, PropertyDescriptor | undefined>();
   const expose = (name: string, value: unknown) => {
@@ -13,9 +13,16 @@ export async function mountEditor() {
   };
   for (const name of ["window", "document", "navigator", "localStorage", "HTMLElement", "HTMLInputElement", "Event", "File"] as const) expose(name, dom.window[name]);
   expose("IS_REACT_ACT_ENVIRONMENT", true);
-  expose("fetch", async (url: string) => Response.json(url.includes("presets") ? { tone: [] } : { models: [], loras: [], textEncoders: [], vaes: [] }));
-  expose("EventSource", class { close() {} });
+  expose("fetch", options.fetch ?? (async (url: string) => Response.json(url.includes("presets") ? { tone: [] } : { models: [], loras: [], textEncoders: [], vaes: [] })));
+  const sources: { url: string; onmessage: ((message: { data: string }) => void) | null; close: () => void }[] = [];
+  expose("EventSource", class {
+    onmessage = null;
+    url: string;
+    constructor(url: string) { this.url = url; sources.push(this); }
+    close() {}
+  });
   dom.window.localStorage.setItem("openjutsu.welcome", "1");
+  for (const [key, value] of Object.entries(options.storage ?? {})) dom.window.localStorage.setItem(key, JSON.stringify(value));
   const createURL = URL.createObjectURL, revokeURL = URL.revokeObjectURL;
   let nextURL = 0;
   URL.createObjectURL = () => `blob:test-${++nextURL}`;
@@ -33,7 +40,7 @@ export async function mountEditor() {
   const root = createRoot(container);
   await act(async () => root.render(createElement(Openjutsu)));
   return {
-    dom, container, videos,
+    dom, container, videos, sources,
     async chooseVideo(name: string) {
       const input = container.querySelector<HTMLInputElement>('input[type="file"][accept^="video"]')!;
       Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["fixture"], name, { type: "video/mp4" })] });
