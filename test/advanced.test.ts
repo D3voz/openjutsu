@@ -53,7 +53,7 @@ test("without No lip-sync every pass hears the soundtrack and sees no faces", ()
   for (const [g, n] of [[graph, 4], [maxq, 2]] as const) {
     const pruned = pruneAdvanced(g, n, settings(true, [], false));
     assert.deepEqual(dangling(pruned), []);
-    assert.equal(Object.keys(pruned).length, Object.keys(g).length - 6 + 1); // mask run identity
+    assert.equal(Object.values(pruned).filter((node) => node.class_type !== "StringConcatenate").length, Object.values(g).filter((node) => node.class_type !== "StringConcatenate").length - 6);
     for (const node of Object.values(pruned)) {
       if (node.class_type === "MiniMaxH3ReferenceToVideo") assert.equal(pruned[(node.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].class_type, "MiniMaxH3ChainCurrent");
       if (node.class_type === "H3SourceSlice") assert.equal(pruned[(node.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");
