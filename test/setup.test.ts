@@ -125,15 +125,30 @@ test("model checks deduplicate files, normalize path separators, and ignore uplo
   assert.deepEqual(inspectSetup(graph, registry).models, [{ name: "missing.safetensors", folder: "text_encoders" }]);
 });
 
-test("setup reads the registry and the websocket fix route, and never uploads or submits a job", async (t) => {
+test("setup reads only the graph's nodes and the websocket fix route, and never uploads or submits a job", async (t) => {
   const graph = setupGraph(load("simple"), simple);
+  const registry = registryFor(graph);
   const urls: string[] = [];
   t.mock.method(globalThis, "fetch", async (url: string) => {
     urls.push(url);
-    return Response.json(url.endsWith("/websocket_reconnect_fix") ? {} : registryFor(graph));
+    const type = decodeURIComponent(new URL(url).pathname.replace("/object_info/", ""));
+    return Response.json(url.endsWith("/websocket_reconnect_fix") ? {} : { [type]: registry[type] });
   });
   assert.equal((await checkSetup(graph)).ok, true);
-  assert.deepEqual(urls.map((url) => new URL(url).pathname).sort(), ["/object_info", "/websocket_reconnect_fix"]);
+  const types = [...new Set(Object.values(graph).map((node) => node.class_type))];
+  assert.deepEqual(urls.map((url) => new URL(url).pathname).sort(), [...types.map((type) => `/object_info/${type}`), "/websocket_reconnect_fix"].sort());
+});
+
+test("a node ComfyUI does not have comes back empty and is listed as missing", async (t) => {
+  const graph = setupGraph(load("simple"), simple);
+  const registry = registryFor(graph);
+  t.mock.method(globalThis, "fetch", async (url: string) => {
+    const type = decodeURIComponent(new URL(url).pathname.replace("/object_info/", ""));
+    return Response.json(url.endsWith("/websocket_reconnect_fix") || type === "H3SourceSlice" ? {} : { [type]: registry[type] });
+  });
+  const result = await checkSetup(graph);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.packs.map((p) => [p.name, p.nodes]), [["comfyui-h3-oneclick-swap", ["H3SourceSlice"]]]);
 });
 
 test("setup lists the websocket fix when ComfyUI does not have it", async (t) => {

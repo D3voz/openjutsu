@@ -99,14 +99,16 @@ export function inspectSetup(graph: ApiGraph, registry: NodeRegistry): SetupResu
   return result;
 }
 
+// Full /object_info rebuilds every node's info per request and can take over 20 s on large installs; ask only for the graph's nodes.
 export async function checkSetup(graph: ApiGraph): Promise<SetupResult> {
   try {
-    const [registry, websocketFix] = await Promise.all([
-      comfyUi("/object_info", 8000),
+    const types = [...new Set(Object.values(graph).map((node) => node.class_type))];
+    const [answers, websocketFix] = await Promise.all([
+      Promise.all(types.map((type) => comfyUi(`/object_info/${encodeURIComponent(type)}`, 8000))),
       comfyUi("/websocket_reconnect_fix", 8000).then(() => true, () => false),
     ]);
-    if (!registry || typeof registry !== "object" || Array.isArray(registry)) throw new Error("Invalid node list");
-    const result = inspectSetup(graph, registry);
+    if (answers.some((info) => !info || typeof info !== "object" || Array.isArray(info))) throw new Error("Invalid node info");
+    const result = inspectSetup(graph, Object.assign({}, ...answers));
     if (!websocketFix) Object.assign(result, { ok: false, error: PACK_HINT, packs: [...result.packs, WEBSOCKET_FIX] });
     return result;
   } catch {
