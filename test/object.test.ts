@@ -24,7 +24,7 @@ test("the export has the picture, the grey motion reference and the video", () =
 
 test("change with a picture keeps the graph and sets the plan", () => {
   const pruned = pruneObject(graph, true, settings("change"));
-  assert.equal(Object.keys(pruned).length, Object.keys(graph).length);
+  assert.equal(Object.keys(pruned).length, Object.keys(graph).length + 1); // mask run identity
   const plan = node(pruned, "Object Swap Plan (what to change)").inputs;
   assert.deepEqual([plan.mode, plan.target, plan.change_to, plan.resolution, plan.seed, plan.clip_seconds], ["change", "hair", "pink hair", "480p", 5, 4]);
   assert.equal(node(pruned, "SAM: what to change").inputs.text, "hair");

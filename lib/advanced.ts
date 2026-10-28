@@ -2,7 +2,7 @@
 // workflows/advanced.api.json (one pass) and advanced_maxq.api.json (one pass per person, 2 characters) are exported
 // with every picture, the hat fix and No lip-sync enabled; each request prunes what it does not use. Nodes are found by title, as
 // the builder (workflows/build/oneclick_advanced_build.js) names them.
-import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
+import { MARGINS, dropNoLipSync, isLink, setMotionSize, setResolution, suffixMaskRunName, type ApiGraph, type Margin, type MotionSize, type Resolution } from "./simple.ts";
 
 export const MAX_CHARACTERS = 4;
 
@@ -79,5 +79,6 @@ export function pruneAdvanced(source: ApiGraph, pictures: number, settings: Adva
   plan.seed = settings.seed;
   plan.clip_seconds = settings.clipSeconds;
   plan.roles = roles.some(Boolean) ? roles.map((role, i) => role || ordinal(i, pictures)).join("\n") : "";
+  suffixMaskRunName(graph, [settings.hatFix, MARGINS[settings.margin]]);
   return graph;
 }
