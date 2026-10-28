@@ -86,7 +86,12 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         const data = await response.json();
         if (!response.ok) {
           setError(data.error ?? "Could not read the job.");
-          if ([400, 404, 422].includes(response.status)) { setJob(null); remember(null, prepared, job!.stage === "render"); }
+          if ([400, 404, 422].includes(response.status)) {
+            setJob(null);
+            if (job!.stage === "prepare") {
+              setPrepared(""); setPreview(null); setApproved(false); remember(null, "", false);
+            } else remember(null, prepared, true);
+          }
           else timer = setTimeout(poll, 5000);
           return;
         }
