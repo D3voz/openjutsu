@@ -101,22 +101,38 @@ function upload(comfy: Comfy, file: StoredFile) {
 // so an input is deleted only once no job here uses it, and only if this server uploaded it rather than reused it.
 const inputs = ((globalThis as { [key: symbol]: unknown })[Symbol.for("openjutsu.inputs")] ??= new Map()) as Map<string, { jobs: number; owned: boolean }>;
 
+// Identity is unknown until commit finishes. Serialize acquisition with deletion so
+// a terminal job cannot invalidate a successful in-flight dedup response.
+const inputOperations = ((globalThis as { [key: symbol]: unknown })[Symbol.for("openjutsu.input-operations")] ??=
+  { pending: Promise.resolve() }) as { pending: Promise<void> };
+
+async function withInputLock<T>(operation: () => Promise<T>): Promise<T> {
+  const previous = inputOperations.pending;
+  let unlock!: () => void;
+  inputOperations.pending = new Promise<void>((resolve) => { unlock = resolve; });
+  await previous;
+  try { return await operation(); }
+  finally { unlock(); }
+}
+
 function hold(asset: Asset) {
   const entry = inputs.get(asset.id!) ?? { jobs: 0, owned: false };
   inputs.set(asset.id!, { jobs: entry.jobs + 1, owned: entry.owned || asset.createdNew === true });
 }
 
 async function release(comfy: Comfy, ids: string[]) {
-  for (const id of ids) {
-    const entry = inputs.get(id);
-    if (!entry) continue;
-    if (entry.jobs > 1) {
-      inputs.set(id, { ...entry, jobs: entry.jobs - 1 });
-      continue;
+  await withInputLock(async () => {
+    for (const id of ids) {
+      const entry = inputs.get(id);
+      if (!entry) continue;
+      if (entry.jobs > 1) {
+        inputs.set(id, { ...entry, jobs: entry.jobs - 1 });
+        continue;
+      }
+      inputs.delete(id);
+      if (entry.owned) await comfy.assets.delete(id).catch(() => {});
     }
-    inputs.delete(id);
-    if (entry.owned) await comfy.assets.delete(id).catch(() => {});
-  }
+  });
 }
 
 // Retry and every other run upload their inputs again from the page, so nothing reuses them after a terminal status.
@@ -138,10 +154,12 @@ async function submit(comfy: Comfy, workflow: Workflow) {
   const assets = Object.values(workflow.json).flatMap((node) => Object.values((node as { inputs?: object }).inputs ?? {})).filter((value) => value instanceof Asset);
   const ids: string[] = [];
   try {
-    for (const asset of assets) {
-      ids.push(await asset.commit());
-      hold(asset);
-    }
+    await withInputLock(async () => {
+      for (const asset of assets) {
+        ids.push(await asset.commit());
+        hold(asset);
+      }
+    });
     const job = await comfy.submit(workflow);
     void releaseWhenDone(comfy, job, ids);
     return publicJob(job);
