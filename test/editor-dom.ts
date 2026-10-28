@@ -11,7 +11,7 @@ export async function mountEditor(options: { storage?: Record<string, unknown>; 
     originals.set(name, Object.getOwnPropertyDescriptor(globalThis, name));
     Object.defineProperty(globalThis, name, { configurable: true, writable: true, value });
   };
-  for (const name of ["window", "document", "navigator", "localStorage", "HTMLElement", "HTMLInputElement", "Event", "File"] as const) expose(name, dom.window[name]);
+  for (const name of ["window", "document", "navigator", "localStorage", "HTMLElement", "HTMLInputElement", "Event", "File", "FormData"] as const) expose(name, dom.window[name]);
   expose("IS_REACT_ACT_ENVIRONMENT", true);
   expose("fetch", options.fetch ?? (async (url: string) => Response.json(url.includes("presets") ? { tone: [] } : { models: [], loras: [], textEncoders: [], vaes: [] })));
   const sources: { url: string; onmessage: ((message: { data: string }) => void) | null; close: () => void }[] = [];
@@ -41,9 +41,9 @@ export async function mountEditor(options: { storage?: Record<string, unknown>; 
   await act(async () => root.render(createElement(Openjutsu)));
   return {
     dom, container, videos, sources,
-    async chooseVideo(name: string) {
+    async chooseVideo(name: string, bytes = "fixture") {
       const input = container.querySelector<HTMLInputElement>('input[type="file"][accept^="video"]')!;
-      Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File(["fixture"], name, { type: "video/mp4" })] });
+      Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File([bytes], name, { type: "video/mp4" })] });
       await act(async () => input.dispatchEvent(new dom.window.Event("change", { bubbles: true })));
       return videos.filter((video) => !video.isConnected).at(-1)!;
     },
