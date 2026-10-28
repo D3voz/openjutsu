@@ -239,6 +239,7 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 export function Openjutsu() {
   const [mode, setMode] = useState<Mode>("simple");
   const [video, setVideo] = useState<{ file: File; url: string; duration: number; width: number; height: number } | null>(null);
+  const videoSelection = useRef(0);
   const [part, setPart] = useState<Section>({ start: 0, length: 0 });
   const player = useRef<HTMLVideoElement>(null);
   const [characters, setCharacters] = useState<Character[]>([]);
@@ -419,6 +420,7 @@ export function Openjutsu() {
   function chooseVideo(files: File[]) {
     const file = files[0];
     if (!file) return;
+    const selection = ++videoSelection.current;
     if (video) URL.revokeObjectURL(video.url);
     const url = URL.createObjectURL(file);
     setVideo({ file, url, duration: 0, width: 0, height: 0 });
@@ -426,6 +428,7 @@ export function Openjutsu() {
     const probe = document.createElement("video");
     probe.preload = "metadata";
     probe.onloadedmetadata = () => {
+      if (selection !== videoSelection.current) return;
       const duration = Number.isFinite(probe.duration) ? probe.duration : 0;
       setVideo((current) => (current?.url === url ? { ...current, duration, width: probe.videoWidth, height: probe.videoHeight } : current));
       setPart({ start: 0, length: duration });
