@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { canvasSize, CUSTOM_SIZE, MAX_SEED, MOTION_SIZES, RESOLUTIONS } from "../lib/simple.ts";
 import { MAX_LORAS, STEPS, STRENGTH } from "../lib/model.ts";
 import { DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureFrames, solarLoraFiles, type PictureVideoSettings } from "../lib/picture.ts";
@@ -31,6 +31,11 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const busy = submitting || !!job;
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
 
   useEffect(() => {
     try {
@@ -84,6 +89,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       try {
         const response = await fetch(`/api/picture?id=${encodeURIComponent(job!.id)}`, { signal: controller.signal });
         const data = await response.json();
+        if (controller.signal.aborted) return;
         if (!response.ok) {
           setError(data.error ?? "Could not read the job.");
           if ([400, 404, 422].includes(response.status)) { setJob(null); remember(null, prepared, job!.stage === "render"); }
@@ -116,10 +122,11 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       form.set("width", String(size[0])); form.set("height", String(size[1])); form.set("prompt", prompt);
       const response = await fetch("/api/picture", { method: "POST", body: form });
       const data = await response.json();
+      if (!active.current) return;
       if (!response.ok) throw new Error(data.error);
       const next: Job = { id: data.id, stage: "prepare" }; remember(next, "", false); setJob(next);
-    } catch (error) { setError((error as Error).message); }
-    finally { setSubmitting(false); }
+    } catch (error) { if (active.current) setError((error as Error).message); }
+    finally { if (active.current) setSubmitting(false); }
   }
   async function render() {
     if (!prepared || !preview || !approved) return;
@@ -127,10 +134,11 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     try {
       const response = await fetch("/api/picture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings }) });
       const data = await response.json();
+      if (!active.current) return;
       if (!response.ok) throw new Error(data.error);
       const next: Job = { id: data.id, stage: "render" }; remember(next, prepared, true); setJob(next);
-    } catch (error) { setError((error as Error).message); }
-    finally { setSubmitting(false); }
+    } catch (error) { if (active.current) setError((error as Error).message); }
+    finally { if (active.current) setSubmitting(false); }
   }
 
   function picker(label: string, value: string, options: string[], onChange: (value: string) => void) {
