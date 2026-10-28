@@ -280,7 +280,13 @@ export async function listTonePresets(): Promise<{ name: string; settings: Recor
   const get = (path: string) => comfyUi(`/orion4d_fxmax/${path}`, 5000);
   try {
     const { presets } = await get("presets/color_fx_dctl_tone_mapper");
-    return await Promise.all((presets as string[]).map(async (name) => ({ name, settings: (await get(`preset/color_fx_dctl_tone_mapper/${encodeURIComponent(name)}`)).settings })));
+    if (!Array.isArray(presets)) return [];
+    const results = await Promise.allSettled(presets.filter((name): name is string => typeof name === "string").map(async (name) => {
+      const { settings } = await get(`preset/color_fx_dctl_tone_mapper/${encodeURIComponent(name)}`);
+      if (!settings || typeof settings !== "object" || Array.isArray(settings)) throw new Error("Invalid preset settings.");
+      return { name, settings: settings as Record<string, unknown> };
+    }));
+    return results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
   } catch {
     return [];
   }
