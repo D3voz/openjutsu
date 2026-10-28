@@ -43,14 +43,16 @@ export async function fakeProxy() {
   const upload = async (request: IncomingMessage) => {
     let head = "";
     let size = 0;
+    let tail = Buffer.alloc(0);
     for await (const chunk of request as AsyncIterable<Buffer>) {
       if (head.length < 4096) head += chunk.toString("latin1", 0, 4096);
       size += chunk.length;
+      tail = Buffer.from(Buffer.concat([tail, chunk.subarray(-2)]).subarray(-2));
     }
     const field = (name: string) => head.match(new RegExp(`name="${name}"\\r\\n\\r\\n([^\\r]*)`))?.[1] ?? "";
     const boundary = String(request.headers["content-type"]).match(/boundary=(.+)$/)![1];
     const start = head.indexOf("\r\n\r\n", head.indexOf('name="file"')) + 4;
-    return { hash: field("expected_hash"), contentType: field("content_type"), filePath: field("file_path"), size: size - start - `\r\n--${boundary}--\r\n`.length };
+    return { hash: field("expected_hash"), contentType: field("content_type"), filePath: field("file_path"), size: size - start - `\r\n--${boundary}--`.length - (tail.equals(Buffer.from("\r\n")) ? 2 : 0) };
   };
 
   const server = createServer(async (request, response) => {
