@@ -624,7 +624,7 @@ export function Openjutsu() {
     if (kind === "simple") selection = { kind, settings: { ...shared, role: character?.role ?? "", target: String(form.get("target")) }, model: selectedModel };
     else if (kind === "advanced" || kind === "advanced_maxq") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, model: selectedModel };
     else if (kind === "montage") selection = { kind, settings: { ...shared, roles: shown.map((c) => c.role) }, pictures: shown.length, review: review ?? null, model: selectedModel };
-    else if (kind === "object") selection = { kind, settings: { ...shared, mode: editMode as EditMode, target: String(form.get("target")), changeTo, biggestOnly, keepOutline,
+    else if (kind === "object") selection = { kind, settings: { ...shared, mode: editMode as EditMode, target: String(form.get("target")), changeTo, biggestOnly, keepOutline, action,
       ...(editMode === "change" ? { paint: paint.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}),
       ...(editMode === "add" ? { placement: placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}) }, picture: !!look && editMode !== "remove", model: selectedModel };
     else if (kind === "face") selection = { kind, settings: { style: faceStyle, seed, chunkSeconds }, model: selectedModel };
