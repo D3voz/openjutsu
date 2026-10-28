@@ -74,8 +74,8 @@ export async function POST(request: Request) {
   try {
     let graph: ApiGraph;
     if (request.headers.get("Content-Type")?.startsWith("application/json")) {
-      const body = await request.json();
-      if (typeof body.prepared !== "string") throw new HttpError(400, "Prepare a picture first.");
+      const body = await request.json().catch(() => { throw new HttpError(400, "Send valid JSON picture settings."); });
+      if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.prepared !== "string") throw new HttpError(400, "Prepare a picture first.");
       const item = await history(body.prepared);
       const file = item?.outputs?.["21"]?.images?.[0];
       const source = item?.prompt?.[2];
