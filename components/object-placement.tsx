@@ -55,6 +55,9 @@ export function ObjectPlacement(props: Props) {
   }, [draft, props.mode, points, frame]);
 
   useEffect(() => { setTime(start); }, [start, src]);
+  useEffect(() => {
+    setTime((current) => Math.max(start, Math.min(current, Math.max(start, end - 1 / 24))));
+  }, [start, end]);
   useEffect(() => { if (video.current) video.current.currentTime = time; }, [time, src]);
   useEffect(() => {
     if (props.mode !== "paint") return;
