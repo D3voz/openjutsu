@@ -86,6 +86,18 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     return () => URL.revokeObjectURL(url);
   }, [picture]);
 
+  // A saved render restores preview URLs, but its result has no source dimensions.
+  useEffect(() => {
+    if (!prepared || !preview || !approved || video || size) return;
+    const controller = new AbortController();
+    fetch(`/api/picture?id=${encodeURIComponent(prepared)}`, { signal: controller.signal }).then(async (response) => {
+      const data = await response.json();
+      if (controller.signal.aborted || !response.ok || data.status !== "ready") return;
+      if ([data.width, data.height].every((side) => typeof side === "number" && Number.isFinite(side) && side > 0)) setSize([data.width, data.height]);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [prepared, preview, approved, video, size]);
+
   function remember(next: Job | null, image: string, accepted: boolean) {
     try { localStorage.setItem(STORAGE, JSON.stringify({ job: next, prepared: image, approved: accepted })); } catch {}
   }
@@ -257,9 +269,9 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
             <label>Video length (seconds)<input className="steps-input" type="number" min={(settings.renderer === "solar" ? 22 : 5) / 24} max={duration ? Math.min(MAX_SECONDS, duration - start) : MAX_SECONDS} step={0.1} value={settings.seconds} onChange={(event) => setSettings({ ...settings, seconds: Number(event.target.value) })} /></label>
             <small>H3 rounds down to a valid clip length: {frames} frames / {(frames / 24).toFixed(3)} s at 24 fps.</small>
             {settings.renderer === "solar" && settings.seconds > 6 && <p className="hint" role="note"><strong>Longer render time:</strong> SolarRenderer clips longer than 6 seconds can take considerably longer to render, especially at higher resolutions.</p>}
-            <label>Video resolution<select className="file-name" value={typeof settings.resolution === "string" ? settings.resolution : "custom"} onChange={(event) => setSettings({ ...settings, resolution: event.target.value === "custom" ? { width: canvas[0], height: canvas[1] } : event.target.value as PictureVideoSettings["resolution"] })}>{RESOLUTIONS.map((value) => <option key={value}>{value}</option>)}<option value="custom">Custom</option></select></label>
+            <label>Video resolution<select className="file-name" value={typeof settings.resolution === "string" ? settings.resolution : "custom"} onChange={(event) => { if (event.target.value === "custom" && !size) return; setSettings({ ...settings, resolution: event.target.value === "custom" ? { width: canvas[0], height: canvas[1] } : event.target.value as PictureVideoSettings["resolution"] }); }}>{RESOLUTIONS.map((value) => <option key={value}>{value}</option>)}<option value="custom" disabled={!size}>Custom</option></select></label>
             {typeof settings.resolution === "object" && <div className="row">{(["width", "height"] as const).map((side) => <label key={side}>Custom {side}<input className="steps-input" type="number" min={CUSTOM_SIZE.min} max={CUSTOM_SIZE.max} step={CUSTOM_SIZE.step} value={typeof settings.resolution === "object" ? settings.resolution[side] : 0} onChange={(event) => setSettings({ ...settings, resolution: { width: canvas[0], height: canvas[1], [side]: Number(event.target.value) } })} /></label>)}</div>}
-            <small>Video canvas: {canvas[0]}×{canvas[1]}.</small>
+            <small>{typeof settings.resolution === "string" && !size ? "Restoring source dimensions…" : `Video canvas: ${canvas[0]}×${canvas[1]}.`}</small>
             <label>Motion reference resolution<select className="file-name" value={settings.motion} onChange={(event) => setSettings({ ...settings, motion: Number(event.target.value) as PictureVideoSettings["motion"] })}><option value={0}>Match video</option>{MOTION_SIZES.map((value) => <option key={value} value={value}>{value} px</option>)}</select></label>
             <small>The motion/mask resolution control uses a normal-map guide here. Its size is separate from the output video.</small>
             <label>Video seed<input className="steps-input" type="number" min={0} max={MAX_SEED} step={1} value={settings.seed} onChange={(event) => setSettings({ ...settings, seed: Number(event.target.value) })} /></label>
