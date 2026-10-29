@@ -61,9 +61,9 @@ async function uploadFile(blob: Blob, extension: string) {
   return asset.subfolder ? `${asset.subfolder}/${asset.name}` : asset.name;
 }
 
-async function history(id: string) {
+async function history(id: string, signal?: AbortSignal) {
   validateJobId(id);
-  const data = await (await comfy(`/history/${encodeURIComponent(id)}`)).json();
+  const data = await (await comfy(`/history/${encodeURIComponent(id)}`, { signal })).json();
   const item: History | undefined = data[id];
   if (item) {
     const graph = item.prompt?.[2];
@@ -167,9 +167,9 @@ export async function GET(request: Request) {
   if (denied) return denied;
   try {
     const url = new URL(request.url), id = url.searchParams.get("id") ?? "";
-    const item = await history(id);
+    const item = await history(id, request.signal);
     if (!item) {
-      const queue = await (await comfy("/queue")).json();
+      const queue = await (await comfy("/queue", { signal: request.signal })).json();
       const waiting = [...queue.queue_running, ...queue.queue_pending].some((entry: unknown[]) => entry[1] === id);
       if (!waiting) throw new HttpError(404, "This job was removed or ComfyUI restarted. Generate the picture again.");
       return Response.json({ status: "processing" });
