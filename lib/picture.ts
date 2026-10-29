@@ -136,11 +136,17 @@ export function applyRelight(graph: ApiGraph, light: string) {
 }
 
 // Relights the video's own person: FLUX edits the raw frame at 3 MP and keeps its person, pose and setting.
-export function applyFrameRelight(graph: ApiGraph, light: string) {
+// Below denoise 1 sampling starts from the frame itself, which keeps its crop; at 1 FLUX may zoom out to fit the light.
+export function applyFrameRelight(graph: ApiGraph, light: string, denoise: number) {
   relightRequest(graph, light);
   for (const id of ["4", "5", "7"]) delete graph[id];
   graph["8"].inputs.image = ["2", 0];
   const { positive, negative, vae } = graph["15"].inputs;
   graph["15"] = { class_type: "ReferenceMultiLatent", inputs: { positive, negative, vae, resolution: "resize", "resolution.megapixels": 3, "images.image0": ["2", 0] }, _meta: { title: "Raw frame only, 3 MP" } };
   graph["21"].inputs.filename_prefix = "openjutsu_picture/flux3/relit_video_frame";
+  graph["19"].inputs.denoise = denoise;
+  if (denoise === 1) return;
+  graph["relight_frame"] = { class_type: "ImageScaleToTotalPixels", inputs: { image: ["2", 0], upscale_method: "lanczos", megapixels: 3, resolution_steps: 16 }, _meta: { title: "Raw frame at 3 MP" } };
+  graph["relight_start"] = { class_type: "VAEEncode", inputs: { pixels: ["relight_frame", 0], vae: ["12", 0] }, _meta: { title: "Start from the frame" } };
+  graph["19"].inputs.latent_image = ["relight_start", 0];
 }

@@ -61,7 +61,7 @@ test("relight gives FLUX only the character picture at 3 MP on the frame's shape
 test("relighting the video's own person gives FLUX and the upsampler only the raw frame", () => {
   const graph = load("prepare");
   graph["6"].inputs.value = FRAME_RELIGHT_PROMPT;
-  applyFrameRelight(graph, LIGHT_LOOKS[7].light);
+  applyFrameRelight(graph, LIGHT_LOOKS[7].light, 1);
   assert.ok(String(graph["6"].inputs.value).endsWith(LIGHT_LOOKS[7].light));
   assert.equal(graph["4"], undefined);
   assert.deepEqual(graph["8"].inputs.image, ["2", 0]);
@@ -69,12 +69,17 @@ test("relighting the video's own person gives FLUX and the upsampler only the ra
   assert.equal(graph["15"].inputs["images.image1"], undefined);
   assert.equal(graph["15"].inputs["resolution.megapixels"], 3);
   assert.deepEqual(graph["19"].inputs.latent_image, ["15", 2]);
+  const kept = load("prepare");
+  applyFrameRelight(kept, LIGHT_LOOKS[0].light, 0.9);
+  assert.equal(kept["19"].inputs.denoise, 0.9);
+  assert.deepEqual(kept["19"].inputs.latent_image, ["relight_start", 0]);
+  assert.deepEqual(kept["relight_frame"].inputs.image, ["2", 0]);
 });
 
 test("picture pipelines have valid links and no disconnected processing nodes", () => {
   const relit = load("prepare"), frame = load("prepare");
   applyRelight(relit, LIGHT_LOOKS[0].light);
-  applyFrameRelight(frame, LIGHT_LOOKS[0].light);
+  applyFrameRelight(frame, LIGHT_LOOKS[0].light, 0.9);
   for (const [stage, graph] of [...["prepare", "motion", "solar"].map((stage) => [stage, load(stage)] as const), ["relight", relit] as const, ["frame relight", frame] as const]) {
     const reached = new Set<string>();
     function visit(id: string) {

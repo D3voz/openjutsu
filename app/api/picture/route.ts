@@ -120,6 +120,8 @@ export async function POST(request: Request) {
       const lit = typeof light === "string" ? light.trim() : "", ownPerson = form.get("relight") === "frame";
       if (!(video instanceof StoredFile) || !video.size) throw new HttpError(400, "Choose a video.");
       if (ownPerson && !lit) throw new HttpError(400, "Choose a light for the video's own person.");
+      const denoise = Number(form.get("denoise") ?? 1);
+      if (!(denoise > 0 && denoise <= 1)) throw new HttpError(400, "Use a denoise above 0 and up to 1.");
       const character = !ownPerson && picture instanceof StoredFile && picture.size ? picture : null;
       if (!ownPerson && !character) throw new HttpError(400, "Choose a character picture.");
       const start = Number(form.get("start") ?? 0), seed = Number(form.get("seed") ?? 0);
@@ -139,7 +141,7 @@ export async function POST(request: Request) {
       if (character) graph["4"].inputs.image = await uploadFile(await openAsBlob(character.path), pictureExtension!.toLowerCase());
       graph["19"].inputs.seed = seed;
       graph["21"]._meta = { title: PREPARED };
-      if (ownPerson) applyFrameRelight(graph, lit);
+      if (ownPerson) applyFrameRelight(graph, lit, denoise);
       else if (lit) applyRelight(graph, lit);
     }
     const result = await (await comfy("/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: graph }) })).json();

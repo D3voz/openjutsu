@@ -27,6 +27,8 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const [relightPrompt, setRelightPrompt] = useState(RELIGHT_PROMPT);
   const [ownPerson, setOwnPerson] = useState(false);
   const [framePrompt, setFramePrompt] = useState(FRAME_RELIGHT_PROMPT);
+  const [keepCrop, setKeepCrop] = useState(false);
+  const [denoise, setDenoise] = useState(0.9);
   const [job, setJob] = useState<Job | null>(null);
   const [prepared, setPrepared] = useState("");
   const [preview, setPreview] = useState<{ url: string; frame: string } | null>(null);
@@ -132,7 +134,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       const form = new FormData();
       form.set("video", video); form.set("start", String(start)); form.set("seed", String(nextSeed));
       form.set("width", String(size[0])); form.set("height", String(size[1])); form.set("prompt", ownPerson ? framePrompt : relight ? relightPrompt : prompt);
-      if (ownPerson) form.set("relight", "frame"); else if (picture) form.set("picture", picture);
+      if (ownPerson) { form.set("relight", "frame"); form.set("denoise", String(keepCrop ? denoise : 1)); } else if (picture) form.set("picture", picture);
       if (relight) form.set("light", light);
       const response = await fetch("/api/picture", { method: "POST", body: form });
       const data = await response.json();
@@ -210,6 +212,14 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         {LIGHT_LOOKS[look] && <figure style={{ margin: 0, display: "grid", gap: 6 }}><img className="picture-reference" src={LIGHT_LOOKS[look].image} alt={`${LIGHT_LOOKS[look].name} example`} style={{ width: 200 }} /><small>Example on one portrait. Your picture and seed will differ.</small></figure>}
         {relight && !ownPerson && <p className="hint">Poses and relights the character in one FLUX pass at 3 MP, about 2 minutes. FLUX sees only image 1; image 2 reaches it as a written pose, so nothing of the video's person leaks in. The light usually changes the background too. Results vary a lot by seed; try two or three.</p>}
         {look === LIGHT_LOOKS.length && <label>Your light<textarea className="report" rows={3} value={ownLight} disabled={busy} onChange={(event) => { invalidate(); setOwnLight(event.target.value); }} /></label>}
+        {ownPerson && <label>Framing<select className="file-name" value={keepCrop ? "keep" : "free"} disabled={busy} onChange={(event) => { invalidate(); setKeepCrop(event.target.value === "keep"); }}>
+          <option value="free">FLUX may recompose · strongest light, may zoom out</option>
+          <option value="keep">Keep the frame's crop · starts from the frame</option>
+        </select></label>}
+        {ownPerson && keepCrop && <label className="setting">
+          <span>Denoise <small>{denoise.toFixed(2)}. Lower keeps more of the frame; near 1 FLUX may zoom out again.</small></span>
+          <input type="range" min={0.8} max={0.99} step={0.01} value={denoise} disabled={busy} onChange={(event) => { invalidate(); setDenoise(Number(event.target.value)); }} />
+        </label>}
         {ownPerson
           ? <label>FLUX relight prompt · {"{look}"} is the light<textarea className="report" rows={4} value={framePrompt} disabled={busy} onChange={(event) => { invalidate(); setFramePrompt(event.target.value); }} /></label>
           : relight
