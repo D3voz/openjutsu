@@ -170,6 +170,8 @@ export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGrap
   return graph;
 }
 
-export function pruneMask(source: ApiGraph, hatFix: boolean, margin: Margin, target: string): ApiGraph {
-  return maskSettings(source, hatFix, margin, target, MASK_NODES);
+export function pruneMask(source: ApiGraph, hatFix: boolean, margin: Margin, target: string, resolution?: Resolution): ApiGraph {
+  const graph = maskSettings(source, hatFix, margin, target, MASK_NODES);
+  if (resolution && typeof resolution === "object") cropSource(graph, MASK_NODES.video, resolution);
+  return graph;
 }
