@@ -32,7 +32,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     const headers = new Headers({ "Cache-Control": "private, max-age=300", "Content-Type": type, "X-Content-Type-Options": "nosniff" });
     for (const [header, value] of await mediaTransferHeaders(response)) headers.set(header, value);
-    if (new URL(request.url).searchParams.has("download")) headers.set("Content-Disposition", `attachment; filename="${name.replace(/"/g, "")}"`);
+    if (new URL(request.url).searchParams.has("download")) {
+      const filename = name.split(/[\\/]/).at(-1)?.replace(/[\x00-\x1f\x7f]/g, "_") || "download";
+      const fallback = filename.replace(/[^\x20-\x7e]|["\\]/g, "_");
+      const encoded = encodeURIComponent(filename).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+      headers.set("Content-Disposition", `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`);
+    }
     return new Response(response.body, { status: response.status, headers });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Unable to download the output." }, { status: error instanceof HttpError ? error.status : 502 });
