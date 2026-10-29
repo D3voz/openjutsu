@@ -532,6 +532,7 @@ export function Openjutsu() {
     form.set("no_lip_sync", String(noLipSync));
     form.set("margin", margin);
     form.set("target", target);
+    if (kind === "mask") form.set("resolution", resolutionField);
     if (kind === "simple" && character) {
       form.set("picture", character.file);
       form.set("role", character.role);
@@ -629,7 +630,7 @@ export function Openjutsu() {
       ...(editMode === "add" ? { placement: placement.map((p) => ({ ...p, frame: p.frame - Math.round((whole ? 0 : part.start) * 24) })) } : {}) }, picture: !!look && editMode !== "remove", model: selectedModel };
     else if (kind === "face") selection = { kind, settings: { style: faceStyle, seed, chunkSeconds }, model: selectedModel };
     else if (kind === "color") selection = { kind, settings: { detail: detailOn ? detail : null, tone: toneOn ? tone : null } };
-    else if (kind === "mask") selection = { kind, hatFix, margin, target: String(form.get("target")) };
+    else if (kind === "mask") selection = { kind, hatFix, margin, target: String(form.get("target")), resolution };
     else selection = kind === "people" ? { kind, resolution, describer } : { kind, resolution };
 
     try {
