@@ -11,8 +11,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (denied) return denied;
   try {
     const { id, outputId } = await params;
-    const { name, response } = await getOutput(id, outputId, request.headers.get("Range"));
-    if (!response.ok || !response.body) return Response.json({ error: "The output is not ready." }, { status: 502 });
+    const { name, response } = await getOutput(id, outputId, request.headers.get("Range"), request.signal);
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+      return Response.json({ error: "The output is not ready." }, { status: 502 });
+    }
 
     const type = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() ?? "";
     if (!SERVED_TYPES.test(type)) {

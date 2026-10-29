@@ -27,9 +27,16 @@ export const TERMINAL = new Set(["succeeded", "failed", "canceled", "expired"]);
 // memory. Uploads are never redirected.
 const fetchUploads: typeof fetch = (input, init) => fetch(input, init?.body instanceof FormData ? { ...init, redirect: "error" } : init);
 
+// SDK handle lookups do not expose a signal argument. Bind read cancellation to
+// their transport while retaining the SDK's own per-request deadline.
+function fetchWithSignal(signal?: AbortSignal): typeof fetch {
+  if (!signal) return fetchUploads;
+  return (input, init) => fetchUploads(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal });
+}
+
 // COMFY_BASE_URL and the optional COMFY_API_KEY come from .env.local; the SDK reads both.
-export function client() {
-  return new Comfy({ clientInfo: "openjutsu", fetch: fetchUploads });
+export function client(signal?: AbortSignal) {
+  return new Comfy({ clientInfo: "openjutsu", fetch: fetchWithSignal(signal) });
 }
 
 // The same deployment as client(); the SDK's resolveBaseUrl() is the Comfy Router's, not COMFY_BASE_URL.
@@ -286,18 +293,18 @@ export async function listTonePresets(): Promise<{ name: string; settings: Recor
   }
 }
 
-export function getJob(id: string) {
+export function getJob(id: string, signal?: AbortSignal) {
   validateJobId(id);
-  return client().jobs.get(id);
+  return client(signal).jobs.get(id);
 }
 
-export async function getOutput(jobId: string, outputId: string, range: string | null) {
-  const job = await getJob(jobId);
+export async function getOutput(jobId: string, outputId: string, range: string | null, signal?: AbortSignal) {
+  const job = await getJob(jobId, signal);
   const output = job.outputs.find((candidate) => candidate.id === outputId);
   // A running job lists no outputs yet; its mask previews arrive as live output events, so any other id must name an
   // asset this job produced. Uploaded inputs have no producing job.
-  const asset = output ? null : await low().getAsset(outputId).catch(() => null);
+  const asset = output ? null : await low().getAsset(outputId, { signal }).catch(() => null);
   if (!output && (!asset || asset.job_id !== job.id)) throw new HttpError(404, "This job has no such output.");
-  const { url } = output ? await output.getDownloadUrl() : await low().getAssetContentUrl(outputId);
-  return { name: output?.name ?? asset?.file_path ?? outputId, response: await fetch(url, { headers: range ? { Range: range } : {} }) };
+  const { url } = output ? await output.getDownloadUrl() : await low().getAssetContentUrl(outputId, { signal });
+  return { name: output?.name ?? asset?.file_path ?? outputId, response: await fetch(url, { headers: range ? { Range: range } : {}, signal }) };
 }
