@@ -190,7 +190,12 @@ export async function readFormData(request: Request, checks: Record<string, File
       if (file.head.length < HEAD_BYTES) file.head = Buffer.concat([file.head, chunk.subarray(0, HEAD_BYTES - file.head.length)]);
       if (file.head.length === HEAD_BYTES) sniff(file);
       file.size += chunk.length;
-      await file.handle.write(chunk);
+      let offset = 0;
+      while (offset < chunk.length) {
+        const { bytesWritten } = await file.handle.write(chunk.subarray(offset));
+        if (bytesWritten === 0) throw new Error("Could not write the uploaded file.");
+        offset += bytesWritten;
+      }
     }
   };
   const finish = async ({ name, text, file }: Part) => {
@@ -213,12 +218,19 @@ export async function readFormData(request: Request, checks: Record<string, File
       buffer = Buffer.concat([buffer, value]);
       for (let more = true; more;) {
         if (state === "preamble" || state === "body") {
-          const at = buffer.indexOf(delimiter);
-          // Without a delimiter, keep only the tail that could still start one.
-          const end = at === -1 ? Math.max(0, buffer.length - delimiter.length + 1) : at;
+          let at = buffer.indexOf(delimiter);
+          // A prefix inside a file is data unless followed by CRLF or the final --.
+          while (at !== -1 && buffer.length >= at + delimiter.length + 2) {
+            const suffix = buffer.toString("latin1", at + delimiter.length, at + delimiter.length + 2);
+            if (suffix === "\r\n" || suffix === "--") break;
+            at = buffer.indexOf(delimiter, at + 2);
+          }
+          const complete = at !== -1 && buffer.length >= at + delimiter.length + 2;
+          // Keep a possible delimiter and its two-byte suffix until the next read.
+          const end = at === -1 ? Math.max(0, buffer.length - delimiter.length - 1) : at;
           if (part) await write(part, buffer.subarray(0, end));
-          buffer = buffer.subarray(at === -1 ? end : at + delimiter.length);
-          if (at === -1) more = false;
+          buffer = buffer.subarray(complete ? at + delimiter.length : end);
+          if (!complete) more = false;
           else {
             if (part) await finish(part);
             part = null;
@@ -239,6 +251,7 @@ export async function readFormData(request: Request, checks: Record<string, File
             if (buffer.length > MAX_HEADER_BYTES) throw malformed();
             more = false;
           } else {
+            if (at > MAX_HEADER_BYTES) throw malformed();
             part = await open(buffer.toString("utf8", 0, at));
             buffer = buffer.subarray(at + 4);
             state = "body";
