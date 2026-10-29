@@ -16,6 +16,7 @@ export function ObjectPlacement(props: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const mask = useRef<HTMLCanvasElement | null>(null);
   const origin = useRef<{ x: number; y: number } | null>(null);
+  const pointer = useRef<number | null>(null);
   const [time, setTime] = useState(start);
   const [draft, setDraft] = useState<Box | null>(null);
   const [eraser, setEraser] = useState(false);
@@ -138,21 +139,24 @@ export function ObjectPlacement(props: Props) {
         onLoadedMetadata={() => { if (video.current) video.current.currentTime = time; }} onLoadedData={draw} onSeeked={draw} />
       <canvas ref={canvas} width={cw} height={ch} aria-label={painting ? "Paint the edit area" : "Draw the new object's placement box"} role="img"
         onPointerDown={(event) => {
+          if (pointer.current !== null) return;
+          pointer.current = event.pointerId;
           event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
           origin.current = position(event);
           if (painting) stroke(event);
           else setDraft({ ...origin.current, width: 0, height: 0 });
         }}
-        onPointerMove={(event) => { if (painting) stroke(event); else { const box = boxAt(event); if (box) setDraft(box); } }}
+        onPointerMove={(event) => { if (pointer.current !== event.pointerId) return; if (painting) stroke(event); else { const box = boxAt(event); if (box) setDraft(box); } }}
         onPointerUp={(event) => {
+          if (pointer.current !== event.pointerId) return;
           if (props.mode === "paint") { stroke(event); savePaint(); }
           else {
             const box = boxAt(event);
             if (box && box.width > 0 && box.height > 0) props.onChange([...props.points.filter((p) => p.frame !== frame), { frame, ...box }].sort((a, b) => a.frame - b.frame));
           }
-          origin.current = null; setDraft(null);
+          pointer.current = null; origin.current = null; setDraft(null);
         }}
-        onPointerCancel={() => { if (painting) savePaint(); origin.current = null; setDraft(null); }} />
+        onPointerCancel={(event) => { if (pointer.current !== event.pointerId) return; if (painting) savePaint(); pointer.current = null; origin.current = null; setDraft(null); }} />
       <label>{painting ? "Paint" : "Placement"} frame: {time.toFixed(2)} s
         <input type="range" min={start} max={Math.max(start, end - 1 / 24)} step={1 / 24} value={time}
           onChange={(event) => setTime(Number(event.target.value))} />
