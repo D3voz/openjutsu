@@ -39,8 +39,12 @@ export async function mountEditor(options: { storage?: Record<string, unknown>; 
   const container = dom.window.document.getElementById("app")!;
   const root = createRoot(container);
   await act(async () => root.render(createElement(Openjutsu)));
+  let mounted = true;
+  async function unmount() {
+    if (mounted) { mounted = false; await act(async () => root.unmount()); }
+  }
   return {
-    dom, container, videos, sources,
+    unmount, dom, container, videos, sources,
     async chooseVideo(name: string, bytes = "fixture") {
       const input = container.querySelector<HTMLInputElement>('input[type="file"][accept^="video"]')!;
       Object.defineProperty(input, "files", { configurable: true, value: [new dom.window.File([bytes], name, { type: "video/mp4" })] });
@@ -52,7 +56,7 @@ export async function mountEditor(options: { storage?: Record<string, unknown>; 
       await act(async () => video.dispatchEvent(new dom.window.Event("loadedmetadata")));
     },
     async close() {
-      await act(async () => root.unmount());
+      await unmount();
       URL.createObjectURL = createURL; URL.revokeObjectURL = revokeURL;
       for (const [name, descriptor] of originals) {
         if (descriptor) Object.defineProperty(globalThis, name, descriptor);
