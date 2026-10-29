@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { canvasSize, CUSTOM_SIZE, MAX_SEED, MOTION_SIZES, RESOLUTIONS } from "../lib/simple.ts";
 import { MAX_LORAS, STEPS, STRENGTH } from "../lib/model.ts";
-import { DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureFrames, solarLoraFiles, type PictureVideoSettings } from "../lib/picture.ts";
+import { DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureCanvasSize, pictureFrames, SOLAR_CANVAS_SIZE, solarLoraFiles, type PictureVideoSettings } from "../lib/picture.ts";
 
 const PROMPT = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
 const STORAGE = "openjutsu.picture-preview";
@@ -138,7 +138,9 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       ? <select className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{[...new Set([value, ...options])].map((name) => <option key={name} value={name}>{name || "Choose a file"}</option>)}</select>
       : <input className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />}</label>;
   }
-  const canvas = typeof settings.resolution === "string" ? canvasSize(size?.[0] ?? 768, size?.[1] ?? 1376, settings.resolution) : [settings.resolution.width, settings.resolution.height];
+  const canvas = pictureCanvasSize(settings, size?.[0] ?? 768, size?.[1] ?? 1376);
+  const solarPresetCapped = settings.renderer === "solar" && typeof settings.resolution === "string"
+    && canvasSize(size?.[0] ?? 768, size?.[1] ?? 1376, settings.resolution).some((side, index) => side !== canvas[index]);
   const frames = pictureFrames(settings.seconds);
 
   return <div className="picture-pipeline">
@@ -188,6 +190,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         <div className="inputs">
           <div className="panel">
             <label>Video renderer<select className="file-name" value={settings.renderer} onChange={(event) => setSettings({ ...settings, renderer: event.target.value as PictureVideoSettings["renderer"], steps: event.target.value === "solar" ? 4 : 6 })}><option value="solar">SolarRenderer</option><option value="h3">H3 · native</option></select></label>
+            {solarPresetCapped && <small>SolarRenderer presets fit its {SOLAR_CANVAS_SIZE.min}–{SOLAR_CANVAS_SIZE.max} px per-side limit. The displayed canvas is the rendered size; use Custom for an exact canvas.</small>}
             <label>Video length (seconds)<input className="steps-input" type="number" min={(settings.renderer === "solar" ? 22 : 5) / 24} max={15} step={0.1} value={settings.seconds} onChange={(event) => setSettings({ ...settings, seconds: Number(event.target.value) })} /></label>
             <small>H3 rounds down to a valid clip length: {frames} frames / {(frames / 24).toFixed(3)} s at 24 fps.</small>
             {settings.renderer === "solar" && settings.seconds > 6 && <p className="hint" role="note"><strong>Longer render time:</strong> SolarRenderer clips longer than 6 seconds can take considerably longer to render, especially at higher resolutions.</p>}

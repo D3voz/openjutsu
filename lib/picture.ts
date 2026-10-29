@@ -16,6 +16,16 @@ export const DEFAULT_PICTURE_VIDEO: PictureVideoSettings = {
   videoVae: "minimax_h3_video_vae_int8_convrot.safetensors", audioVae: "minimax_h3_audio_vae_fp32.safetensors",
 };
 
+export const SOLAR_CANVAS_SIZE = { min: 256, max: 2048 };
+
+export function pictureCanvasSize(settings: Pick<PictureVideoSettings, "renderer" | "resolution">, sourceWidth: number, sourceHeight: number) {
+  if (typeof settings.resolution !== "string") return [settings.resolution.width, settings.resolution.height];
+  const dimensions = canvasSize(sourceWidth, sourceHeight, settings.resolution);
+  if (settings.renderer !== "solar") return dimensions;
+  const scale = Math.min(1, SOLAR_CANVAS_SIZE.max / Math.max(...dimensions));
+  return dimensions.map((side) => Math.max(SOLAR_CANVAS_SIZE.min, Math.min(SOLAR_CANVAS_SIZE.max, Math.round(side * scale / 32) * 32)));
+}
+
 export function solarLoraFiles(rank: 384 | 64, files: string[] = []) {
   const find = (role: string) => {
     const name = `solarrenderer_${role}_lora${rank === 64 ? "_rank64" : ""}.safetensors`;
@@ -65,7 +75,7 @@ export function parsePictureVideoSettings(value: unknown): PictureVideoSettings 
 }
 
 export function applyPictureVideoSettings(graph: ApiGraph, settings: PictureVideoSettings, sourceWidth: number, sourceHeight: number) {
-  const [width, height] = typeof settings.resolution === "string" ? canvasSize(sourceWidth, sourceHeight, settings.resolution) : [settings.resolution.width, settings.resolution.height];
+  const [width, height] = pictureCanvasSize(settings, sourceWidth, sourceHeight);
   const length = pictureFrames(settings.seconds);
   graph["1"].inputs.frame_load_cap = length;
   Object.assign(graph["56"].inputs, { width, height, length });
