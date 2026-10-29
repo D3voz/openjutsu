@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
+import { applyRelight, LIGHT_LOOKS, RELIGHT_PROMPT } from "../lib/picture.ts";
 
 const load = (stage: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/picture/from_picture_${stage}_flux3.api.json`, import.meta.url), "utf8"));
 const prompt = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
@@ -41,9 +42,26 @@ test("the motion workflow consumes the prepared picture directly and resizes nor
   assert.ok(!Object.values(graph).some((node) => /ControlNet|DWPreprocessor|ChainLoop/.test(node.class_type)));
 });
 
+test("relight gives FLUX only the character picture at 3 MP on the frame's shape and writes the light into the request", () => {
+  const graph = load("prepare");
+  graph["6"].inputs.value = RELIGHT_PROMPT;
+  applyRelight(graph, LIGHT_LOOKS[1].light);
+  assert.ok(String(graph["6"].inputs.value).endsWith(LIGHT_LOOKS[1].light)); assert.ok(!String(graph["6"].inputs.value).includes("{look}"));
+  assert.equal(graph["15"].inputs["images.image1"], undefined);
+  assert.deepEqual(graph["15"].inputs["images.image0"], ["4", 0]);
+  assert.equal(graph["15"].inputs["resolution.megapixels"], 3);
+  assert.deepEqual(graph["7"].inputs, { "images.image0": ["4", 0], "images.image1": ["3", 0] });
+  assert.deepEqual(graph["19"].inputs.latent_image, ["relight_latent", 0]);
+  assert.deepEqual(graph["relight_canvas"].inputs.image, ["3", 0]);
+  const custom = load("prepare");
+  applyRelight(custom, "Light the new photo with candles.");
+  assert.ok(String(custom["6"].inputs.value).endsWith(" Light the new photo with candles."));
+});
+
 test("picture pipelines have valid links and no disconnected processing nodes", () => {
-  for (const stage of ["prepare", "motion", "solar"]) {
-    const graph = load(stage);
+  const relit = load("prepare");
+  applyRelight(relit, LIGHT_LOOKS[0].light);
+  for (const [stage, graph] of [...["prepare", "motion", "solar"].map((stage) => [stage, load(stage)] as const), ["relight", relit] as const]) {
     const reached = new Set<string>();
     function visit(id: string) {
       if (reached.has(id)) return;

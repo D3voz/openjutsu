@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
 import { listModels } from "../../../lib/comfy.ts";
-import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
+import { applyPictureVideoSettings, applyRelight, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
 
 export const runtime = "nodejs";
 const PREPARED = "OpenJutsu · prepared picture";
@@ -135,6 +135,8 @@ export async function POST(request: Request) {
       graph["4"].inputs.image = await uploadFile(await openAsBlob(picture.path), pictureExtension.toLowerCase());
       graph["19"].inputs.seed = seed;
       graph["21"]._meta = { title: PREPARED };
+      const light = form.get("light");
+      if (typeof light === "string" && light.trim()) applyRelight(graph, light.trim());
     }
     const result = await (await comfy("/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: graph }) })).json();
     return Response.json({ id: result.prompt_id }, { status: 202 });
