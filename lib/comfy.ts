@@ -79,9 +79,13 @@ function jobErrorMessage(error: unknown) {
   return message || "ComfyUI could not run this workflow. Check the ComfyUI console.";
 }
 
+function baseMediaType(value: string) {
+  return value.split(";", 1)[0].trim().toLowerCase();
+}
+
 export function publicJob(job: Job): PublicJob {
-  const video = job.outputs.find((output) => output.contentType.startsWith("video/"));
-  const data = job.outputs.find((output) => output.contentType === "application/json");
+  const video = job.outputs.find((output) => baseMediaType(output.contentType).startsWith("video/"));
+  const data = job.outputs.find((output) => baseMediaType(output.contentType) === "application/json");
   return {
     id: job.id,
     status: job.status,
