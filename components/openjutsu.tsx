@@ -1533,7 +1533,7 @@ function PersonList({ url, photos, onBack, onGenerate }: {
         ))}
       </div>
       {found && !found.list.length && <p className="hint">Nobody found.</p>}
-      {found && !onGenerate && <p className="hint">The video, the part to use or the custom size changed since Find people, or a photo is missing. Go back and find the people again.</p>}
+      {found && !onGenerate && <p className="hint">The video, part, custom size or ordered roles changed since Find people, a photo is missing, or this saved review predates role checks. Go back and find the people again.</p>}
       <div className="row">
         <button className="primary" disabled={!onGenerate || !found?.tracks || !labels.length} onClick={() => onGenerate?.(found!.tracks!, labels)}>
           {labels.length ? "Generate" : "Pick a photo to generate"}
