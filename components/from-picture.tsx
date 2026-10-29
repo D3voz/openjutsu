@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { canvasSize, CUSTOM_SIZE, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, PLACES, placeStart, RESOLUTIONS, timecode } from "../lib/simple.ts";
 import { MAX_LORAS, STEPS, STRENGTH } from "../lib/model.ts";
-import { DEFAULT_PICTURE_VIDEO, LIGHT_LOOKS, parsePictureVideoSettings, pictureFrames, RELIGHT_PROMPT, solarLoraFiles, type PictureVideoSettings } from "../lib/picture.ts";
+import { DEFAULT_PICTURE_VIDEO, FRAME_RELIGHT_PROMPT, LIGHT_LOOKS, parsePictureVideoSettings, pictureFrames, RELIGHT_PROMPT, solarLoraFiles, type PictureVideoSettings } from "../lib/picture.ts";
 
 const PROMPT = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
 const STORAGE = "openjutsu.picture-preview";
@@ -25,6 +25,8 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const [look, setLook] = useState(-1);
   const [ownLight, setOwnLight] = useState("Light the new photo with ");
   const [relightPrompt, setRelightPrompt] = useState(RELIGHT_PROMPT);
+  const [ownPerson, setOwnPerson] = useState(false);
+  const [framePrompt, setFramePrompt] = useState(FRAME_RELIGHT_PROMPT);
   const [job, setJob] = useState<Job | null>(null);
   const [prepared, setPrepared] = useState("");
   const [preview, setPreview] = useState<{ url: string; frame: string } | null>(null);
@@ -39,6 +41,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const busy = submitting || !!job;
   const relight = look >= 0;
   const light = look === LIGHT_LOOKS.length ? ownLight : LIGHT_LOOKS[look]?.light ?? "";
+  const ready = !!video && (ownPerson || !!picture) && !!size && (relight ? !!light.trim() : !ownPerson);
 
   useEffect(() => {
     try {
@@ -123,12 +126,13 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     setPrepared(""); setPreview(null); setApproved(false); setResult(""); setError(""); remember(null, "", false);
   }
   async function prepare(nextSeed: number) {
-    if (!video || !picture || !size) return;
+    if (!ready || !video || !size) return;
     setSubmitting(true); invalidate(); setSeed(nextSeed);
     try {
       const form = new FormData();
-      form.set("video", video); form.set("picture", picture); form.set("start", String(start)); form.set("seed", String(nextSeed));
-      form.set("width", String(size[0])); form.set("height", String(size[1])); form.set("prompt", relight ? relightPrompt : prompt);
+      form.set("video", video); form.set("start", String(start)); form.set("seed", String(nextSeed));
+      form.set("width", String(size[0])); form.set("height", String(size[1])); form.set("prompt", ownPerson ? framePrompt : relight ? relightPrompt : prompt);
+      if (ownPerson) form.set("relight", "frame"); else if (picture) form.set("picture", picture);
       if (relight) form.set("light", light);
       const response = await fetch("/api/picture", { method: "POST", body: form });
       const data = await response.json();
@@ -186,28 +190,33 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
             <input type="range" min={0} max={duration - settings.seconds} step={0.1} value={start} disabled={busy || whole} onChange={(event) => choosePart(Number(event.target.value), settings.seconds)} />
           </label>
         </>}
-        <label>Character picture · image 1<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setPicture(file); } }} /></label>
-        {pictureUrl && <img className="picture-reference" src={pictureUrl} alt="Character and background reference" />}
-        <small>The part's first frame is image 2. Choose the render settings after reviewing the prepared image.</small>
+        <label className="setting toggle"><span>Relight the video's own person <small>No new character: only the light changes.</small></span><input type="checkbox" checked={ownPerson} disabled={busy} onChange={(event) => { invalidate(); setOwnPerson(event.target.checked); if (event.target.checked && look < 0) setLook(0); }} /><i /></label>
+        {!ownPerson && <>
+          <label>Character picture · image 1<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setPicture(file); } }} /></label>
+          {pictureUrl && <img className="picture-reference" src={pictureUrl} alt="Character and background reference" />}
+        </>}
+        <small>The part's first frame is {ownPerson ? "the picture FLUX relights" : "image 2"}. Choose the render settings after reviewing the prepared image.</small>
       </section>
       <section className="panel">
         <h2><span>2</span> Prepare the first frame</h2>
-        <p className="hint">Image 1 supplies the character and background. Image 2 supplies the pose and body cut.</p>
+        <p className="hint">{ownPerson ? "FLUX relights the frame itself: the same person, pose, framing and setting under a new light." : "Image 1 supplies the character and background. Image 2 supplies the pose and body cut."}</p>
         <p className="hint">Missing the FLUX model files? <a href="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy" target="_blank" rel="noopener noreferrer">Download FLUX 3 Image Klein files</a>.</p>
         <p className="hint"><strong>Prompt upsampler required.</strong> This workflow needs the <a href="https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy/blob/main/text_encoders/qwen3.5_9b_flux3_prompt_upsampler_int8_convrot.safetensors" target="_blank" rel="noopener noreferrer">Qwen3.5 9B FLUX prompt upsampler</a> to expand the edit prompt before image generation. Download it into <code>ComfyUI/models/text_encoders</code>.</p>
         <label>Relight<select className="file-name" value={look} disabled={busy} onChange={(event) => { invalidate(); setLook(Number(event.target.value)); }}>
-          <option value={-1}>Off · keep the picture's light</option>
+          {!ownPerson && <option value={-1}>Off · keep the picture's light</option>}
           {LIGHT_LOOKS.map((item, index) => <option key={item.name} value={index}>{item.name}</option>)}
           <option value={LIGHT_LOOKS.length}>My own light</option>
         </select></label>
         {LIGHT_LOOKS[look] && <figure style={{ margin: 0, display: "grid", gap: 6 }}><img className="picture-reference" src={LIGHT_LOOKS[look].image} alt={`${LIGHT_LOOKS[look].name} example`} style={{ width: 200 }} /><small>Example on one portrait. Your picture and seed will differ.</small></figure>}
-        {relight && <p className="hint">Poses and relights the character in one FLUX pass at 3 MP, about 2 minutes. FLUX sees only image 1; image 2 reaches it as a written pose, so nothing of the video's person leaks in. The light usually changes the background too. Results vary a lot by seed; try two or three.</p>}
+        {relight && !ownPerson && <p className="hint">Poses and relights the character in one FLUX pass at 3 MP, about 2 minutes. FLUX sees only image 1; image 2 reaches it as a written pose, so nothing of the video's person leaks in. The light usually changes the background too. Results vary a lot by seed; try two or three.</p>}
         {look === LIGHT_LOOKS.length && <label>Your light<textarea className="report" rows={3} value={ownLight} disabled={busy} onChange={(event) => { invalidate(); setOwnLight(event.target.value); }} /></label>}
-        {relight
+        {ownPerson
+          ? <label>FLUX relight prompt · {"{look}"} is the light<textarea className="report" rows={4} value={framePrompt} disabled={busy} onChange={(event) => { invalidate(); setFramePrompt(event.target.value); }} /></label>
+          : relight
           ? <label>FLUX relight prompt · {"{look}"} is the light<textarea className="report" rows={6} value={relightPrompt} disabled={busy} onChange={(event) => { invalidate(); setRelightPrompt(event.target.value); }} /></label>
           : <label>FLUX edit prompt<textarea className="report" rows={6} value={prompt} disabled={busy} onChange={(event) => { invalidate(); setPrompt(event.target.value); }} /></label>}
         <label>Seed<input className="target-input" type="number" min={0} max={MAX_SEED} step={1} value={seed} disabled={busy} onChange={(event) => { invalidate(); setSeed(Number(event.target.value)); }} /></label>
-        <button className="primary" disabled={busy || !video || !picture || !size || (relight && !light.trim())} onClick={() => prepare(seed)}>Generate preview image</button>
+        <button className="primary" disabled={busy || !ready} onClick={() => prepare(seed)}>Generate preview image</button>
         <p className="hint">This step only generates an image. After reviewing it, choose the video settings and press Render video.</p>
       </section>
     </div>}
@@ -216,13 +225,13 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     {preview && !approved && <section className="panel">
       <h2><span>3</span> Review before rendering</h2>
       <div className="inputs picture-comparison">
-        <figure><figcaption>Source frame · image 2</figcaption><img src={preview.frame} alt="Raw source video frame used for pose and body cut" /></figure>
+        <figure><figcaption>Source frame{ownPerson ? "" : " · image 2"}</figcaption><img src={preview.frame} alt="Raw source video frame used for pose and body cut" /></figure>
         <figure><figcaption>FLUX prepared image</figcaption><img src={preview.url} alt="FLUX generated character in the source pose" /></figure>
       </div>
       <p className="hint">Check the pose, framing, character and background. The video will use this exact prepared image.</p>
       <div className="row">
         <a href={preview.url} download="prepared-frame.png">Download image</a>
-        <button className="secondary" disabled={busy || !video || !picture || !size} onClick={() => prepare((seed + 1) % (MAX_SEED + 1))}>Generate another image</button>
+        <button className="secondary" disabled={busy || !ready} onClick={() => prepare((seed + 1) % (MAX_SEED + 1))}>Generate another image</button>
         <button className="primary" disabled={busy} onClick={() => { setApproved(true); remember(null, prepared, true); }}>Use this image</button>
       </div>
     </section>}

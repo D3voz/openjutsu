@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
 import { listModels } from "../../../lib/comfy.ts";
-import { applyPictureVideoSettings, applyRelight, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
+import { applyFrameRelight, applyPictureVideoSettings, applyRelight, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
 
 export const runtime = "nodejs";
 const PREPARED = "OpenJutsu · prepared picture";
@@ -116,15 +116,19 @@ export async function POST(request: Request) {
       graph = Object.fromEntries(Object.entries(graph).filter(([id]) => keep.has(id)));
     } else {
       upload = await readFormData(request, FILE_CHECKS);
-      const form = upload.form, video = form.get("video"), picture = form.get("picture");
-      if (!(video instanceof StoredFile) || !video.size || !(picture instanceof StoredFile) || !picture.size) throw new HttpError(400, "Choose a video and a character picture.");
+      const form = upload.form, video = form.get("video"), picture = form.get("picture"), light = form.get("light");
+      const lit = typeof light === "string" ? light.trim() : "", ownPerson = form.get("relight") === "frame";
+      if (!(video instanceof StoredFile) || !video.size) throw new HttpError(400, "Choose a video.");
+      if (ownPerson && !lit) throw new HttpError(400, "Choose a light for the video's own person.");
+      const character = !ownPerson && picture instanceof StoredFile && picture.size ? picture : null;
+      if (!ownPerson && !character) throw new HttpError(400, "Choose a character picture.");
       const start = Number(form.get("start") ?? 0), seed = Number(form.get("seed") ?? 0);
       const width = Number(form.get("width")), height = Number(form.get("height"));
       if (!Number.isFinite(start) || start < 0 || !Number.isInteger(seed) || seed < 0 || seed > MAX_SEED) throw new HttpError(400, "Use a start time of 0 or later and a valid whole-number seed.");
       if (![width, height].every((side) => Number.isFinite(side) && side > 0)) throw new HttpError(400, "Wait for the video's dimensions to load.");
       const extension = video.name.match(/\.(mp4|mov|mkv|webm|avi)$/i)?.[0];
-      const pictureExtension = picture.name.match(/\.(png|jpe?g|webp)$/i)?.[0];
-      if (!extension || !pictureExtension) throw new HttpError(400, "Choose a supported video and PNG, JPEG or WebP picture.");
+      const pictureExtension = character?.name.match(/\.(png|jpe?g|webp)$/i)?.[0];
+      if (!extension || character && !pictureExtension) throw new HttpError(400, "Choose a supported video and PNG, JPEG or WebP picture.");
       graph = await template("prepare");
       const prompt = form.get("prompt");
       if (typeof prompt === "string" && prompt.trim()) graph["6"].inputs.value = prompt;
@@ -132,11 +136,11 @@ export async function POST(request: Request) {
       for (const id of ["3", "5"]) Object.assign(graph[id].inputs, { width: editWidth, height: editHeight });
       graph["1"].inputs.video = await uploadFile(await openAsBlob(video.path), extension.toLowerCase());
       graph["1"].inputs.skip_first_frames = Math.round(start * 24);
-      graph["4"].inputs.image = await uploadFile(await openAsBlob(picture.path), pictureExtension.toLowerCase());
+      if (character) graph["4"].inputs.image = await uploadFile(await openAsBlob(character.path), pictureExtension!.toLowerCase());
       graph["19"].inputs.seed = seed;
       graph["21"]._meta = { title: PREPARED };
-      const light = form.get("light");
-      if (typeof light === "string" && light.trim()) applyRelight(graph, light.trim());
+      if (ownPerson) applyFrameRelight(graph, lit);
+      else if (lit) applyRelight(graph, lit);
     }
     const result = await (await comfy("/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: graph }) })).json();
     return Response.json({ id: result.prompt_id }, { status: 202 });
