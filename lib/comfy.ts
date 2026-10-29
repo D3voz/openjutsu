@@ -309,5 +309,5 @@ export async function getOutput(jobId: string, outputId: string, range: string |
   });
   if (!output && (!asset || asset.job_id !== job.id)) throw new HttpError(404, "This job has no such output.");
   const { url } = output ? await output.getDownloadUrl() : await low().getAssetContentUrl(outputId, { signal });
-  return { name: output?.name ?? asset?.file_path ?? outputId, response: await fetch(url, { headers: range ? { Range: range } : {}, signal }) };
+  return { name: output?.name ?? asset?.file_path ?? outputId, response: await fetch(url, { headers: { "Accept-Encoding": "identity", ...(range ? { Range: range } : {}) }, signal }) };
 }

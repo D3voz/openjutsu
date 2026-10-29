@@ -1,4 +1,4 @@
-import { apiAccess, HttpError } from "../../../../../../lib/http.ts";
+import { apiAccess, HttpError, mediaTransferHeaders } from "../../../../../../lib/http.ts";
 import { getOutput } from "../../../../../../lib/comfy.ts";
 
 export const runtime = "nodejs";
@@ -31,10 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const headers = new Headers({ "Cache-Control": "private, max-age=300", "Content-Type": type, "X-Content-Type-Options": "nosniff" });
-    for (const header of ["Content-Length", "Content-Range", "Accept-Ranges"]) {
-      const value = response.headers.get(header);
-      if (value) headers.set(header, value);
-    }
+    for (const [header, value] of await mediaTransferHeaders(response)) headers.set(header, value);
     if (new URL(request.url).searchParams.has("download")) headers.set("Content-Disposition", `attachment; filename="${name.replace(/"/g, "")}"`);
     return new Response(response.body, { status: response.status, headers });
   } catch (error) {

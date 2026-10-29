@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { openAsBlob } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
+import { apiAccess, HttpError, mediaTransferHeaders, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
 import { listModels } from "../../../lib/comfy.ts";
 import { applyPictureVideoSettings, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
@@ -21,6 +21,8 @@ async function comfy(path: string, init?: RequestInit, rangeResponse = false) {
   const base = (process.env.COMFYUI_URL?.trim() || "http://127.0.0.1:8188").replace(/\/+$/, "");
   const deadline = AbortSignal.timeout(30_000);
   const media = path.startsWith("/view?");
+  const headers = new Headers(init?.headers);
+  if (media) headers.set("Accept-Encoding", "identity");
   const headersDeadline = new AbortController();
   const expireHeaders = () => headersDeadline.abort(deadline.reason);
   if (media) {
@@ -30,7 +32,7 @@ async function comfy(path: string, init?: RequestInit, rangeResponse = false) {
   const bounded = media ? headersDeadline.signal : deadline;
   const signal = init?.signal ? AbortSignal.any([init.signal, bounded]) : bounded;
   try {
-    const response = await fetch(`${base}${path}`, { ...init, cache: "no-store", redirect: "error", signal });
+    const response = await fetch(`${base}${path}`, { ...init, headers, cache: "no-store", redirect: "error", signal });
     if (!response.ok && !(rangeResponse && response.status === 416)) {
       const data = await response.json().catch(() => null);
       const details = Object.values(data?.node_errors ?? {}).flatMap((node) => (node as { errors?: { message: string; details?: string }[] }).errors ?? [])
@@ -191,7 +193,7 @@ export async function GET(request: Request) {
     }
     return new Response(response.body, { status: response.status, headers: {
       "Content-Type": isVideo ? "video/mp4" : "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
-      ...Object.fromEntries(["Content-Length", "Content-Range", "Accept-Ranges"].flatMap((key) => response.headers.has(key) ? [[key, response.headers.get(key)!]] : [])),
+      ...Object.fromEntries(await mediaTransferHeaders(response)),
     } });
   } catch (error) { return failure(error); }
 }
