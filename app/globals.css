@@ -76,6 +76,8 @@ h1 { margin: 0; font-size: 28px; letter-spacing: -0.02em; }
   border: 1.5px dashed var(--line); border-radius: 14px; display: grid; place-items: center; text-align: center;
   gap: 4px; padding: 20px; cursor: pointer; color: var(--muted); transition: border-color 0.15s, background 0.15s;
 }
+.drop .upload-input { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
 .drop strong { color: var(--text); }
 .drop:hover, .drop.over { border-color: var(--accent); background: #d6ff3f0d; }
 .drop.big { min-height: 260px; }

@@ -230,7 +230,7 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
       onDragLeave={() => setOver(false)}
       onDrop={(event) => { setOver(false); onFiles(droppedFiles(event, kind)); }}
     >
-      <input type="file" accept={accept} multiple={multiple} hidden onChange={(event) => { onFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
+      <input type="file" accept={accept} multiple={multiple} className="upload-input" onChange={(event) => { onFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
       {children}
     </label>
   );
