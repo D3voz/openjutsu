@@ -5,7 +5,7 @@ import type { PublicJob } from "../lib/comfy.ts";
 import type { SetupRequest, SetupResult } from "../lib/setup.ts";
 import type { NodeInfo } from "../lib/progress.ts";
 import { clipCount, clipStarts } from "../lib/clips.ts";
-import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, canvasSize, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
+import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, PLACES, placeStart, RESOLUTIONS, CUSTOM_SIZE, canvasSize, timecode, type Margin, type MotionSize, type Resolution, type Section, type Size } from "../lib/simple.ts";
 import { MAX_CHARACTERS } from "../lib/advanced.ts";
 import { ACCELERATIONS, DEFAULT_DESCRIBER, DEFAULT_MODEL, hasSpeedLora, isSpeedLora, MAX_LORAS, STEPS, STRENGTH, type Acceleration, type Lora, type ModelFiles } from "../lib/model.ts";
 import type { EditMode, FitSummary, PaintKeyframe, PlacementKeyframe } from "../lib/object.ts";
@@ -132,17 +132,6 @@ function readSettings(defaults: Settings): Settings {
 function droppedFiles(event: DragEvent, kind: "video" | "image") {
   event.preventDefault();
   return [...event.dataTransfer.files].filter((file) => file.type.startsWith(`${kind}/`) || (kind === "video" && /\.(mkv|mov|avi)$/i.test(file.name)));
-}
-
-const PLACES = ["Whole", "Start", "Middle", "End"] as const;
-
-// Where a part of the given length sits for each place button.
-function placeStart(place: (typeof PLACES)[number], duration: number, length: number) {
-  return place === "Middle" ? (duration - length) / 2 : place === "End" ? duration - length : 0;
-}
-
-function timecode(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
 }
 
 function elapsed(ms: number) {

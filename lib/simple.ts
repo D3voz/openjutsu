@@ -52,6 +52,17 @@ export type MotionSize = (typeof MOTION_SIZES)[number];
 export type Section = { start: number; length: number };
 export const MIN_SECTION_SECONDS = 2;
 
+export const PLACES = ["Whole", "Start", "Middle", "End"] as const;
+
+// Where a part of the given length sits for each place button.
+export function placeStart(place: (typeof PLACES)[number], duration: number, length: number) {
+  return place === "Middle" ? (duration - length) / 2 : place === "End" ? duration - length : 0;
+}
+
+export function timecode(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, "0")}`;
+}
+
 export function setSection(graph: ApiGraph, video: string, section: Section) {
   // every export loads the video at force_rate 24
   graph[video].inputs.skip_first_frames = Math.round(section.start * 24);

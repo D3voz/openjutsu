@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { canvasSize, CUSTOM_SIZE, MAX_SEED, MOTION_SIZES, RESOLUTIONS } from "../lib/simple.ts";
+import { useEffect, useRef, useState } from "react";
+import { canvasSize, CUSTOM_SIZE, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, PLACES, placeStart, RESOLUTIONS, timecode } from "../lib/simple.ts";
 import { MAX_LORAS, STEPS, STRENGTH } from "../lib/model.ts";
 import { DEFAULT_PICTURE_VIDEO, LIGHT_LOOKS, parsePictureVideoSettings, pictureFrames, RELIGHT_PROMPT, solarLoraFiles, type PictureVideoSettings } from "../lib/picture.ts";
 
 const PROMPT = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
 const STORAGE = "openjutsu.picture-preview";
 const VIDEO_STORAGE = "openjutsu.picture-video-settings";
+const MAX_SECONDS = 15;
 type Job = { id: string; stage: "prepare" | "render" };
 
 export function FromPicture({ initialVideo, initialPicture, start: initialStart = 0 }: { initialVideo?: File; initialPicture?: File; start?: number }) {
@@ -17,6 +18,8 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const [pictureUrl, setPictureUrl] = useState("");
   const [size, setSize] = useState<[number, number] | null>(null);
   const [start, setStart] = useState(initialStart);
+  const [duration, setDuration] = useState(0);
+  const player = useRef<HTMLVideoElement>(null);
   const [seed, setSeed] = useState(0);
   const [prompt, setPrompt] = useState(PROMPT);
   const [look, setLook] = useState(-1);
@@ -109,6 +112,13 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     return () => { controller.abort(); clearTimeout(timer); };
   }, [job, prepared]);
 
+  // The part is start + the video length; only a new start changes the pose frame.
+  function choosePart(nextStart: number, length: number, total = duration) {
+    const begin = Math.min(Math.max(0, nextStart), total - length);
+    if (begin !== start) { invalidate(); setStart(begin); }
+    setSettings((current) => ({ ...current, seconds: length }));
+    if (player.current) player.current.currentTime = begin;
+  }
   function invalidate() {
     setPrepared(""); setPreview(null); setApproved(false); setResult(""); setError(""); remember(null, "", false);
   }
@@ -146,18 +156,39 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   }
   const canvas = typeof settings.resolution === "string" ? canvasSize(size?.[0] ?? 768, size?.[1] ?? 1376, settings.resolution) : [settings.resolution.width, settings.resolution.height];
   const frames = pictureFrames(settings.seconds);
+  const whole = duration <= MAX_SECONDS && start === 0 && settings.seconds >= duration;
+  const place = whole ? "Whole" : PLACES.slice(1).find((p) => Math.abs(placeStart(p, duration, settings.seconds) - start) < 0.05);
 
   return <div className="picture-pipeline">
     <p className="hint">Prepare the character in the video's starting pose with FLUX. Review the image first, then render its motion while keeping the picture's background.</p>
     {!approved && <div className="inputs">
       <section className="panel">
         <h2><span>1</span> Character and source video</h2>
-        <label>Source video<input type="file" accept="video/*,.mkv" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setVideo(file); setStart(0); } }} /></label>
-        {videoUrl && <video src={videoUrl} controls preload="metadata" onLoadedMetadata={(event) => setSize([event.currentTarget.videoWidth, event.currentTarget.videoHeight])} />}
+        <label>Source video<input type="file" accept="video/*,.mkv" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setVideo(file); setStart(0); setDuration(0); } }} /></label>
+        {videoUrl && <video ref={player} src={videoUrl} controls preload="metadata"
+          onLoadedMetadata={(event) => { const { videoWidth, videoHeight, duration: total } = event.currentTarget; setSize([videoWidth, videoHeight]); setDuration(total); choosePart(start, Math.min(settings.seconds, total, MAX_SECONDS), total); }}
+          onTimeUpdate={(event) => { if (event.currentTarget.currentTime >= start + settings.seconds) event.currentTarget.currentTime = start; }} />}
+        {duration > MIN_SECTION_SECONDS && <>
+          <div className="setting">
+            <span>Part to use <small>{timecode(start)}–{timecode(start + settings.seconds)} ({settings.seconds.toFixed(1)} s). Its first frame sets the pose; up to {MAX_SECONDS} s.</small></span>
+            <div className="segmented">
+              {PLACES.filter((p) => p !== "Whole" || duration <= MAX_SECONDS).map((p) => (
+                <button key={p} className={p === place ? "on" : ""} disabled={busy} onClick={() => p === "Whole" ? choosePart(0, duration) : choosePart(placeStart(p, duration, settings.seconds), settings.seconds)}>{p}</button>
+              ))}
+            </div>
+          </div>
+          <label className="setting">
+            <span>Length <small>{settings.seconds.toFixed(1)} s</small></span>
+            <input type="range" min={MIN_SECTION_SECONDS} max={Math.min(duration, MAX_SECONDS)} step={0.5} value={settings.seconds} disabled={busy} onChange={(event) => choosePart(start, Number(event.target.value))} />
+          </label>
+          <label className="setting">
+            <span>Starts at <small>{timecode(start)}</small></span>
+            <input type="range" min={0} max={duration - settings.seconds} step={0.1} value={start} disabled={busy || whole} onChange={(event) => choosePart(Number(event.target.value), settings.seconds)} />
+          </label>
+        </>}
         <label>Character picture · image 1<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) { invalidate(); setPicture(file); } }} /></label>
         {pictureUrl && <img className="picture-reference" src={pictureUrl} alt="Character and background reference" />}
-        <label>Start at (seconds)<input className="target-input" type="number" min={0} step={0.1} value={start} disabled={busy} onChange={(event) => { invalidate(); setStart(Number(event.target.value)); }} /></label>
-        <small>The raw frame at this time is image 2. Choose the video length and render settings after reviewing the prepared image.</small>
+        <small>The part's first frame is image 2. Choose the render settings after reviewing the prepared image.</small>
       </section>
       <section className="panel">
         <h2><span>2</span> Prepare the first frame</h2>
@@ -204,7 +235,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         <div className="inputs">
           <div className="panel">
             <label>Video renderer<select className="file-name" value={settings.renderer} onChange={(event) => setSettings({ ...settings, renderer: event.target.value as PictureVideoSettings["renderer"], steps: event.target.value === "solar" ? 4 : 6 })}><option value="solar">SolarRenderer</option><option value="h3">H3 · native</option></select></label>
-            <label>Video length (seconds)<input className="steps-input" type="number" min={(settings.renderer === "solar" ? 22 : 5) / 24} max={15} step={0.1} value={settings.seconds} onChange={(event) => setSettings({ ...settings, seconds: Number(event.target.value) })} /></label>
+            <label>Video length (seconds)<input className="steps-input" type="number" min={(settings.renderer === "solar" ? 22 : 5) / 24} max={duration ? Math.min(MAX_SECONDS, duration - start) : MAX_SECONDS} step={0.1} value={settings.seconds} onChange={(event) => setSettings({ ...settings, seconds: Number(event.target.value) })} /></label>
             <small>H3 rounds down to a valid clip length: {frames} frames / {(frames / 24).toFixed(3)} s at 24 fps.</small>
             {settings.renderer === "solar" && settings.seconds > 6 && <p className="hint" role="note"><strong>Longer render time:</strong> SolarRenderer clips longer than 6 seconds can take considerably longer to render, especially at higher resolutions.</p>}
             <label>Video resolution<select className="file-name" value={typeof settings.resolution === "string" ? settings.resolution : "custom"} onChange={(event) => setSettings({ ...settings, resolution: event.target.value === "custom" ? { width: canvas[0], height: canvas[1] } : event.target.value as PictureVideoSettings["resolution"] })}>{RESOLUTIONS.map((value) => <option key={value}>{value}</option>)}<option value="custom">Custom</option></select></label>
