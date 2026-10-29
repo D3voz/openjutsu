@@ -294,6 +294,7 @@ export function Openjutsu() {
   const [formError, setFormError] = useState("");
 
   const [run, setRun] = useState<Run | null>(null);
+  const runGeneration = useRef(0);
   const [history, setHistory] = useState<PastRun[]>([]);
   const [job, setJob] = useState<PublicJob | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
@@ -651,6 +652,7 @@ export function Openjutsu() {
       setProgress(null);
       setPreview("");
       setStreamError("");
+      runGeneration.current++;
       setRun(next);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not start the job.");
@@ -662,18 +664,20 @@ export function Openjutsu() {
 
   async function cancel() {
     if (!run) return;
+    const generation = runGeneration.current;
     setFormError("");
     try {
       const response = await fetch(`/api/jobs/${run.id}`, { method: "DELETE" });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not cancel the job.");
-      setJob(body);
+      if (generation === runGeneration.current) setJob(body);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Could not cancel the job.");
+      if (generation === runGeneration.current) setFormError(error instanceof Error ? error.message : "Could not cancel the job.");
     }
   }
 
   function reset() {
+    runGeneration.current++;
     resultDownload.current?.abort();
     resultDownload.current = null;
     setFormError("");
@@ -687,6 +691,7 @@ export function Openjutsu() {
   }
 
   function reopen(past: PastRun) {
+    runGeneration.current++;
     setFormError("");
     setSetup(null);
     writeRun(past);
