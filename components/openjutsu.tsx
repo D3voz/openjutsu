@@ -178,6 +178,15 @@ function jobLine(run: Run, job: PublicJob | null) {
   return `Job: ${run.kind} ${run.id}, status ${job?.status ?? "unknown"}`;
 }
 
+async function resultJson<T>(url: string, signal: AbortSignal): Promise<T> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error("Result metadata is unavailable.");
+  }
+  return response.json();
+}
+
 // A plain-text report for a GitHub issue or Discord: nothing about the uploads, prompts or saved settings.
 function CopyDetails({ lines }: { lines: string[] }) {
   const [copied, setCopied] = useState(false);
@@ -1446,7 +1455,12 @@ function FitCheck({ url, data, onUseBox, onGenerate, onBack }: {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (data) fetch(data).then((response) => response.json()).then(setSummary, () => setError("Could not read what the fit check found."));
+    const controller = new AbortController();
+    setSummary(null); setError("");
+    if (data) resultJson<FitSummary>(data, controller.signal)
+      .then((summary) => { if (!controller.signal.aborted) setSummary(summary); })
+      .catch(() => { if (!controller.signal.aborted) setError("Could not read what the fit check found."); });
+    return () => controller.abort();
   }, [data]);
 
   const misses = summary?.outside ?? [];
@@ -1457,7 +1471,7 @@ function FitCheck({ url, data, onUseBox, onGenerate, onBack }: {
       <p className="hint legend">
         <i className="swatch green" /> predicted motion inside the edit area <i className="swatch red" /> outside it: possible clipping. Yellow: edit boundary.
       </p>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       {summary && <p>{!summary.person ? "No one to copy was found in this part, so there is nothing to check the box against."
         : misses.length ? `${summary.moving ? "Their predicted motion leaves the moving edit area" : "Their routine leaves the box"} at ${misses.map((o) => `${timecode(o.start / 24)}–${timecode(o.end / 24)} (${o.sides.join(", ")})`).join(", ")}.`
         : summary.moving ? "Their predicted motion stays inside the moving edit area." : "Their whole routine fits inside your box."}</p>}
@@ -1475,9 +1489,17 @@ function FitCheck({ url, data, onUseBox, onGenerate, onBack }: {
 // A montage without review keeps brief or small appearances as they are; say so instead of passing the swap off as complete.
 function KeptNote({ url }: { url: string }) {
   const [kept, setKept] = useState<Kept[]>([]);
+  const [error, setError] = useState("");
   useEffect(() => {
-    fetch(url).then((response) => response.json()).then((data: { kept: Kept[] }) => setKept(data.kept), () => setKept([]));
+    const controller = new AbortController();
+    setKept([]); setError("");
+    resultJson<{ kept: Kept[] }>(url, controller.signal).then((data) => {
+      if (!Array.isArray(data.kept)) throw new Error("Invalid montage metadata.");
+      if (!controller.signal.aborted) setKept(data.kept);
+    }).catch(() => { if (!controller.signal.aborted) setError("Could not read who the montage left unchanged."); });
+    return () => controller.abort();
   }, [url]);
+  if (error) return <p className="error" role="alert">{error}</p>;
   if (!kept.length) return null;
   return (
     <p className="hint">
@@ -1494,8 +1516,13 @@ function PersonList({ url, photos, onBack, onGenerate }: {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(url).then((response) => response.json()).then((people: People) => setFound({ tracks: people.tracks, list: appearances(people) }),
-      () => setError("Could not read what Find people found."));
+    const controller = new AbortController();
+    setFound(null); setError("");
+    resultJson<People>(url, controller.signal).then((people) => {
+      const list = appearances(people);
+      if (!controller.signal.aborted) setFound({ tracks: people.tracks, list });
+    }).catch(() => { if (!controller.signal.aborted) setError("Could not read what Find people found."); });
+    return () => controller.abort();
   }, [url]);
 
   const labels = found ? renderLabels(found.list) : [];
@@ -1511,7 +1538,7 @@ function PersonList({ url, photos, onBack, onGenerate }: {
         Everyone SAM tracked, in order of appearance, matched to the photos. Check each one and pick the photo they become,
         or Keep to leave them as they are. The whole video is then made in one go, with one H3 pass per photo on screen.
       </p>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       {!found && !error && <p className="hint">Loading…</p>}
       <div className="people-list">
         {found?.list.map((a, i) => (
