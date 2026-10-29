@@ -22,7 +22,7 @@ type Post = "face" | "color";
 type Kind = "simple" | "mask" | "advanced" | "advanced_maxq" | "object" | "fit" | "face" | "color" | "people" | "montage";
 type TonePreset = { name: string; settings: Record<string, unknown> };
 // frames: the video, part and crop SAM saw
-type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number; frames: string };
+type Run = { id: string; kind: Kind; margin: Margin; clips: number; clipSeconds: number; startedAt: number; frames: string; roles?: string[] };
 type PastRun = Run & { status?: string; result?: string };
 // pass counts the sampler runs started so far: Fix faces samples its chunks one after another in the same node.
 type Progress = NodeInfo & { step: number | null; steps: number | null; pass: number };
@@ -642,7 +642,7 @@ export function Openjutsu() {
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
-      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now(), frames };
+      const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now(), frames, ...(kind === "people" ? { roles: shown.map((c) => c.role) } : {}) };
       writeRun(next);
       setHistory((list) => [next, ...list.filter((p) => p.id !== next.id)].slice(0, HISTORY_LENGTH));
       setJob(body);
@@ -779,7 +779,7 @@ export function Openjutsu() {
           onUseBox={video && same ? (box) => { setPlacement([{ frame: Math.round((whole ? 0 : part.start) * 24), ...box }]); reset(); } : null}
           margin={margin} onMargin={setMargin} onRecheck={video && !submitting ? () => submit("mask") : null}
           photos={shown.map((c) => c.url)}
-          onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
+          onMontage={video && character && !submitting && run.roles?.length === shown.length && run.roles.every((role, index) => role === shown[index].role) ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
           onRetry={video && same && ready && !submitting && run.kind === generateKind && generateKind !== "montage" ? () => { reset(); submit(generateKind); } : null}
         />
       ) : mode === "object" && editMode === "picture" ? <FromPicture initialVideo={video?.file} initialPicture={look?.file} start={whole ? 0 : part.start} /> : (
@@ -1533,7 +1533,7 @@ function PersonList({ url, photos, onBack, onGenerate }: {
         ))}
       </div>
       {found && !found.list.length && <p className="hint">Nobody found.</p>}
-      {found && !onGenerate && <p className="hint">The video, the part to use or the custom size changed since Find people, or a photo is missing. Go back and find the people again.</p>}
+      {found && !onGenerate && <p className="hint">The video, part, custom size or ordered roles changed since Find people, a photo is missing, or this saved review predates role checks. Go back and find the people again.</p>}
       <div className="row">
         <button className="primary" disabled={!onGenerate || !found?.tracks || !labels.length} onClick={() => onGenerate?.(found!.tracks!, labels)}>
           {labels.length ? "Generate" : "Pick a photo to generate"}
