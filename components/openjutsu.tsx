@@ -301,6 +301,8 @@ export function Openjutsu() {
   const [streamError, setStreamError] = useState("");
   const [now, setNow] = useState(Date.now());
   const [restored, setRestored] = useState(false);
+  const resultDownload = useRef<AbortController | null>(null);
+  useEffect(() => () => resultDownload.current?.abort(), []);
 
   useEffect(() => {
     setRun(readRun());
@@ -672,6 +674,8 @@ export function Openjutsu() {
   }
 
   function reset() {
+    resultDownload.current?.abort();
+    resultDownload.current = null;
     setFormError("");
     setSetup(null);
     writeRun(null);
@@ -691,15 +695,24 @@ export function Openjutsu() {
 
   async function fixResult(next: Post) {
     if (!job?.video) return;
+    resultDownload.current?.abort();
+    const controller = new AbortController();
+    resultDownload.current = controller;
     setFormError("");
     try {
-      const response = await fetch(job.video.url);
-      if (!response.ok) throw new Error();
+      const response = await fetch(job.video.url, { signal: controller.signal });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new Error();
+      }
       const blob = await response.blob();
+      if (controller.signal.aborted || resultDownload.current !== controller) return;
       chooseVideo([new File([blob], job.video.name, { type: blob.type || "video/mp4" })]);
     } catch {
-      setFormError("Could not load the result video. Download it and choose it in Post-processing.");
+      if (!controller.signal.aborted && resultDownload.current === controller) setFormError("Could not load the result video. Download it and choose it in Post-processing.");
       return;
+    } finally {
+      if (resultDownload.current === controller) resultDownload.current = null;
     }
     reset();
     setMode("post");
