@@ -17,16 +17,32 @@ const FILE_CHECKS = {
 type OutputFile = { filename: string; subfolder?: string; type?: string };
 type History = { prompt?: [number, string, ApiGraph]; status?: { status_str?: string; completed?: boolean }; outputs?: Record<string, { images?: OutputFile[]; gifs?: OutputFile[] }> };
 
-async function comfy(path: string, init?: RequestInit) {
+async function comfy(path: string, init?: RequestInit, rangeResponse = false) {
   const base = (process.env.COMFYUI_URL?.trim() || "http://127.0.0.1:8188").replace(/\/+$/, "");
-  const response = await fetch(`${base}${path}`, { ...init, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000) });
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    const details = Object.values(data?.node_errors ?? {}).flatMap((node) => (node as { errors?: { message: string; details?: string }[] }).errors ?? [])
-      .map((error) => `${error.message}${error.details ? `: ${error.details}` : ""}`).join("; ");
-    throw new HttpError(502, details || data?.error?.message || `ComfyUI answered with HTTP ${response.status}. Check its console.`);
+  const deadline = AbortSignal.timeout(30_000);
+  const media = path.startsWith("/view?");
+  const headersDeadline = new AbortController();
+  const expireHeaders = () => headersDeadline.abort(deadline.reason);
+  if (media) {
+    if (deadline.aborted) expireHeaders();
+    else deadline.addEventListener("abort", expireHeaders, { once: true });
   }
-  return response;
+  const bounded = media ? headersDeadline.signal : deadline;
+  const signal = init?.signal ? AbortSignal.any([init.signal, bounded]) : bounded;
+  try {
+    const response = await fetch(`${base}${path}`, { ...init, cache: "no-store", redirect: "error", signal });
+    if (!response.ok && !(rangeResponse && response.status === 416)) {
+      const data = await response.json().catch(() => null);
+      const details = Object.values(data?.node_errors ?? {}).flatMap((node) => (node as { errors?: { message: string; details?: string }[] }).errors ?? [])
+        .map((error) => `${error.message}${error.details ? `: ${error.details}` : ""}`).join("; ");
+      throw new HttpError(502, details || data?.error?.message || `ComfyUI answered with HTTP ${response.status}. Check its console.`);
+    }
+    return response;
+  } finally {
+    // Metadata/error JSON remains bounded above. Healthy media bodies may take
+    // longer than the header deadline; only caller cancellation bounds them.
+    if (media) deadline.removeEventListener("abort", expireHeaders);
+  }
 }
 
 async function template(stage: "prepare" | "motion" | "solar"): Promise<ApiGraph> {
@@ -45,9 +61,9 @@ async function uploadFile(blob: Blob, extension: string) {
   return asset.subfolder ? `${asset.subfolder}/${asset.name}` : asset.name;
 }
 
-async function history(id: string) {
+async function history(id: string, signal?: AbortSignal) {
   validateJobId(id);
-  const data = await (await comfy(`/history/${encodeURIComponent(id)}`)).json();
+  const data = await (await comfy(`/history/${encodeURIComponent(id)}`, { signal })).json();
   const item: History | undefined = data[id];
   if (item) {
     const graph = item.prompt?.[2];
@@ -151,9 +167,9 @@ export async function GET(request: Request) {
   if (denied) return denied;
   try {
     const url = new URL(request.url), id = url.searchParams.get("id") ?? "";
-    const item = await history(id);
+    const item = await history(id, request.signal);
     if (!item) {
-      const queue = await (await comfy("/queue")).json();
+      const queue = await (await comfy("/queue", { signal: request.signal })).json();
       const waiting = [...queue.queue_running, ...queue.queue_pending].some((entry: unknown[]) => entry[1] === id);
       if (!waiting) throw new HttpError(404, "This job was removed or ComfyUI restarted. Generate the picture again.");
       return Response.json({ status: "processing" });
@@ -165,7 +181,14 @@ export async function GET(request: Request) {
     if (!file) throw new HttpError(422, "ComfyUI returned no result. Check its console.");
     const base = `/api/picture?id=${encodeURIComponent(id)}`;
     if (!media) return Response.json({ status: "ready", url: `${base}&media=result`, ...(!isVideo ? { frame: `${base}&media=frame`, width: item.prompt![2]["3"].inputs.width, height: item.prompt![2]["3"].inputs.height } : {}) });
-    const response = await comfy(view(file), { headers: request.headers.has("Range") ? { Range: request.headers.get("Range")! } : {} });
+    const response = await comfy(view(file), { headers: request.headers.has("Range") ? { Range: request.headers.get("Range")! } : {}, signal: request.signal }, true);
+    if (response.status === 416) {
+      await response.body?.cancel();
+      const headers = new Headers({ "Cache-Control": "private, no-store" });
+      const range = response.headers.get("Content-Range");
+      if (range) headers.set("Content-Range", range);
+      return new Response(null, { status: 416, headers });
+    }
     return new Response(response.body, { status: response.status, headers: {
       "Content-Type": isVideo ? "video/mp4" : "image/png", "X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
       ...Object.fromEntries(["Content-Length", "Content-Range", "Accept-Ranges"].flatMap((key) => response.headers.has(key) ? [[key, response.headers.get(key)!]] : [])),
