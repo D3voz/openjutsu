@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Asset, Comfy, COMFY_CLOUD_BASE_URL, NotFound, resolveCredentials, type Job, type Workflow } from "@comfyorg/sdk";
-import { ComfyLow } from "@comfyorg/sdk/low";
+import { ComfyLow, NotFound as LowNotFound } from "@comfyorg/sdk/low";
 import { MASK_NODES, NODES, cropSource, isLink, pruneMask, pruneSimple, setSection, type ApiGraph, type Margin, type Resolution, type Section, type SimpleSettings } from "./simple.ts";
 import { VIDEO, nodeByTitle, pruneAdvanced, type AdvancedSettings } from "./advanced.ts";
 import { applyDescriber, applyModel, type ModelFiles, type ModelSettings } from "./model.ts";
@@ -303,7 +303,10 @@ export async function getOutput(jobId: string, outputId: string, range: string |
   const output = job.outputs.find((candidate) => candidate.id === outputId);
   // A running job lists no outputs yet; its mask previews arrive as live output events, so any other id must name an
   // asset this job produced. Uploaded inputs have no producing job.
-  const asset = output ? null : await low().getAsset(outputId, { signal }).catch(() => null);
+  const asset = output ? null : await low().getAsset(outputId, { signal }).catch((error: unknown) => {
+    if (error instanceof LowNotFound) return null;
+    throw error;
+  });
   if (!output && (!asset || asset.job_id !== job.id)) throw new HttpError(404, "This job has no such output.");
   const { url } = output ? await output.getDownloadUrl() : await low().getAssetContentUrl(outputId, { signal });
   return { name: output?.name ?? asset?.file_path ?? outputId, response: await fetch(url, { headers: range ? { Range: range } : {}, signal }) };
