@@ -11,6 +11,7 @@ import { OBJECT_PICTURE, OBJECT_VIDEO, pruneFit, pruneObject, type ObjectSetting
 import { FACE_PICTURE, FACE_VIDEO, pruneFace, type FaceSettings } from "./face.ts";
 import { COLOR_VIDEO, pruneColor, type ColorSettings } from "./color.ts";
 import { PEOPLE_NODES, peopleRoles, pruneMontage, type Review } from "./montage.ts";
+import { bindMediaIdentity } from "./media-identity.ts";
 
 export type PublicJob = {
   id: string;
@@ -156,6 +157,7 @@ export async function submitSimple(video: StoredFile, section: Section, picture:
   const graph = pruneSimple(await loadGraph("simple"), settings);
   applyModel(graph, model);
   setSection(graph, NODES.video, section);
+  await bindMediaIdentity(graph, video, [picture]);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(NODES.video, "video", upload(comfy, video));
   workflow.setInput(NODES.picture, "image", upload(comfy, picture));
@@ -167,6 +169,7 @@ export async function submitAdvanced(video: StoredFile, section: Section, pictur
   const graph = pruneAdvanced(await loadGraph(maxQuality ? "advanced_maxq" : "advanced"), pictures.length, settings);
   applyModel(graph, model);
   setSection(graph, nodeByTitle(graph, VIDEO), section);
+  await bindMediaIdentity(graph, video, pictures);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, VIDEO), "video", upload(comfy, video));
   for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", upload(comfy, picture));
@@ -178,6 +181,7 @@ export async function submitObject(video: StoredFile, section: Section, picture:
   const graph = pruneObject(await loadGraph("object"), !!picture, settings);
   applyModel(graph, model);
   setSection(graph, nodeByTitle(graph, OBJECT_VIDEO), section);
+  await bindMediaIdentity(graph, video, picture && settings.mode !== "remove" ? [picture] : []);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, OBJECT_VIDEO), "video", upload(comfy, video));
   if (picture && settings.mode !== "remove") workflow.setInput(nodeByTitle(graph, OBJECT_PICTURE), "image", upload(comfy, picture));
@@ -228,6 +232,7 @@ export async function submitMontage(video: StoredFile, section: Section, picture
   const graph = pruneMontage(await loadGraph("montage"), pictures.length, settings, review);
   applyModel(graph, model);
   setSection(graph, nodeByTitle(graph, VIDEO), section);
+  await bindMediaIdentity(graph, video, pictures);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(nodeByTitle(graph, VIDEO), "video", upload(comfy, video));
   for (const [i, picture] of pictures.entries()) workflow.setInput(nodeByTitle(graph, `Picture ${i + 1}`), "image", upload(comfy, picture));
