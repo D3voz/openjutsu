@@ -41,7 +41,9 @@ function parseMask(form: FormData) {
 
 function parsePicture(picture: FormDataEntryValue | null) {
   if (!(picture instanceof StoredFile) || picture.size === 0) throw new Error("Add a character photo.");
-  if (!picture.type.startsWith("image/")) throw new Error("The character photo must be an image.");
+  // Multipart byte checks already verified the image container. Browsers and
+  // file drag sources may omit MIME metadata, just as they can for videos.
+  if (!picture.type.startsWith("image/") && !/\.(png|jpe?g|webp)$/i.test(picture.name)) throw new Error("The character photo must be an image.");
   return picture;
 }
 
