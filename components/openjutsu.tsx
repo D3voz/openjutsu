@@ -1368,11 +1368,15 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
   const [frames, setFrames] = useState(0);
   const [frame, setFrame] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [playError, setPlayError] = useState("");
+  const playAttempt = useRef(0);
+  useEffect(() => () => { playAttempt.current++; }, [url]);
   const starts = frames ? clipStarts(frames / 24, clipSeconds) : [0];
 
   function seek(target: number) {
     const v = player.current;
     if (!v || !frames) return;
+    playAttempt.current++;
     v.pause();
     setPlaying(false);
     const next = Math.max(0, Math.min(frames - 1, target));
@@ -1383,9 +1387,14 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
   function toggle() {
     const v = player.current;
     if (!v) return;
+    const attempt = ++playAttempt.current;
+    setPlayError("");
     if (playing) v.pause();
-    else v.play();
-    setPlaying(!playing);
+    else void v.play().catch(() => {
+      if (playAttempt.current !== attempt) return;
+      setPlaying(false);
+      setPlayError("Could not play the mask video. Try Play again, or check the mask again.");
+    });
   }
 
   return (
@@ -1395,8 +1404,11 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
         ref={player} src={url} muted playsInline preload="auto"
         onLoadedMetadata={(event) => setFrames(Number.isFinite(event.currentTarget.duration) ? Math.round(event.currentTarget.duration * 24) : 0)}
         onTimeUpdate={(event) => playing && setFrame(Math.min(frames - 1, Math.floor(event.currentTarget.currentTime * 24)))}
-        onEnded={() => setPlaying(false)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => { playAttempt.current++; setPlaying(false); }}
+        onEnded={() => { playAttempt.current++; setPlaying(false); }}
       />
+      {playError && <p className="error" role="alert">{playError}</p>}
       <input className="scrub" type="range" min={0} max={Math.max(frames - 1, 0)} value={frame} aria-label="Frame" onChange={(event) => seek(Number(event.target.value))} />
       <div className="row">
         <div className="steps">
