@@ -45,6 +45,17 @@ non_diegetic_music:
 N/A"""
 
 
+DESCRIBE_VIDEO = "These are frames from one video clip, in time order, two per second. Describe what happens, for a video model that redoes the clip with a new person. Write one paragraph of 80 to 180 words in the present tense, calling the main person \"the person\". Go through the frames in order and name every change: what they do with their body, hands, head and mouth, such as blowing, eating, drinking, speaking, singing or laughing; every object they hold, use or touch, with its shape, colour and material, and what happens to it, such as candles going out or a lid opening; their facial expression and when it changes; where they look; what any other people do; and how the camera moves or cuts. Do not describe the person's hair, face, body or clothing, except a movement of hair or clothing, such as hair swinging or a hand fixing a collar. Say nothing about the light, its colours or the colour grade. No preamble, lists or Markdown."
+DESCRIBE_PICTURE = "Describe this picture for a casting sheet in two sentences: first the person's hair, outfit and accessories, then the setting behind them. Say nothing about their pose, hands, expression or the light. No preamble."
+REWRITE_SYSTEM = """You rewrite a video description for a new character. The user gives the new character and setting, then a description of what happens in the original video. The new video keeps the new character's looks and setting and the original video's actions. Rewrite the description as one paragraph of 60 to 160 words in the present tense, in the same time order, calling the main person "the character".
+
+Keep every action, gesture, head turn, gaze direction, expression change, mouth action, speech or singing, and camera movement. Keep every object the person holds, uses or touches, with its shape, colour and material and what happens to it.
+Fit everything tied to looks to the new character: never repeat the original person's hair, face, body or clothing; drop movements of hair, clothing or accessories the new character does not have, and describe the ones they do have as the new character's description gives them. Do not otherwise describe the new character's looks.
+Move the action into the new setting: drop or replace furniture, walls, rooms, stages, landscapes and places from the description that the new setting does not have, and never describe the original setting. Keep objects the person uses.
+Refer to other people only by what they do, such as "a second person", without their age, gender, hair, skin or clothing.
+Never mention lighting, light colours, colour grading, pictures, frames or the original video. Output only the paragraph."""
+
+
 def node(kind, title, **inputs):
     return {"class_type": kind, "inputs": inputs, "_meta": {"title": title}}
 
@@ -143,6 +154,32 @@ def solar(prepared, width=480, height=864, frames=141):
     return graph
 
 
+def describe(video, picture, frames=141):
+    """Pass 1 describes the source part; pass 2 rewrites it for the prepared picture.
+
+    The rewrite reads the picture as text: shown the image, Qwen3-VL 8B describes its pose instead of the video's actions."""
+    return {
+        "1": node("VHS_LoadVideo", "1 · Source video — selected motion clip", video=video, force_rate=24.0,
+                  custom_width=0, custom_height=0, frame_load_cap=frames, skip_first_frames=0, select_every_nth=1, format="None"),
+        "70": node("VHS_SelectEveryNthImage", "Two frames per second", images=["1", 0], select_every_nth=12, skip_first_images=0),
+        "71": node("ImageScaleToMaxDimension", "Shrink for the describer", image=["70", 0], largest_size=512, upscale_method="area"),
+        "72": node("CLIPLoader", "Describer: Qwen3-VL 8B", clip_name="qwen3vl_8b_int8_convrot.safetensors", type="stable_diffusion", device="default"),
+        "73": node("TextGenerate", "Pass 1 · describe the source video", clip=["72", 0], image=["71", 0], prompt=DESCRIBE_VIDEO,
+                   max_length=600, sampling_mode="off", thinking=False, use_default_template=True, mtp="off"),
+        "74": node("LoadImage", "Prepared picture", image=picture),
+        "75": node("ImageScaleToMaxDimension", "Prepared picture for the describer", image=["74", 0], largest_size=768, upscale_method="area"),
+        "80": node("TextGenerate", "Pass 2 · describe the prepared picture", clip=["72", 0], image=["75", 0], prompt=DESCRIBE_PICTURE,
+                   max_length=160, sampling_mode="off", thinking=False, use_default_template=True, mtp="off"),
+        "81": node("StringConcatenate", "New character and setting", string_a="New character and setting:", string_b=["80", 0], delimiter="\n"),
+        "76": node("StringConcatenate", "Pass 1 text for the rewrite", string_a="Original video:", string_b=["73", 0], delimiter="\n"),
+        "82": node("StringConcatenate", "Rewrite request", string_a=["81", 0], string_b=["76", 0], delimiter="\n\n"),
+        "77": node("PrimitiveStringMultiline", "Rewrite rules", value=REWRITE_SYSTEM),
+        "78": node("TextGenerate", "Pass 2 · rewrite for the prepared picture", clip=["72", 0], prompt=["82", 0],
+                   system_prompt=["77", 0], max_length=500, sampling_mode="off", thinking=False, use_default_template=True, mtp="off"),
+        "79": node("PreviewAny", "Video description for H3", source=["78", 0]),
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video", default="instagram1_normal_source_20261027.mp4", help="Filename in ComfyUI input/")
@@ -151,7 +188,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     first = prepare(args.video, args.picture)
-    for name, graph in [("prepare", first), ("motion", motion(first)), ("solar", solar(first))]:
+    for name, graph in [("prepare", first), ("motion", motion(first)), ("solar", solar(first)), ("describe", describe(args.video, args.picture))]:
         path = args.output_dir/f"from_picture_{name}_flux3.api.json"
         path.write_text(json.dumps(dict(sorted(graph.items(), key=lambda item: int(item[0]))), indent=2, ensure_ascii=False)+"\n", encoding="utf-8")
         print(path)

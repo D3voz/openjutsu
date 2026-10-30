@@ -8,10 +8,11 @@ import { DEFAULT_PICTURE_VIDEO, FRAME_RELIGHT_PROMPT, LIGHT_LOOKS, parsePictureV
 const PROMPT = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
 const STORAGE = "openjutsu.picture-preview";
 const VIDEO_STORAGE = "openjutsu.picture-video-settings";
+const DESCRIPTION_STORAGE = "openjutsu.picture-description";
 const MAX_SECONDS = 15;
-type Job = { id: string; stage: "prepare" | "render" };
+type Job = { id: string; stage: "prepare" | "describe" | "render" };
 
-export function FromPicture({ initialVideo, initialPicture, start: initialStart = 0 }: { initialVideo?: File; initialPicture?: File; start?: number }) {
+export function FromPicture({ initialVideo, initialPicture, start: initialStart = 0, describer }: { initialVideo?: File; initialPicture?: File; start?: number; describer: string }) {
   const [video, setVideo] = useState<File | null>(initialVideo ?? null);
   const [picture, setPicture] = useState<File | null>(initialPicture ?? null);
   const [videoUrl, setVideoUrl] = useState("");
@@ -33,6 +34,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   const [prepared, setPrepared] = useState("");
   const [preview, setPreview] = useState<{ url: string; frame: string } | null>(null);
   const [approved, setApproved] = useState(false);
+  const [description, setDescription] = useState("");
   const [settings, setSettings] = useState<PictureVideoSettings>(() => structuredClone(DEFAULT_PICTURE_VIDEO));
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [files, setFiles] = useState<{ models: string[]; loras: string[]; textEncoders: string[]; vaes: string[] }>({ models: [], loras: [], textEncoders: [], vaes: [] });
@@ -50,9 +52,10 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       const saved = JSON.parse(localStorage.getItem(STORAGE) ?? "null");
       if (typeof saved?.prepared === "string") setPrepared(saved.prepared);
       setApproved(saved?.approved === true || saved?.job?.stage === "render");
-      if (typeof saved?.job?.id === "string" && ["prepare", "render"].includes(saved.job.stage)) {
+      setDescription(localStorage.getItem(DESCRIPTION_STORAGE) ?? "");
+      if (typeof saved?.job?.id === "string" && ["prepare", "describe", "render"].includes(saved.job.stage)) {
         setJob(saved.job);
-        if (saved.job.stage === "render" && saved.prepared) {
+        if (saved.job.stage !== "prepare" && saved.prepared) {
           const base = `/api/picture?id=${encodeURIComponent(saved.prepared)}`;
           setPreview({ url: `${base}&media=result`, frame: `${base}&media=frame` });
         }
@@ -89,6 +92,10 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
   function remember(next: Job | null, image: string, accepted: boolean) {
     try { localStorage.setItem(STORAGE, JSON.stringify({ job: next, prepared: image, approved: accepted })); } catch {}
   }
+  function keepDescription(text: string) {
+    setDescription(text);
+    try { localStorage.setItem(DESCRIPTION_STORAGE, text); } catch {}
+  }
   useEffect(() => {
     if (!job) return;
     const controller = new AbortController();
@@ -99,7 +106,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         const data = await response.json();
         if (!response.ok) {
           setError(data.error ?? "Could not read the job.");
-          if ([400, 404, 422].includes(response.status)) { setJob(null); remember(null, prepared, job!.stage === "render"); }
+          if ([400, 404, 422].includes(response.status)) { setJob(null); remember(null, prepared, job!.stage !== "prepare"); }
           else timer = setTimeout(poll, 5000);
           return;
         }
@@ -107,7 +114,8 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         if (data.status !== "ready") { timer = setTimeout(poll, 2000); return; }
         if (job!.stage === "prepare") {
           setPrepared(job!.id); setPreview({ url: data.url, frame: data.frame }); setSize([data.width, data.height]); remember(null, job!.id, approved);
-        } else { setResult(data.url); remember(job, prepared, true); }
+        } else if (job!.stage === "describe") { keepDescription(data.text); remember(null, prepared, true); }
+        else { setResult(data.url); remember(job, prepared, true); }
         setJob(null);
       } catch {
         if (!controller.signal.aborted) { setError("Connection interrupted. Retrying…"); timer = setTimeout(poll, 5000); }
@@ -125,7 +133,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     if (player.current) player.current.currentTime = begin;
   }
   function invalidate() {
-    setPrepared(""); setPreview(null); setApproved(false); setResult(""); setError(""); remember(null, "", false);
+    setPrepared(""); setPreview(null); setApproved(false); setResult(""); setError(""); remember(null, "", false); keepDescription("");
   }
   async function prepare(nextSeed: number) {
     if (!ready || !video || !size) return;
@@ -143,11 +151,22 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
     } catch (error) { setError((error as Error).message); }
     finally { setSubmitting(false); }
   }
+  // The describer watches the part, then rewrites what happens for the prepared picture; H3 gets the result as text.
+  async function describe() {
+    setSubmitting(true); setError("");
+    try {
+      const response = await fetch("/api/picture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, describe: true, seconds: settings.seconds, describer }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      const next: Job = { id: data.id, stage: "describe" }; remember(next, prepared, true); setJob(next);
+    } catch (error) { setError((error as Error).message); }
+    finally { setSubmitting(false); }
+  }
   async function render() {
     if (!prepared || !preview || !approved) return;
     setSubmitting(true); setError(""); setResult("");
     try {
-      const response = await fetch("/api/picture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings }) });
+      const response = await fetch("/api/picture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings, description }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       const next: Job = { id: data.id, stage: "render" }; remember(next, prepared, true); setJob(next);
@@ -230,7 +249,7 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
         <p className="hint">This step only generates an image. After reviewing it, choose the video settings and press Render video.</p>
       </section>
     </div>}
-    {busy && <p role="status">{submitting ? "Submitting…" : job?.stage === "prepare" ? "FLUX is preparing the image…" : "Generating normals and rendering the video…"}</p>}
+    {busy && <p role="status">{submitting ? "Submitting…" : job?.stage === "prepare" ? "FLUX is preparing the image…" : job?.stage === "describe" ? "Describing the video…" : "Generating normals and rendering the video…"}</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {preview && !approved && <section className="panel">
       <h2><span>3</span> Review before rendering</h2>
@@ -242,13 +261,16 @@ export function FromPicture({ initialVideo, initialPicture, start: initialStart 
       <div className="row">
         <a href={preview.url} download="prepared-frame.png">Download image</a>
         <button className="secondary" disabled={busy || !ready} onClick={() => prepare((seed + 1) % (MAX_SEED + 1))}>Generate another image</button>
-        <button className="primary" disabled={busy} onClick={() => { setApproved(true); remember(null, prepared, true); }}>Use this image</button>
+        <button className="primary" disabled={busy} onClick={() => { setApproved(true); remember(null, prepared, true); if (!description) void describe(); }}>Use this image</button>
       </div>
     </section>}
     {preview && approved && <section className="panel">
       <h2><span>4</span> Video render settings</h2>
       <div className="row"><img className="picture-reference" src={preview.url} alt="Approved FLUX image for the video" style={{ width: 120, maxHeight: 180 }} /><button className="secondary" disabled={busy} onClick={() => { setApproved(false); remember(null, prepared, false); }}>Back to image review</button></div>
       <p className="hint">The approved image is reused without running FLUX again. Native H3 and SolarRenderer render one clip, up to 15 seconds, without a context loop.</p>
+      <label>Video description · H3 reads it with the normal-map video<textarea className="report" rows={6} value={description} disabled={busy} onChange={(event) => keepDescription(event.target.value)} /></label>
+      <small>The visual describer (<code>{describer}</code>) watches the part, two frames a second, and writes its actions, held objects and expressions; with a character picture it then rewrites them for the prepared image. Remove anything about the video person's looks, clothes or setting. Leave it empty to render without it.</small>
+      <div className="row"><button className="secondary" disabled={busy} onClick={describe}>Describe again</button><small>Describe again after changing the video length.</small></div>
       {modelError && <p className="error" role="alert">{modelError}</p>}
       <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="inputs">

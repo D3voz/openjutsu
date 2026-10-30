@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { isLink, type ApiGraph } from "../lib/simple.ts";
-import { applyFrameRelight, applyRelight, FRAME_RELIGHT_PROMPT, LIGHT_LOOKS, RELIGHT_PROMPT } from "../lib/picture.ts";
+import { applyDescription, applyFrameRelight, applyRelight, FRAME_RELIGHT_PROMPT, LIGHT_LOOKS, RELIGHT_PROMPT } from "../lib/picture.ts";
 
 const load = (stage: string): ApiGraph => JSON.parse(readFileSync(new URL(`../workflows/picture/from_picture_${stage}_flux3.api.json`, import.meta.url), "utf8"));
 const prompt = "change <image 1> character pose follow the  <image 2> pose. keep the final image as same body cut as <image 2> . do not change the background of <image 1> and do not add anything extra in <image 1>.";
@@ -76,11 +76,36 @@ test("relighting the video's own person gives FLUX and the upsampler only the ra
   assert.deepEqual(kept["relight_frame"].inputs.image, ["2", 0]);
 });
 
+test("the describer watches the source part, then rewrites its text against the prepared picture's description", () => {
+  const graph = load("describe");
+  assert.deepEqual(graph["70"].inputs.images, ["1", 0]); assert.equal(graph["70"].inputs.select_every_nth, 12);
+  assert.deepEqual(graph["73"].inputs.image, ["71", 0]); assert.deepEqual(graph["73"].inputs.clip, ["72", 0]);
+  assert.deepEqual(graph["80"].inputs.image, ["75", 0]); assert.deepEqual(graph["75"].inputs.image, ["74", 0]);
+  assert.deepEqual(graph["82"].inputs.string_a, ["81", 0]); assert.deepEqual(graph["82"].inputs.string_b, ["76", 0]);
+  assert.deepEqual(graph["81"].inputs.string_b, ["80", 0]); assert.deepEqual(graph["76"].inputs.string_b, ["73", 0]);
+  assert.equal(graph["78"].inputs.image, undefined); assert.deepEqual(graph["78"].inputs.prompt, ["82", 0]);
+  assert.deepEqual(graph["79"].inputs.source, ["78", 0]);
+  assert.ok(!Object.values(graph).some((node) => /MiniMax|Metric3D|Solar|KSampler/.test(node.class_type)));
+});
+
+test("the description opens the detailed description of both renderers", () => {
+  for (const stage of ["motion", "solar"]) {
+    const graph = load(stage);
+    applyDescription(graph, "  The character lifts a white cup\nand smiles.  ");
+    const prompt = String(graph["56"].inputs.prompt);
+    assert.ok(prompt.includes(stage === "solar" ? "[Shot 1] The shot begins from <Video 2>. The character lifts a white cup and smiles. The same character"
+      : "detailed_description:\nThe character lifts a white cup and smiles. Follow the motion guide"), stage);
+    const empty = load(stage), before = empty["56"].inputs.prompt;
+    applyDescription(empty, " \n ");
+    assert.equal(empty["56"].inputs.prompt, before);
+  }
+});
+
 test("picture pipelines have valid links and no disconnected processing nodes", () => {
   const relit = load("prepare"), frame = load("prepare");
   applyRelight(relit, LIGHT_LOOKS[0].light);
   applyFrameRelight(frame, LIGHT_LOOKS[0].light, 0.9);
-  for (const [stage, graph] of [...["prepare", "motion", "solar"].map((stage) => [stage, load(stage)] as const), ["relight", relit] as const, ["frame relight", frame] as const]) {
+  for (const [stage, graph] of [...["prepare", "motion", "solar", "describe"].map((stage) => [stage, load(stage)] as const), ["relight", relit] as const, ["frame relight", frame] as const]) {
     const reached = new Set<string>();
     function visit(id: string) {
       if (reached.has(id)) return;

@@ -26,7 +26,7 @@ const server = createServer(async (request, response) => {
     const inputs = {
       UNETLoader: { unet_name: [[DEFAULT_PICTURE_VIDEO.model, "another_h3.safetensors"]] },
       LoraLoaderModelOnly: { lora_name: [[DEFAULT_PICTURE_VIDEO.loras[0].name, "style.safetensors", "solarrenderer_4step_lora.safetensors", "solarrenderer_control_lora.safetensors", "solar\\solarrenderer_4step_lora_rank64.safetensors", "solar\\solarrenderer_control_lora_rank64.safetensors"]] },
-      CLIPLoader: { clip_name: [[DEFAULT_PICTURE_VIDEO.textEncoder, "another_encoder.safetensors"]] },
+      CLIPLoader: { clip_name: [[DEFAULT_PICTURE_VIDEO.textEncoder, "another_encoder.safetensors", "qwen3vl_8b_int8_convrot.safetensors", "qwen3vl_4b_fp8_scaled.safetensors"]] },
       VAELoader: { vae_name: [[DEFAULT_PICTURE_VIDEO.videoVae, DEFAULT_PICTURE_VIDEO.audioVae, "another_vae.safetensors"]] },
     };
     if (node === "SolarRendererLoraLoader" && !solarInstalled) data = {};
@@ -58,8 +58,8 @@ function inputs() {
   form.set("width", "1280"); form.set("height", "720"); form.set("start", "2.5"); form.set("seed", "42");
   return form;
 }
-function render(prepared: string, settings?: unknown) {
-  return POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings: settings ?? { ...DEFAULT_PICTURE_VIDEO, renderer: "h3", steps: 6, seed: 42 }, filename: "untrusted.png", prompt: { untrusted: true } }) }));
+function render(prepared: string, settings?: unknown, description?: string) {
+  return POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared, settings: settings ?? { ...DEFAULT_PICTURE_VIDEO, renderer: "h3", steps: 6, seed: 42 }, description, filename: "untrusted.png", prompt: { untrusted: true } }) }));
 }
 function completed() {
   return { prompt: [0, "picture-1", prompts[0]], status: { status_str: "success", completed: true }, outputs: {
@@ -121,6 +121,30 @@ test("explicit render uses the exact saved preview, retains the source offset an
   assert.equal(graph["58"].inputs.noise_seed, 42);
   assert.ok(!Object.values(graph).some((node) => /ReferenceMultiLatent|TextGenerate|SaveImage/.test(node.class_type)));
   assert.deepEqual(graph["63"].inputs.audio, ["36", 0]);
+});
+
+test("describing reads the selected part, rewrites it against the saved preview and returns the text", async () => {
+  history = { "picture-1": completed() };
+  const describe = (seconds: number, describer?: string) => POST(new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prepared: "picture-1", describe: true, seconds, describer }) }));
+  const response = await describe(15, "qwen3vl_4b_fp8_scaled.safetensors");
+  assert.equal(response.status, 202);
+  const graph = prompts.at(-1)!, id = (await response.json()).id;
+  assert.equal(graph["72"].inputs.clip_name, "qwen3vl_4b_fp8_scaled.safetensors");
+  assert.equal(graph["1"].inputs.video, prompts[0]["1"].inputs.video);
+  assert.equal(graph["1"].inputs.skip_first_frames, 60); assert.equal(graph["1"].inputs.frame_load_cap, 345);
+  assert.equal(graph["74"].inputs.image, `picture/uploaded-${uploads}.png`); assert.deepEqual(graph["79"].inputs.source, ["78", 0]);
+  history = { [id]: { prompt: [0, id, graph], outputs: { "79": { text: ["The character waves."] } } } };
+  assert.deepEqual(await (await GET(new Request(`${url}?id=${id}`))).json(), { status: "ready", text: "The character waves." });
+  const own = structuredClone(prompts[0]); delete own["4"];
+  history = { "picture-1": { ...completed(), prompt: [0, "picture-1", own] } };
+  assert.equal((await describe(6)).status, 202);
+  const pass = prompts.at(-1)!;
+  assert.deepEqual(Object.keys(pass).sort(), ["1", "70", "71", "72", "73", "79"]); assert.deepEqual(pass["79"].inputs.source, ["73", 0]);
+  assert.equal(pass["72"].inputs.clip_name, "qwen3vl_8b_int8_convrot.safetensors");
+  assert.equal((await describe(16)).status, 400); assert.equal((await describe(6, "missing.safetensors")).status, 400);
+  history = { "picture-1": completed() };
+  assert.equal((await render("picture-1", { ...DEFAULT_PICTURE_VIDEO, renderer: "h3", steps: 6 }, "The character waves.")).status, 202);
+  assert.ok(String(prompts.at(-1)!["56"].inputs.prompt).includes("detailed_description:\nThe character waves. "));
 });
 
 test("render rejects unfinished, unrelated and failed histories instead of accepting a client filename", async () => {

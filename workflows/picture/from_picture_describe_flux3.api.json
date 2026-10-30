@@ -1,0 +1,215 @@
+{
+  "1": {
+    "class_type": "VHS_LoadVideo",
+    "inputs": {
+      "video": "instagram1_normal_source_20261027.mp4",
+      "force_rate": 24.0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 141,
+      "skip_first_frames": 0,
+      "select_every_nth": 1,
+      "format": "None"
+    },
+    "_meta": {
+      "title": "1 · Source video — selected motion clip"
+    }
+  },
+  "70": {
+    "class_type": "VHS_SelectEveryNthImage",
+    "inputs": {
+      "images": [
+        "1",
+        0
+      ],
+      "select_every_nth": 12,
+      "skip_first_images": 0
+    },
+    "_meta": {
+      "title": "Two frames per second"
+    }
+  },
+  "71": {
+    "class_type": "ImageScaleToMaxDimension",
+    "inputs": {
+      "image": [
+        "70",
+        0
+      ],
+      "largest_size": 512,
+      "upscale_method": "area"
+    },
+    "_meta": {
+      "title": "Shrink for the describer"
+    }
+  },
+  "72": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen3vl_8b_int8_convrot.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "Describer: Qwen3-VL 8B"
+    }
+  },
+  "73": {
+    "class_type": "TextGenerate",
+    "inputs": {
+      "clip": [
+        "72",
+        0
+      ],
+      "image": [
+        "71",
+        0
+      ],
+      "prompt": "These are frames from one video clip, in time order, two per second. Describe what happens, for a video model that redoes the clip with a new person. Write one paragraph of 80 to 180 words in the present tense, calling the main person \"the person\". Go through the frames in order and name every change: what they do with their body, hands, head and mouth, such as blowing, eating, drinking, speaking, singing or laughing; every object they hold, use or touch, with its shape, colour and material, and what happens to it, such as candles going out or a lid opening; their facial expression and when it changes; where they look; what any other people do; and how the camera moves or cuts. Do not describe the person's hair, face, body or clothing, except a movement of hair or clothing, such as hair swinging or a hand fixing a collar. Say nothing about the light, its colours or the colour grade. No preamble, lists or Markdown.",
+      "max_length": 600,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "off"
+    },
+    "_meta": {
+      "title": "Pass 1 · describe the source video"
+    }
+  },
+  "74": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "Stylish%20Blonde%20in%20a%20Warm%20Cafe.png"
+    },
+    "_meta": {
+      "title": "Prepared picture"
+    }
+  },
+  "75": {
+    "class_type": "ImageScaleToMaxDimension",
+    "inputs": {
+      "image": [
+        "74",
+        0
+      ],
+      "largest_size": 768,
+      "upscale_method": "area"
+    },
+    "_meta": {
+      "title": "Prepared picture for the describer"
+    }
+  },
+  "76": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": "Original video:",
+      "string_b": [
+        "73",
+        0
+      ],
+      "delimiter": "\n"
+    },
+    "_meta": {
+      "title": "Pass 1 text for the rewrite"
+    }
+  },
+  "77": {
+    "class_type": "PrimitiveStringMultiline",
+    "inputs": {
+      "value": "You rewrite a video description for a new character. The user gives the new character and setting, then a description of what happens in the original video. The new video keeps the new character's looks and setting and the original video's actions. Rewrite the description as one paragraph of 60 to 160 words in the present tense, in the same time order, calling the main person \"the character\".\n\nKeep every action, gesture, head turn, gaze direction, expression change, mouth action, speech or singing, and camera movement. Keep every object the person holds, uses or touches, with its shape, colour and material and what happens to it.\nFit everything tied to looks to the new character: never repeat the original person's hair, face, body or clothing; drop movements of hair, clothing or accessories the new character does not have, and describe the ones they do have as the new character's description gives them. Do not otherwise describe the new character's looks.\nMove the action into the new setting: drop or replace furniture, walls, rooms, stages, landscapes and places from the description that the new setting does not have, and never describe the original setting. Keep objects the person uses.\nRefer to other people only by what they do, such as \"a second person\", without their age, gender, hair, skin or clothing.\nNever mention lighting, light colours, colour grading, pictures, frames or the original video. Output only the paragraph."
+    },
+    "_meta": {
+      "title": "Rewrite rules"
+    }
+  },
+  "78": {
+    "class_type": "TextGenerate",
+    "inputs": {
+      "clip": [
+        "72",
+        0
+      ],
+      "prompt": [
+        "82",
+        0
+      ],
+      "system_prompt": [
+        "77",
+        0
+      ],
+      "max_length": 500,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "off"
+    },
+    "_meta": {
+      "title": "Pass 2 · rewrite for the prepared picture"
+    }
+  },
+  "79": {
+    "class_type": "PreviewAny",
+    "inputs": {
+      "source": [
+        "78",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Video description for H3"
+    }
+  },
+  "80": {
+    "class_type": "TextGenerate",
+    "inputs": {
+      "clip": [
+        "72",
+        0
+      ],
+      "image": [
+        "75",
+        0
+      ],
+      "prompt": "Describe this picture for a casting sheet in two sentences: first the person's hair, outfit and accessories, then the setting behind them. Say nothing about their pose, hands, expression or the light. No preamble.",
+      "max_length": 160,
+      "sampling_mode": "off",
+      "thinking": false,
+      "use_default_template": true,
+      "mtp": "off"
+    },
+    "_meta": {
+      "title": "Pass 2 · describe the prepared picture"
+    }
+  },
+  "81": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": "New character and setting:",
+      "string_b": [
+        "80",
+        0
+      ],
+      "delimiter": "\n"
+    },
+    "_meta": {
+      "title": "New character and setting"
+    }
+  },
+  "82": {
+    "class_type": "StringConcatenate",
+    "inputs": {
+      "string_a": [
+        "81",
+        0
+      ],
+      "string_b": [
+        "76",
+        0
+      ],
+      "delimiter": "\n\n"
+    },
+    "_meta": {
+      "title": "Rewrite request"
+    }
+  }
+}

@@ -771,7 +771,7 @@ export function Openjutsu() {
           onMontage={video && character && !submitting ? (tracks, labels) => submit("montage", { tracks, labels }) : null} frames={frames}
           onRetry={video && same && ready && !submitting && run.kind === generateKind && generateKind !== "montage" ? () => { reset(); submit(generateKind); } : null}
         />
-      ) : mode === "object" && editMode === "picture" ? <FromPicture initialVideo={video?.file} initialPicture={look?.file} start={whole ? 0 : part.start} /> : (
+      ) : mode === "object" && editMode === "picture" ? <FromPicture initialVideo={video?.file} initialPicture={look?.file} start={whole ? 0 : part.start} describer={describer} /> : (
         <>
           <section className="inputs">
             <div className="panel">

@@ -9,6 +9,13 @@ The app uses them under **Object swap → From picture**. Choose the video and c
 | `from_picture_prepare_flux3.api.json` | FLUX 3 prepares and saves the first-frame picture. |
 | `from_picture_motion_flux3.api.json` | FLUX preparation → Metric3D normals → H3 video. |
 | `from_picture_solar_flux3.api.json` | FLUX preparation → Metric3D normals → SolarRenderer with its four-step and control LoRAs. |
+| `from_picture_describe_flux3.api.json` | The visual describer writes what happens in the source part, then rewrites it for the prepared picture. |
+
+## Video description
+
+The normal map shows H3 how the body moves but not what is happening: held objects become unlabeled shapes, and faces lose their expression. **Use this image** therefore runs the visual describer chosen in the app (Qwen3-VL 8B by default) twice. Pass 1 watches the part at two frames per second and writes its actions, held objects, mouth actions, expressions, gaze, other people and camera, without the person's looks or the light. Pass 2 describes the prepared picture's person and setting in words, then rewrites pass 1 for them: it keeps every action and held object, drops hair or clothing movements the new character cannot make, moves the action into the picture's setting and names other people only by what they do. The rewrite reads the picture as text because, shown the image, the 8B model described the picture's pose instead of the video's actions. **Relight the video's own person** keeps the person, so it uses pass 1 directly.
+
+The text appears in an editable box before **Render video** and opens the prompt's `detailed_description`. Remove anything about the source person's looks or setting; leave the box empty to render without it. Describe again after changing the video length. On a 4060 Ti 16 GB both passes take about 15 s with the model loaded, 40 s without.
 
 ## SolarRenderer
 

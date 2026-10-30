@@ -5,17 +5,19 @@ import { join } from "node:path";
 import { apiAccess, HttpError, IMAGE_SIGNATURE, readFormData, StoredFile, validateJobId, VIDEO_SIGNATURE } from "../../../lib/http.ts";
 import { canvasSize, isLink, MAX_SEED, type ApiGraph } from "../../../lib/simple.ts";
 import { listModels } from "../../../lib/comfy.ts";
-import { applyFrameRelight, applyPictureVideoSettings, applyRelight, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
+import { applyDescriber, DEFAULT_DESCRIBER } from "../../../lib/model.ts";
+import { applyDescription, applyFrameRelight, applyPictureVideoSettings, applyRelight, DEFAULT_PICTURE_VIDEO, parsePictureVideoSettings, pictureFrames, pictureLoras, solarLoraFiles, type PictureVideoSettings } from "../../../lib/picture.ts";
 
 export const runtime = "nodejs";
 const PREPARED = "OpenJutsu · prepared picture";
 const RENDERED = "OpenJutsu · picture motion";
+const DESCRIBED = "OpenJutsu · picture video description";
 const FILE_CHECKS = {
   video: { signature: VIDEO_SIGNATURE, error: "Choose an MP4, MOV, MKV, WebM or AVI video." },
   picture: { signature: IMAGE_SIGNATURE, error: "Choose a PNG, JPEG or WebP character picture." },
 };
 type OutputFile = { filename: string; subfolder?: string; type?: string };
-type History = { prompt?: [number, string, ApiGraph]; status?: { status_str?: string; completed?: boolean }; outputs?: Record<string, { images?: OutputFile[]; gifs?: OutputFile[] }> };
+type History = { prompt?: [number, string, ApiGraph]; status?: { status_str?: string; completed?: boolean }; outputs?: Record<string, { images?: OutputFile[]; gifs?: OutputFile[]; text?: string[] }> };
 
 async function comfy(path: string, init?: RequestInit) {
   const base = (process.env.COMFYUI_URL?.trim() || "http://127.0.0.1:8188").replace(/\/+$/, "");
@@ -29,7 +31,7 @@ async function comfy(path: string, init?: RequestInit) {
   return response;
 }
 
-async function template(stage: "prepare" | "motion" | "solar"): Promise<ApiGraph> {
+async function template(stage: "prepare" | "motion" | "solar" | "describe"): Promise<ApiGraph> {
   return JSON.parse(await readFile(join(process.cwd(), "workflows", "picture", `from_picture_${stage}_flux3.api.json`), "utf8"));
 }
 
@@ -53,7 +55,8 @@ async function history(id: string) {
     const graph = item.prompt?.[2];
     const prepared = graph?.["21"]?.class_type === "SaveImage" && graph["21"]._meta?.title === PREPARED;
     const rendered = graph?.["63"]?.class_type === "VHS_VideoCombine" && graph["63"]._meta?.title === RENDERED;
-    if (!prepared && !rendered) throw new HttpError(404, "This is not an OpenJutsu picture job.");
+    const described = graph?.["79"]?.class_type === "PreviewAny" && graph["79"]._meta?.title === DESCRIBED;
+    if (!prepared && !rendered && !described) throw new HttpError(404, "This is not an OpenJutsu picture job.");
     if (item.status?.status_str === "error") throw new HttpError(422, "Generation failed. Check the ComfyUI console for missing models or memory errors.");
   }
   return item;
@@ -80,6 +83,24 @@ export async function POST(request: Request) {
       const file = item?.outputs?.["21"]?.images?.[0];
       const source = item?.prompt?.[2];
       if (!file || !source || source["21"]?._meta?.title !== PREPARED || source["1"]?.class_type !== "VHS_LoadVideo") throw new HttpError(409, "The prepared picture is not ready. Generate it first.");
+      if (body.describe === true) {
+        const seconds = Number(body.seconds);
+        if (!(seconds >= 5 / 24 && seconds <= 15)) throw new HttpError(400, "Video length must be between 5 frames and 15 seconds.");
+        const describer = String(body.describer ?? DEFAULT_DESCRIBER).trim();
+        if (!(await listModels()).textEncoders.includes(describer)) throw new HttpError(400, "Choose a visual describer ComfyUI has in models/text_encoders.");
+        graph = await template("describe");
+        applyDescriber(graph, describer);
+        Object.assign(graph["1"].inputs, { video: source["1"].inputs.video, skip_first_frames: source["1"].inputs.skip_first_frames, frame_load_cap: pictureFrames(seconds) });
+        // Relighting the video's own person keeps that person, so pass 1 is already the description.
+        if (source["4"]) graph["74"].inputs.image = await uploadFile(await (await comfy(view(file))).blob(), ".png");
+        else {
+          for (const id of ["74", "75", "76", "77", "78", "80", "81", "82"]) delete graph[id];
+          graph["79"].inputs.source = ["73", 0];
+        }
+        graph["79"]._meta = { title: DESCRIBED };
+        const result = await (await comfy("/prompt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: graph }) })).json();
+        return Response.json({ id: result.prompt_id }, { status: 202 });
+      }
       let settings: PictureVideoSettings;
       try { settings = parsePictureVideoSettings(body.settings ?? { ...DEFAULT_PICTURE_VIDEO, seed: source["19"].inputs.seed }); }
       catch (error) { throw new HttpError(400, (error as Error).message); }
@@ -105,6 +126,7 @@ export async function POST(request: Request) {
       graph["1"].inputs.video = source["1"].inputs.video;
       graph["1"].inputs.skip_first_frames = source["1"].inputs.skip_first_frames;
       applyPictureVideoSettings(graph, settings, Number(source["3"].inputs.width), Number(source["3"].inputs.height));
+      if (typeof body.description === "string") applyDescription(graph, body.description);
       graph["63"]._meta = { title: RENDERED };
       const keep = new Set<string>();
       function visit(id: string) {
@@ -165,6 +187,11 @@ export async function GET(request: Request) {
       const waiting = [...queue.queue_running, ...queue.queue_pending].some((entry: unknown[]) => entry[1] === id);
       if (!waiting) throw new HttpError(404, "This job was removed or ComfyUI restarted. Generate the picture again.");
       return Response.json({ status: "processing" });
+    }
+    if (item.prompt?.[2]?.["79"]?._meta?.title === DESCRIBED) {
+      const text = item.outputs?.["79"]?.text?.[0];
+      if (typeof text !== "string") throw new HttpError(422, "ComfyUI returned no description. Check its console.");
+      return Response.json({ status: "ready", text });
     }
     const isVideo = item.prompt?.[2]?.["63"]?._meta?.title === RENDERED;
     const media = url.searchParams.get("media");

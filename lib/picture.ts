@@ -94,6 +94,12 @@ export function applyPictureVideoSettings(graph: ApiGraph, settings: PictureVide
   graph["49"].inputs.model = model;
 }
 
+// The describer's paragraph opens the detailed description; SolarRenderer keeps its shot tag and opening sentence first.
+export function applyDescription(graph: ApiGraph, description: string) {
+  const text = description.trim().replace(/\s+/g, " ");
+  if (text) graph["56"].inputs.prompt = String(graph["56"].inputs.prompt).replace(/detailed_description:\n(\[Shot 1\] The shot begins from <Video 2>\. )?/, (head) => `${head}${text} `);
+}
+
 export const LIGHT_LOOKS = [
   { name: "Cold beam", image: "/relight/cold_beam.webp", light: "Light the new photo as a dark horror scene: a single narrow cold white spotlight shines straight down from directly above, with a visible beam of light cutting through dusty air above the head; it lights the top of the hair, forehead, cheekbones, nose and shoulders, leaves deep shadows in the eye sockets and under the nose and chin, and the background falls to black. Cold, desaturated blue-grey colour grade." },
   { name: "Golden halo", image: "/relight/golden_halo.webp", light: "Light the new photo with a warm golden glow: a strong amber backlight behind the head turns the background into glowing orange-gold haze and puts a bright golden rim on the hair and shoulders, while soft warm gold light falls on the face from the front. Rich honey and orange tones, glowing highlights, warm shadows, like sunset in a cathedral." },
