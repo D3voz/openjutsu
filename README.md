@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/2d8d763a-1764-49a6-9116-d6d1be661ff6
 
 **From picture → Relight: new light in the same pass**
 
-![A video frame and a picture combined into a posed picture under golden backlight, then a video that keeps the light, with the nine light looks below](docs/media/relight.jpg)
+![A video frame and a picture combined into a posed picture under golden backlight, then a video that keeps the light, with the seventeen light looks below](docs/media/relight.jpg)
 
 ## First visit: visual describer
 
