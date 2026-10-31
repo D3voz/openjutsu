@@ -252,3 +252,6 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
   .welcome-actions > .row { width: 100%; }
   .welcome-actions button { flex: 1; }
 }
+
+.language-switch { display: flex; align-items: center; gap: 8px; font-size: 0.86em; color: var(--muted); }
+.language-switch select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
