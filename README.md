@@ -18,6 +18,8 @@ https://github.com/user-attachments/assets/2d8d763a-1764-49a6-9116-d6d1be661ff6
 
 ## First visit: visual describer
 
+The welcome page and editor support **English** and **简体中文**. Use **语言 / Language** in the header to switch at any time. The first visit follows your browser's first supported language, falling back to English; your choice is saved in this browser. Switching languages keeps your files, settings and running job. Model filenames, generation prompts and diagnostic details retain their original values.
+
 The welcome page lets you choose the vision-language model that describes pictures and video frames and writes prompts. Qwen3-VL 8B INT8 remains the default; Qwen3-VL 4B FP8 and Gemma 4 E2B INT8 are smaller alternatives. Install a compatible single-file model including its vision weights in `ComfyUI/models/text_encoders`, then press **Refresh models**. Other installed models can be selected if they support image/video input and text generation through ComfyUI's CLIPLoader and Generate Text nodes. Text-only models and files requiring a different loader are unsuitable.
 
 Choose according to available VRAM and leave room for image/video context and working memory; file size is not a VRAM requirement, and H3 generation has separate memory needs. Your selection is saved in this browser and used for swaps, prompt descriptions and **Find people**. Reopen **Welcome & models** to change it, or use **Visual describer** under Model components. Alternative describers may change prompt quality and person matching. **Set up later** opens the editor; generation still checks the required files. The separate H3 text encoder remains unchanged.

@@ -1,5 +1,7 @@
 "use client";
 
+import { useT, useLocale, LanguageSwitch } from "./language.tsx";
+
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent, type ReactNode } from "react";
 import type { PublicJob } from "../lib/comfy.ts";
 import type { SetupRequest, SetupResult } from "../lib/setup.ts";
@@ -155,9 +157,10 @@ const COLOR_SHARE: Record<string, number> = { ImageDetailContrast: 0.15, Orion4D
 
 // A picker over ComfyUI's files, or a text field when the list could not be read.
 function FilePicker({ value, options, onChange, label }: { value: string; options: string[]; onChange: (value: string) => void; label: string }) {
-  if (!options.length) return <input className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} />;
+  const t = useT();
+  if (!options.length) return <input className="file-name" aria-label={t(label)} value={value} onChange={(event) => onChange(event.target.value)} />;
   return (
-    <select className="file-name" aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>
+    <select className="file-name" aria-label={t(label)} value={value} onChange={(event) => onChange(event.target.value)}>
       {(options.includes(value) ? options : [value, ...options]).map((name) => <option key={name} value={name}>{name}</option>)}
     </select>
   );
@@ -169,6 +172,7 @@ function jobLine(run: Run, job: PublicJob | null) {
 
 // A plain-text report for a GitHub issue or Discord: nothing about the uploads, prompts or saved settings.
 function CopyDetails({ lines }: { lines: string[] }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
@@ -192,16 +196,17 @@ function CopyDetails({ lines }: { lines: string[] }) {
   }
 
   return (<>
-    <button className="secondary" onClick={copy}>{copied ? "Copied" : "Copy error details"}</button>
-    {manual && <textarea ref={box} className="report" readOnly rows={manual.split("\n").length} value={manual} aria-label="Error details" onFocus={(event) => event.currentTarget.select()} />}
+    <button className="secondary" onClick={copy}>{copied ? t("Copied") : t("Copy error details")}</button>
+    {manual && <textarea ref={box} className="report" readOnly rows={manual.split("\n").length} value={manual} aria-label={t("Error details")} onFocus={(event) => event.currentTarget.select()} />}
   </>);
 }
 
 function MarginPicker({ value, onChange }: { value: Margin; onChange: (margin: Margin) => void }) {
+  const t = useT();
   return (
     <div className="segmented">
       {(Object.keys(MARGINS) as Margin[]).map((m) => (
-        <button key={m} className={m === value ? "on" : ""} onClick={() => onChange(m)}>{m[0].toUpperCase() + m.slice(1)}</button>
+        <button key={m} className={m === value ? "on" : ""} onClick={() => onChange(m)}>{t(m[0].toUpperCase() + m.slice(1))}</button>
       ))}
     </div>
   );
@@ -226,6 +231,8 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 }
 
 export function Openjutsu() {
+  const t = useT();
+  const locale = useLocale();
   const [mode, setMode] = useState<Mode>("simple");
   const [video, setVideo] = useState<{ file: File; url: string; duration: number; width: number; height: number } | null>(null);
   const [part, setPart] = useState<Section>({ start: 0, length: 0 });
@@ -695,7 +702,7 @@ export function Openjutsu() {
     setPost(next);
   }
 
-  if (!restored) return <main className="shell"><p className="hint" role="status">Loading Openjutsu…</p></main>;
+  if (!restored) return <main className="shell"><p className="hint" role="status">{t("Loading Openjutsu…")}</p></main>;
   if (welcome && !run) return <Welcome value={describer} options={files.textEncoders} onChange={setDescriber}
     loading={modelsLoading} error={modelsError} onRefresh={refreshModels} onContinue={finishWelcome} />;
 
@@ -706,63 +713,63 @@ export function Openjutsu() {
           <span className="mark" aria-hidden>忍</span>
           <div>
             <h1>Openjutsu</h1>
-            <p>Swap the people or things in any video. Open weights, on your own GPU.</p>
+            <p>{t("Swap the people or things in any video. Open weights, on your own GPU.")}</p>
           </div>
         </div>
-        <button className="secondary" disabled={!!run || submitting} onClick={() => setWelcome(true)}>Welcome &amp; models</button>
+        <div className="row"><LanguageSwitch /><button className="secondary" disabled={!!run || submitting} onClick={() => setWelcome(true)}>{t("Welcome & models")}</button></div>
       </header>
 
-      <nav className="modes" aria-label="Mode">
+      <nav className="modes" aria-label={t("Mode")}>
         {MODES.map((m) => (
           <button
             key={m.id} className={`mode ${m.id === mode ? "active" : ""}`} disabled={!m.ready || !!run} aria-pressed={m.id === mode}
             onClick={() => setMode(m.id)}
           >
-            <strong>{m.title}</strong>
-            <span>{m.text}</span>
-            {!m.ready && <em>Coming soon</em>}
+            <strong>{t(m.title)}</strong>
+            <span>{t(m.text)}</span>
+            {!m.ready && <em>{t("Coming soon")}</em>}
           </button>
         ))}
       </nav>
 
-      {mode === "object" && !run && <nav className="segmented" aria-label="Object swap tools">
+      {mode === "object" && !run && <nav className="segmented" aria-label={t("Object swap tools")}>
         {EDITS.map((e) => <button key={e.id} className={e.id === editMode ? "on" : ""} aria-pressed={e.id === editMode} onClick={() => {
           if (e.id !== editMode) { setEditTarget(e.target); setChangeTo(""); setAction(""); }
           setEditMode(e.id);
-        }}>{e.label}</button>)}
+        }}>{t(e.label)}</button>)}
       </nav>}
 
       {formError && <div className="row">
-        <p className="error" role="alert">{formError}</p>
-        <CopyDetails lines={[tab, run ? jobLine(run, job) : "", `Error: ${formError}`]} />
+        <p className="error" role="alert">{t(formError)}</p>
+        <CopyDetails lines={[tab, run ? jobLine(run, job) : "", `Error: ${t(formError)}`]} />
       </div>}
-      {checkingSetup && <p className="hint" role="status">Checking required nodes and models…</p>}
+      {checkingSetup && <p className="hint" role="status">{t("Checking required nodes and models…")}</p>}
       {setup && !setup.ok && (
         <section className="panel setup" role="alert">
-          <h2>Setup needs attention</h2>
-          {setup.error && <p className="error">{setup.error}</p>}
+          <h2>{t("Setup needs attention")}</h2>
+          {setup.error && <p className="error">{t(setup.error)}</p>}
           {setup.packs.length > 0 && <>
-            <p className="hint">Install or update each custom node pack in the <code>custom_nodes</code> folder of the ComfyUI installation Openjutsu connects to, with one subfolder per pack (for example, <code>ComfyUI/custom_nodes/ComfyUI-KJNodes</code>).</p>
-            <p className="hint">Use ComfyUI Manager or follow the links below for installation and Python dependency instructions. If ComfyUI itself is listed, update ComfyUI. Then restart ComfyUI and try again.</p>
+            <p className="hint">{t("Install or update each custom node pack in the")}{" "}<code>custom_nodes</code>{" "}{t("folder of the ComfyUI installation Openjutsu connects to, with one subfolder per pack (for example,")}{" "}<code>ComfyUI/custom_nodes/ComfyUI-KJNodes</code>).</p>
+            <p className="hint">{t("Use ComfyUI Manager or follow the links below for installation and Python dependency instructions. If ComfyUI itself is listed, update ComfyUI. Then restart ComfyUI and try again.")}</p>
             <ul>{setup.packs.map((pack) => <li key={pack.url}>
               <a href={pack.url} target="_blank" rel="noopener noreferrer">{pack.name} ↗</a>
-              {pack.nodes.length > 0 && <small>Missing nodes: {pack.nodes.join(", ")}</small>}
+              {pack.nodes.length > 0 && <small>{t("Missing nodes:")}{" "}{pack.nodes.join(", ")}</small>}
             </li>)}</ul>
           </>}
           {setup.models.length > 0 && <>
-            <p className="hint">Add these models to ComfyUI, or choose an installed base model or LoRA, then try again.</p>
+            <p className="hint">{t("Add these models to ComfyUI, or choose an installed base model or LoRA, then try again.")}</p>
             <ul>{setup.models.map((item) => <li key={`${item.folder}/${item.name}`}>
-              <code>{item.name}</code><small>ComfyUI/models/{item.folder}</small>
+              <code>{item.name}</code><small>{t("ComfyUI/models/")}{item.folder}</small>
             </li>)}</ul>
           </>}
-          <CopyDetails lines={[tab, "Setup check failed", setup.error ? `Error: ${setup.error}` : "",
+          <CopyDetails lines={[tab, "Setup check failed", setup.error ? `Error: ${t(setup.error)}` : "",
             ...setup.packs.map((pack) => `Missing pack: ${pack.name} ${pack.url}${pack.nodes.length ? ` (nodes: ${pack.nodes.join(", ")})` : ""}`),
             ...setup.models.map((item) => `Missing model: ComfyUI/models/${item.folder}/${item.name}`)]} />
         </section>
       )}
       {run ? (
         <RunView
-          run={run} job={job} progress={progress} preview={preview} streamError={streamError} now={now}
+          run={run} job={job} progress={progress} preview={preview} streamError={t(streamError)} now={now}
           before={video && same ? { url: video.url, start: whole ? 0 : part.start } : null}
           onCancel={cancel} onReset={reset} onFix={fixResult} onGenerate={!video || !same || submitting ? null : mode === "simple" && character ? () => submit("simple") : run.kind === "fit" && ready ? () => submit("object") : null}
           onUseBox={video && same ? (box) => { setPlacement([{ frame: Math.round((whole ? 0 : part.start) * 24), ...box }]); reset(); } : null}
@@ -775,7 +782,7 @@ export function Openjutsu() {
         <>
           <section className="inputs">
             <div className="panel">
-              <h2><span>1</span> Source video</h2>
+              <h2><span>1</span>{" "}{t("Source video")}</h2>
               {video ? (
                 <div className="video-pick">
                   <video
@@ -783,25 +790,25 @@ export function Openjutsu() {
                     onTimeUpdate={(event) => { if (!whole && event.currentTarget.currentTime >= part.start + part.length) event.currentTarget.currentTime = part.start; }}
                   />
                   <div className="row">
-                    <small>{video.file.name}{video.duration ? ` · ${video.duration.toFixed(1)} s` : ""}</small>
-                    <DropZone accept="video/*,.mkv" onFiles={chooseVideo} className="link">Replace</DropZone>
+                    <small>{video.file.name}{video.duration ? t(" · {seconds} s", { seconds: video.duration.toFixed(1) }) : ""}</small>
+                    <DropZone accept="video/*,.mkv" onFiles={chooseVideo} className="link">{t("Replace")}</DropZone>
                   </div>
                   {video.duration > MIN_SECTION_SECONDS && (
                     <>
                       <div className="setting">
-                        <span>Part to use <small>{timecode(part.start)}–{timecode(part.start + part.length)} ({part.length.toFixed(1)} s). Only this part is swapped.</small></span>
+                        <span>{t("Part to use")}{" "}<small>{timecode(part.start)}–{timecode(part.start + part.length)} ({part.length.toFixed(1)}{" "}{t("s). Only this part is swapped.")}</small></span>
                         <div className="segmented">
                           {PLACES.map((p) => (
-                            <button key={p} className={p === place ? "on" : ""} onClick={() => p === "Whole" ? choosePart(0, video.duration) : choosePart(placeStart(p, video.duration, part.length), part.length)}>{p}</button>
+                            <button key={p} className={p === place ? "on" : ""} onClick={() => p === "Whole" ? choosePart(0, video.duration) : choosePart(placeStart(p, video.duration, part.length), part.length)}>{t(p)}</button>
                           ))}
                         </div>
                       </div>
                       <label className="setting">
-                        <span>Length <small>{part.length.toFixed(1)} s</small></span>
+                        <span>{t("Length")}{" "}<small>{part.length.toFixed(1)} s</small></span>
                         <input type="range" min={MIN_SECTION_SECONDS} max={video.duration} step={0.5} value={part.length} onChange={(event) => choosePart(part.start, Number(event.target.value))} />
                       </label>
                       <label className="setting">
-                        <span>Starts at <small>{timecode(part.start)}</small></span>
+                        <span>{t("Starts at")}{" "}<small>{timecode(part.start)}</small></span>
                         <input type="range" min={0} max={video.duration - part.length} step={0.1} value={part.start} disabled={whole} onChange={(event) => choosePart(Number(event.target.value), part.length)} />
                       </label>
                     </>
@@ -809,91 +816,86 @@ export function Openjutsu() {
                 </div>
               ) : (
                 <DropZone accept="video/*,.mkv" onFiles={chooseVideo} className="big">
-                  <strong>Drop a video</strong>
-                  <span>or click to browse. Its camera, cuts, motion and soundtrack are kept.</span>
+                  <strong>{t("Drop a video")}</strong>
+                  <span>{t("or click to browse. Its camera, cuts, motion and soundtrack are kept.")}</span>
                 </DropZone>
               )}
             </div>
 
             <div className="panel">
-              <h2><span>2</span> {mode === "object" ? "What to change" : colorFix ? "Colour fix" : faceFix ? "Whose face" : mode === "simple" ? "Character" : "Characters"}</h2>
+              <h2><span>2</span> {mode === "object" ? t("What to change") : colorFix ? t("Colour fix") : faceFix ? t("Whose face") : mode === "simple" ? t("Character") : t("Characters")}</h2>
               {mode === "post" && (
                 <div className="segmented">
                   {POSTS.map((p) => (
-                    <button key={p.id} className={p.id === post ? "on" : ""} onClick={() => setPost(p.id)}>{p.label}</button>
+                    <button key={p.id} className={p.id === post ? "on" : ""} onClick={() => setPost(p.id)}>{t(p.label)}</button>
                   ))}
                 </div>
               )}
               {mode === "advanced" && (<>
                 <div className="segmented">
-                  <button className={montage ? "" : "on"} onClick={() => setMontage(false)}>Standard</button>
-                  <button className={montage ? "on" : ""} onClick={() => setMontage(true)}>Montage</button>
+                  <button className={montage ? "" : "on"} onClick={() => setMontage(false)}>{t("Standard")}</button>
+                  <button className={montage ? "on" : ""} onClick={() => setMontage(true)}>{t("Montage")}</button>
                 </div>
                 {montage && (
-                  <p className="hint">
-                    For edited clips where different people take turns within one shot, with no hard cut between them: whip pans,
-                    selfie handovers, travel and &ldquo;vibe&rdquo; montages. Generate tracks everyone over the whole video, matches them to the
-                    photos and makes the video in one go. To check who becomes which photo first, use Find people. Give every photo a role with a look after
-                    &ldquo; - &rdquo; (&ldquo;the dancer - white polo, jeans&rdquo;) so the people can be told apart. Use Standard for everything else.
-                  </p>
+                  <p className="hint">{t("For edited clips where different people take turns within one shot, with no hard cut between them: whip pans, selfie handovers, travel and “vibe” montages. Generate tracks everyone over the whole video, matches them to the photos and makes the video in one go. To check who becomes which photo first, use Find people. Give every photo a role with a look after “ - ” (“the dancer - white polo, jeans”) so the people can be told apart. Use Standard for everything else.")}</p>
                 )}
               </>)}
               {colorFix ? (<>
                 <label className="setting toggle">
-                  <span>Detail contrast <small>Softens H3&apos;s crunchy fine detail and over-sharpened skin, without blurring edges.</small></span>
+                  <span>{t("Detail contrast")}{" "}<small>{t("Softens H3's crunchy fine detail and over-sharpened skin, without blurring edges.")}</small></span>
                   <input type="checkbox" checked={detailOn} onChange={(event) => setDetailOn(event.target.checked)} />
                   <i aria-hidden />
                 </label>
                 {detailOn && <label className="setting">
-                  <span>Amount <small>{detail.toFixed(2)}: below 0 softens, above 0 sharpens.</small></span>
+                  <span>{t("Amount")}{" "}<small>{detail.toFixed(2)}{t(": below 0 softens, above 0 sharpens.")}</small></span>
                   <input type="range" min={DETAIL.min} max={DETAIL.max} step={0.01} value={detail} onChange={(event) => setDetail(Number(event.target.value))} />
                 </label>}
                 <label className="setting toggle">
-                  <span>Tone mapper <small>Orion4D DCTL Tone Mapper, a colour grade over every frame. {DEFAULT_PRESET} softens contrast and highlights and keeps the blacks deep.</small></span>
+                  <span>{t("Tone mapper")}{" "}<small>{t("Orion4D DCTL Tone Mapper, a colour grade over every frame.")}{" "}{DEFAULT_PRESET}{" "}{t("softens contrast and highlights and keeps the blacks deep.")}</small></span>
                   <input type="checkbox" checked={toneOn} onChange={(event) => setToneOn(event.target.checked)} />
                   <i aria-hidden />
                 </label>
                 {toneOn && <div className="setting">
-                  <span>Preset <small>Orion&apos;s saved presets. Change the values under Settings to make your own.</small></span>
-                  <select className="file-name" aria-label="Tone mapper preset" value={tonePreset} onChange={(event) => choosePreset(event.target.value)}>
-                    {!tonePreset && <option value="">Custom</option>}
+                  <span>{t("Preset")}{" "}<small>{t("Orion's saved presets. Change the values under Settings to make your own.")}</small></span>
+                  <select className="file-name" aria-label={t("Tone mapper preset")} value={tonePreset} onChange={(event) => choosePreset(event.target.value)}>
+                    {!tonePreset && <option value="">{t("Custom")}</option>}
                     {presetOptions.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
                   </select>
                 </div>}
-                <p className="hint">No H3 run: the video is only filtered, so it keeps its frames and soundtrack. The detail contrast runs first, then the tone mapper.</p>
+                <p className="hint">{t("No H3 run: the video is only filtered, so it keeps its frames and soundtrack. The detail contrast runs first, then the tone mapper.")}</p>
               </>) : mode === "object" ? (
                 <div className="edit">
                   <label>
-                    <span>{edit.what} <small>{editMode === "add" ? "Describe the placement, for example on the table in front of the person." : "What SAM tracks, in English."}{(editMode === "change" || editMode === "remove") && " Separate several with commas."}</small></span>
+                    <span>{t(edit.what)} <small>{editMode === "add" ? t("Describe the placement, for example on the table in front of the person.") : t("What SAM tracks, in English.")}{editMode === "change" || editMode === "remove" && t(" Separate several with commas.")}</small></span>
                     <input value={editTarget} maxLength={100} placeholder={edit.target} onChange={(event) => setEditTarget(event.target.value)} />
                   </label>
                   <label>
-                    <span>{edit.toHint}</span>
-                    <input value={changeTo} maxLength={300} placeholder={`e.g. ${edit.to}`} onChange={(event) => setChangeTo(event.target.value)} />
+                    <span>{t(edit.toHint)}</span>
+                    <input value={changeTo} maxLength={300} placeholder={t("e.g. {description}", { description: edit.to })} onChange={(event) => setChangeTo(event.target.value)} />
                   </label>
                   {editMode === "add" && <label>
-                    <span>What happens with it <small>Optional. Leave empty for a still object.</small></span>
-                    <input value={action} maxLength={300} placeholder="e.g. she dances the same routine in sync with the others" onChange={(event) => setAction(event.target.value)} />
+                    <span>{t("What happens with it")}{" "}<small>{t("Optional. Leave empty for a still object.")}</small></span>
+                    <input value={action} maxLength={300} placeholder={t("e.g. she dances the same routine in sync with the others")} onChange={(event) => setAction(event.target.value)} />
                   </label>}
                   {editMode !== "remove" && (look ? (
                     <div className="character look">
-                      <img src={look.url} alt="Reference picture" />
-                      <button className="remove" onClick={() => { URL.revokeObjectURL(look.url); setLook(null); }} aria-label="Remove picture">×</button>
+                      <img src={look.url} alt={t("Reference picture")} />
+                      <button className="remove" onClick={() => { URL.revokeObjectURL(look.url); setLook(null); }} aria-label={t("Remove picture")}>×</button>
                     </div>
                   ) : (
                     <DropZone accept="image/*" onFiles={chooseLook} className="add">
                       <strong>+</strong>
-                      <span>{editMode === "add" ? "Picture of the object (optional)" : editMode === "background" ? "Picture of the place (optional)" : "Picture of the new look (optional)"}</span>
+                      <span>{editMode === "add" ? t("Picture of the object (optional)") : editMode === "background" ? t("Picture of the place (optional)") : t("Picture of the new look (optional)")}</span>
                     </DropZone>
                   ))}
                   <p className="hint">
-                    {editMode === "change" && "Only what SAM tracks is regenerated: hair, a top, a car. A picture of an outfit, hairstyle or product is copied onto it."}
-                    {editMode === "add" && "A new object is generated inside your placement area while the scene continues. Keep the supporting surface visible and describe where the object rests."}
-                    {editMode === "remove" && "What SAM tracks is erased and filled with what is around it. The camera, people and sound stay."}
-                    {editMode === "background" && "Everything except what SAM tracks becomes the new place; the camera movement stays."}
+                    {editMode === "change" && t("Only what SAM tracks is regenerated: hair, a top, a car. A picture of an outfit, hairstyle or product is copied onto it.")}
+                    {editMode === "add" && t("A new object is generated inside your placement area while the scene continues. Keep the supporting surface visible and describe where the object rests.")}
+                    {editMode === "remove" && t("What SAM tracks is erased and filled with what is around it. The camera, people and sound stay.")}
+                    {editMode === "background" && t("Everything except what SAM tracks becomes the new place; the camera movement stays.")}
                   </p>
                   {editMode === "change" && video && canvas && <details>
-                    <summary>Paint edit area (optional)</summary>
+                    <summary>{t("Paint edit area (optional)")}</summary>
                     <ObjectPlacement key={`${video.url}:${resolutionField}:paint`} src={video.url}
                       start={whole ? 0 : part.start} end={whole ? video.duration : part.start + part.length}
                       width={canvas[0]} height={canvas[1]} mode="paint" points={paint} onChange={setPaint} />
@@ -905,14 +907,14 @@ export function Openjutsu() {
               <div className="characters">
                 {shown.map((c, i) => (
                   <div className="character" key={c.url}>
-                    <img src={c.url} alt={`Character ${i + 1}`} />
-                    <button className="remove" onClick={() => removeCharacter(i)} aria-label={`Remove character ${i + 1}`}>×</button>
+                    <img src={c.url} alt={t("Character {index}", { index: i + 1 })} />
+                    <button className="remove" onClick={() => removeCharacter(i)} aria-label={t("Remove character {index}", { index: i + 1 })}>×</button>
                     {mode !== "post" && <label>
-                      <span>Who do they replace? (optional)</span>
+                      <span>{t("Who do they replace? (optional)")}</span>
                       <input
                         value={c.role}
                         maxLength={200}
-                        placeholder={i === 0 ? "e.g. the singer - red dress" : "e.g. the drummer - black cap"}
+                        placeholder={i === 0 ? t("e.g. the singer - red dress") : t("e.g. the drummer - black cap")}
                         onChange={(event) => setRole(i, event.target.value)}
                       />
                     </label>}
@@ -921,33 +923,22 @@ export function Openjutsu() {
                 {shown.length < limit && (
                   <DropZone accept="image/*" onFiles={addCharacters} multiple={mode === "advanced"} className="add">
                     <strong>+</strong>
-                    <span>Drop a photo</span>
+                    <span>{t("Drop a photo")}</span>
                   </DropZone>
                 )}
               </div>
               {faceFix ? (<>
                 <div className="segmented">
                   {(Object.keys(FACE_STYLE_TEXT) as FaceStyle[]).map((f) => (
-                    <button key={f} className={f === faceStyle ? "on" : ""} onClick={() => setFaceStyle(f)}>{FACE_STYLE_TEXT[f].label}</button>
+                    <button key={f} className={f === faceStyle ? "on" : ""} onClick={() => setFaceStyle(f)}>{t(FACE_STYLE_TEXT[f].label)}</button>
                   ))}
                 </div>
                 <p className="hint">
-                  {FACE_STYLE_TEXT[faceStyle].hint} Use the photo the video was made with. Only that person&apos;s face changes; faces
-                  taller than a fifth of the frame are already sharp and are left alone.
-                </p>
+                  {t(FACE_STYLE_TEXT[faceStyle].hint)}{" "}{t("Use the photo the video was made with. Only that person's face changes; faces taller than a fifth of the frame are already sharp and are left alone.")}</p>
               </>) : mode === "simple" ? (
-                <p className="hint">
-                  The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays.
-                  Mirrors and reflections do not work yet.
-                  To name them for the prompt, use a role (&ldquo;the singer&rdquo;), not clothes; their look can go after &ldquo; - &rdquo; (&ldquo;the singer - red dress&rdquo;).
-                </p>
+                <p className="hint">{t("The character replaces the main person in the video, the one who fills the most of the frame. Everyone else stays. Mirrors and reflections do not work yet. To name them for the prompt, use a role (“the singer”), not clothes; their look can go after “ - ” (“the singer - red dress”).")}</p>
               ) : (
-                <p className="hint">
-                  Up to {MAX_CHARACTERS} characters. In every clip each tracked person is matched to a role; people without a
-                  character (extras, passers-by) stay as they are. Mirrors and reflections do not work yet. Name roles (&ldquo;the drummer&rdquo;), not clothes, and add how they look
-                  after &ldquo; - &rdquo; to help the matching (&ldquo;the drummer - man in a cap&rdquo;). Blank roles go to the people with the
-                  most screen time.
-                </p>
+                <p className="hint">{t("Up to")}{" "}{MAX_CHARACTERS}{" "}{t("characters. In every clip each tracked person is matched to a role; people without a character (extras, passers-by) stay as they are. Mirrors and reflections do not work yet. Name roles (“the drummer”), not clothes, and add how they look after “ - ” to help the matching (“the drummer - man in a cap”). Blank roles go to the people with the most screen time.")}</p>
               )}
               </>)}
             </div>
@@ -955,36 +946,36 @@ export function Openjutsu() {
 
           {colorFix ? toneOn && (
             <section className="panel settings">
-              <h2><span>3</span> Settings <small>{tonePreset || "Custom"}</small></h2>
+              <h2><span>3</span>{" "}{t("Settings")}{" "}<small>{tonePreset || t("Custom")}</small></h2>
               <div className="setting">
-                <span>Tone mapper mode</span>
+                <span>{t("Tone mapper mode")}</span>
                 <div className="segmented">
                   {TONE_MODES.map((m) => (
-                    <button key={m} className={m === tone.mode ? "on" : ""} onClick={() => { setTone({ ...tone, mode: m }); setTonePreset(""); }}>{m}</button>
+                    <button key={m} className={m === tone.mode ? "on" : ""} onClick={() => { setTone({ ...tone, mode: m }); setTonePreset(""); }}>{t(m)}</button>
                   ))}
                 </div>
               </div>
               {(Object.keys(TONE_RANGES) as ToneValue[]).map((key) => (
                 <label className="setting" key={key}>
-                  <span>{TONE_RANGES[key].label} <small>{tone[key].toFixed(2)}</small></span>
+                  <span>{t(TONE_RANGES[key].label)} <small>{tone[key].toFixed(2)}</small></span>
                   <input
                     type="range" min={TONE_RANGES[key].min} max={TONE_RANGES[key].max} step={TONE_RANGES[key].step} value={tone[key]}
                     onChange={(event) => { setTone({ ...tone, [key]: Number(event.target.value) }); setTonePreset(""); }}
                   />
                 </label>
               ))}
-              <p className="hint">Strength mixes the grade with the original: 0.2 is 20% of it. Pick the preset again to undo your changes.</p>
+              <p className="hint">{t("Strength mixes the grade with the original: 0.2 is 20% of it. Pick the preset again to undo your changes.")}</p>
             </section>
           ) : (
           <section className="panel settings">
-            <h2><span>3</span> Settings</h2>
+            <h2><span>3</span>{" "}{t("Settings")}</h2>
             {mode !== "post" && <div className="setting">
-              <span>Resolution <small>{typeof resolution === "object" ? "Width × height. The video is scaled and centre-cropped to this shape." : `${canvas ? `${canvas[0]} × ${canvas[1]} for this video` : "Short edge of the video"}. The shape follows the source.`}</small></span>
+              <span>{t("Resolution")}{" "}<small>{typeof resolution === "object" ? t("Width × height. The video is scaled and centre-cropped to this shape.") : t("{dimensions}. The shape follows the source.", { dimensions: canvas ? t("{width} × {height} for this video", { width: canvas[0], height: canvas[1] }) : t("Short edge of the video") })}</small></span>
               <div className="segmented">
                 {RESOLUTIONS.map((r) => (
                   <button key={r} className={r === resolution ? "on" : ""} onClick={() => setResolution(r)}>{r}</button>
                 ))}
-                <button className={typeof resolution === "object" ? "on" : ""} onClick={() => setResolution(customSize)}>Custom</button>
+                <button className={typeof resolution === "object" ? "on" : ""} onClick={() => setResolution(customSize)}>{t("Custom")}</button>
               </div>
               {typeof resolution === "object" && (
                 <div className="custom-size">
@@ -992,7 +983,7 @@ export function Openjutsu() {
                     <label key={side}>
                       {side === "height" && "×"}
                       <input
-                        className="steps-input" type="number" aria-label={`Custom ${side} in pixels`} min={CUSTOM_SIZE.min} max={CUSTOM_SIZE.max} step={CUSTOM_SIZE.step}
+                        className="steps-input" type="number" aria-label={t("Custom {side} in pixels", { side: t(side) })} min={CUSTOM_SIZE.min} max={CUSTOM_SIZE.max} step={CUSTOM_SIZE.step}
                         defaultValue={resolution[side]} onBlur={(event) => { event.target.value = String(chooseSize(side, Number(event.target.value))); }}
                         onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
                       />
@@ -1003,69 +994,69 @@ export function Openjutsu() {
             </div>}
             {mode === "object" && (editMode === "change" || editMode === "remove") && (
               <label className="setting toggle">
-                <span>Only the biggest one <small>Off: every match SAM finds changes (everyone&apos;s hair). On: only the one that fills the most of the frame.</small></span>
+                <span>{t("Only the biggest one")}{" "}<small>{t("Off: every match SAM finds changes (everyone's hair). On: only the one that fills the most of the frame.")}</small></span>
                 <input type="checkbox" checked={biggestOnly} onChange={(event) => setBiggestOnly(event.target.checked)} />
                 <i aria-hidden />
               </label>
             )}
             {mode === "object" && editMode === "change" && (
               <label className="setting toggle">
-                <span>Keep original outline <small>On: the face, hands and arms around it stay exact, but the new look keeps the old shape (sleeves, length). Off: the shape can change (long hair to a bob, pants to a skirt), but edges near the face and hands may be lost.</small></span>
+                <span>{t("Keep original outline")}{" "}<small>{t("On: the face, hands and arms around it stay exact, but the new look keeps the old shape (sleeves, length). Off: the shape can change (long hair to a bob, pants to a skirt), but edges near the face and hands may be lost.")}</small></span>
                 <input type="checkbox" checked={keepOutline} onChange={(event) => setKeepOutline(event.target.checked)} />
                 <i aria-hidden />
               </label>
             )}
             {mode === "simple" && (
               <div className="setting">
-                <span>What to replace <small>What SAM tracks, in English: person, cat, dog, or a short description such as “black and white cat”. The biggest match is replaced.</small></span>
-                <input className="target-input" aria-label="What to replace" placeholder={DEFAULT_TARGET} value={target} onChange={(event) => setTarget(event.target.value)} />
+                <span>{t("What to replace")}{" "}<small>{t("What SAM tracks, in English: person, cat, dog, or a short description such as “black and white cat”. The biggest match is replaced.")}</small></span>
+                <input className="target-input" aria-label={t("What to replace")} placeholder={DEFAULT_TARGET} value={target} onChange={(event) => setTarget(event.target.value)} />
               </div>
             )}
             {(mode === "simple" || mode === "advanced") && <label className="setting toggle">
-              <span>Hat fix <small>Also replaces hats{mode === "advanced" ? " worn by the people being replaced" : ""} (about 45 s more per clip).</small></span>
+              <span>{t("Hat fix")}{" "}<small>{t("Also replaces hats")}{mode === "advanced" ? t(" worn by the people being replaced") : ""}{" "}{t("(about 45 s more per clip).")}</small></span>
               <input type="checkbox" checked={hatFix} onChange={(event) => setHatFix(event.target.checked)} />
               <i aria-hidden />
             </label>}
             {(mode === "simple" || mode === "advanced") && <label className="setting toggle">
-              <span>No lip-sync <small>For songs the people in the video do not sing or talk along to, so the new {mode === "advanced" ? "people" : "person"} do{mode === "advanced" ? "" : "es"} not lip-sync them (about 30 s more per clip).</small></span>
+              <span>{t("No lip-sync")}{" "}<small>{t("For background songs, keep the source expressions without lip-sync (about 30 s more per clip).")}</small></span>
               <input type="checkbox" checked={noLipSync} onChange={(event) => setNoLipSync(event.target.checked)} />
               <i aria-hidden />
             </label>}
             {mode === "advanced" && !montage && (
               <label className="setting toggle">
-                <span>One pass per person <small>Each character gets their own H3 pass with only their photo, so about twice the generation time.{shown.length === 2 ? "" : " Needs exactly two characters."}</small></span>
+                <span>{t("One pass per person")}{" "}<small>{t("Each character gets their own H3 pass with only their photo, so about twice the generation time.")}{shown.length === 2 ? "" : t(" Needs exactly two characters.")}</small></span>
                 <input type="checkbox" checked={onePassEach} disabled={shown.length !== 2} onChange={(event) => setMaxQuality(event.target.checked)} />
                 <i aria-hidden />
               </label>
             )}
             {mode !== "post" && <div className="setting">
-              <span>Mask margin <small>{mode === "object"
-                ? editMode === "background" ? "How far the new place reaches into the edge of what stays." : "Room around it for a bigger new shape and its shadow."
-                : <>Room around the person for a differently built character.{mode === "simple" ? " Check mask shows it." : ""}</>}</small></span>
+              <span>{t("Mask margin")}{" "}<small>{mode === "object"
+                ? editMode === "background" ? t("How far the new place reaches into the edge of what stays.") : t("Room around it for a bigger new shape and its shadow.")
+                : <>{t("Room around the person for a differently built character.")}{mode === "simple" ? t(" Check mask shows it.") : ""}</>}</small></span>
               <MarginPicker value={margin} onChange={setMargin} />
             </div>}
             <details>
-              <summary>Advanced</summary>
+              <summary>{t("Advanced")}</summary>
               <div className="setting">
-                <span>Seed <small>Change it for a new take.</small></span>
+                <span>{t("Seed")}{" "}<small>{t("Change it for a new take.")}</small></span>
                 <div className="seed">
                   <input type="number" min={0} max={MAX_SEED} value={seed} onChange={(event) => setSeed(Math.min(MAX_SEED, Math.max(0, Math.floor(Number(event.target.value) || 0))))} />
-                  <button onClick={() => setSeed(Math.floor(Math.random() * MAX_SEED))} aria-label="Random seed">🎲</button>
+                  <button onClick={() => setSeed(Math.floor(Math.random() * MAX_SEED))} aria-label={t("Random seed")}>🎲</button>
                 </div>
               </div>
               {faceFix ? (
                 <div className="setting">
-                  <span>Chunk length <small>{chunkSeconds.toFixed(1)} s of face per H3 generation; chunks overlap by 1 s and are crossfaded.</small></span>
+                  <span>{t("Chunk length")}{" "}<small>{chunkSeconds.toFixed(1)}{" "}{t("s of face per H3 generation; chunks overlap by 1 s and are crossfaded.")}</small></span>
                   <input type="range" min={CHUNK_SECONDS.min} max={CHUNK_SECONDS.max} step={0.5} value={chunkSeconds} onChange={(event) => setChunkSeconds(Number(event.target.value))} />
                 </div>
               ) : (
                 <div className="setting">
-                  <span>Clip length <small>{clipSeconds.toFixed(1)} s per H3 generation</small></span>
+                  <span>{t("Clip length")}{" "}<small>{clipSeconds.toFixed(1)}{" "}{t("s per H3 generation")}</small></span>
                   <input type="range" min={CLIP_SECONDS.min} max={CLIP_SECONDS.max} step={0.5} value={clipSeconds} onChange={(event) => setClipSeconds(Number(event.target.value))} />
                 </div>
               )}
               {mode !== "post" && <div className="setting">
-                <span>Motion reference <small>Size of the grey figures H3 copies the motion from. Bigger follows the source poses a bit more closely; sampling takes about a third longer at 768 px and about 2.4× as long at 1376 px.</small></span>
+                <span>{t("Motion reference")}{" "}<small>{t("Size of the grey figures H3 copies the motion from. Bigger follows the source poses a bit more closely; sampling takes about a third longer at 768 px and about 2.4× as long at 1376 px.")}</small></span>
                 <div className="segmented">
                   {MOTION_SIZES.map((m) => (
                     <button key={m} className={m === motion ? "on" : ""} onClick={() => setMotion(m)}>{m} px</button>
@@ -1073,73 +1064,73 @@ export function Openjutsu() {
                 </div>
               </div>}
               <div className="setting">
-                <span>Steps <small>6 with the DMAD speed LoRA; without a speed LoRA, 20 or more.</small></span>
+                <span>{t("Steps")}{" "}<small>{t("6 with the DMAD speed LoRA; without a speed LoRA, 20 or more.")}</small></span>
                 <input
                   className="steps-input" type="number" min={STEPS.min} max={STEPS.max} value={steps}
                   onChange={(event) => setSteps(Math.min(STEPS.max, Math.max(STEPS.min, Math.floor(Number(event.target.value) || STEPS.min))))}
                 />
               </div>
               <div className="setting">
-                <span>Base model <small>The H3 diffusion model in ComfyUI&apos;s models/diffusion_models.</small></span>
-                <FilePicker label="Base model" value={model} options={files.models} onChange={setModel} />
+                <span>{t("Base model")}{" "}<small>{t("The H3 diffusion model in ComfyUI's models/diffusion_models.")}</small></span>
+                <FilePicker label={t("Base model")} value={model} options={files.models} onChange={setModel} />
               </div>
               <div className="setting">
-                <span>Visual describer <small>Reads pictures and video frames to write prompts. Use a vision-language model in models/text_encoders.</small></span>
-                <FilePicker label="Visual describer" value={describer} options={files.textEncoders} onChange={setDescriber} />
+                <span>{t("Visual describer")}{" "}<small>{t("Reads pictures and video frames to write prompts. Use a vision-language model in models/text_encoders.")}</small></span>
+                <FilePicker label={t("Visual describer")} value={describer} options={files.textEncoders} onChange={setDescriber} />
               </div>
               <div className="setting">
-                <span>H3 text encoder <small>Choose your MiniMax H3 Qwen3-VL 32B quantization from models/text_encoders.</small></span>
-                <FilePicker label="H3 text encoder" value={textEncoder} options={files.textEncoders} onChange={setTextEncoder} />
+                <span>{t("H3 text encoder")}{" "}<small>{t("Choose your MiniMax H3 Qwen3-VL 32B quantization from models/text_encoders.")}</small></span>
+                <FilePicker label={t("H3 text encoder")} value={textEncoder} options={files.textEncoders} onChange={setTextEncoder} />
               </div>
               <div className="setting">
-                <span>Video VAE <small>Choose a MiniMax H3 video VAE from models/vae.</small></span>
-                <FilePicker label="Video VAE" value={videoVae} options={files.vaes} onChange={setVideoVae} />
+                <span>{t("Video VAE")}{" "}<small>{t("Choose a MiniMax H3 video VAE from models/vae.")}</small></span>
+                <FilePicker label={t("Video VAE")} value={videoVae} options={files.vaes} onChange={setVideoVae} />
               </div>
               <div className="setting">
-                <span>Audio VAE <small>Choose a MiniMax H3 audio VAE from models/vae.</small></span>
-                <FilePicker label="Audio VAE" value={audioVae} options={files.vaes} onChange={setAudioVae} />
+                <span>{t("Audio VAE")}{" "}<small>{t("Choose a MiniMax H3 audio VAE from models/vae.")}</small></span>
+                <FilePicker label={t("Audio VAE")} value={audioVae} options={files.vaes} onChange={setAudioVae} />
               </div>
               <label className="setting toggle">
-                <span>Use LoRAs <small>Turn off to use the base model alone. Without a speed LoRA, use 20 or more steps.</small></span>
+                <span>{t("Use LoRAs")}{" "}<small>{t("Turn off to use the base model alone. Without a speed LoRA, use 20 or more steps.")}</small></span>
                 <input type="checkbox" checked={useLoras} onChange={(event) => setUseLoras(event.target.checked)} />
                 <i />
               </label>
               {useLoras && <div className="setting loras">
-                <span>LoRAs <small>Applied in order to the base model.</small></span>
+                <span>LoRAs <small>{t("Applied in order to the base model.")}</small></span>
                 <div className="lora-list">
                   {loras.map((l, i) => (
                     <div className="lora-entry" key={i}>
                       <div className="lora">
-                        <FilePicker label={`LoRA ${i + 1}`} value={l.name} options={files.loras} onChange={(name) => setLoras(loras.map((x, j) => (j === i ? { ...x, name } : x)))} />
+                        <FilePicker label={t("LoRA {index}", { index: i + 1 })} value={l.name} options={files.loras} onChange={(name) => setLoras(loras.map((x, j) => (j === i ? { ...x, name } : x)))} />
                         <input
-                          type="number" aria-label={`LoRA ${i + 1} strength`} min={STRENGTH.min} max={STRENGTH.max} step={0.05} value={l.strength}
+                          type="number" aria-label={t("LoRA {index} strength", { index: i + 1 })} min={STRENGTH.min} max={STRENGTH.max} step={0.05} value={l.strength}
                           onChange={(event) => setLoras(loras.map((x, j) => (j === i ? { ...x, strength: Math.min(STRENGTH.max, Math.max(STRENGTH.min, Number(event.target.value) || 0)) } : x)))}
                         />
-                        <button className="secondary" onClick={() => setLoras(loras.filter((_, j) => j !== i))} aria-label={`Remove LoRA ${i + 1}`}>×</button>
+                        <button className="secondary" onClick={() => setLoras(loras.filter((_, j) => j !== i))} aria-label={t("Remove LoRA {index}", { index: i + 1 })}>×</button>
                       </div>
                       <label className="setting toggle">
-                        <span>{isSpeedLora(l) ? "Use speed LoRA" : "Use this LoRA"}<small>Turn off to skip this LoRA and keep its settings.</small></span>
-                        <input type="checkbox" aria-label={`Use LoRA ${i + 1}`} checked={l.enabled !== false}
+                        <span>{isSpeedLora(l) ? t("Use speed LoRA") : t("Use this LoRA")}<small>{t("Turn off to skip this LoRA and keep its settings.")}</small></span>
+                        <input type="checkbox" aria-label={t("Use LoRA {index}", { index: i + 1 })} checked={l.enabled !== false}
                           onChange={(event) => setLoras(loras.map((x, j) => j === i ? { ...x, enabled: event.target.checked } : x))} />
                         <i />
                       </label>
                       {!isSpeedLora({ ...l, speed: false }) && <label className="setting toggle">
-                        <span>Speed LoRA <small>Mark renamed or other few-step LoRAs here.</small></span>
-                        <input type="checkbox" aria-label={`LoRA ${i + 1} is a speed LoRA`} checked={l.speed === true}
+                        <span>{t("Speed LoRA")}{" "}<small>{t("Mark renamed or other few-step LoRAs here.")}</small></span>
+                        <input type="checkbox" aria-label={t("LoRA {index} is a speed LoRA", { index: i + 1 })} checked={l.speed === true}
                           onChange={(event) => setLoras(loras.map((x, j) => j === i ? { ...x, speed: event.target.checked } : x))} />
                         <i />
                       </label>}
                     </div>
                   ))}
                   {loras.length < MAX_LORAS && (
-                    <button className="secondary" onClick={() => setLoras([...loras, { name: files.loras[0] ?? "", strength: 1 }])}>Add LoRA</button>
+                    <button className="secondary" onClick={() => setLoras([...loras, { name: files.loras[0] ?? "", strength: 1 }])}>{t("Add LoRA")}</button>
                   )}
                 </div>
               </div>}
               <div className="setting">
-                <span>Acceleration <small>{speedLora ? "Turn off the speed LoRA to use Spectrum." : "Spectrum skips some H3 evaluations and can change the result. Requires ComfyUI-Spectrum-MiniMax-H3; use 20 or more steps."}</small></span>
-                <select className="file-name" aria-label="Acceleration" value={selectedAcceleration} disabled={speedLora} onChange={(event) => setAcceleration(event.target.value as Acceleration)}>
-                  <option value="none">Off</option>
+                <span>{t("Acceleration")}{" "}<small>{speedLora ? t("Turn off the speed LoRA to use Spectrum.") : t("Spectrum skips some H3 evaluations and can change the result. Requires ComfyUI-Spectrum-MiniMax-H3; use 20 or more steps.")}</small></span>
+                <select className="file-name" aria-label={t("Acceleration")} value={selectedAcceleration} disabled={speedLora} onChange={(event) => setAcceleration(event.target.value as Acceleration)}>
+                  <option value="none">{t("Off")}</option>
                   <option value="spectrum">Spectrum</option>
                 </select>
               </div>
@@ -1149,40 +1140,47 @@ export function Openjutsu() {
 
           <div className="go">
             <div className="row">
-              {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>Check mask</button>}
-              {mode === "object" && editMode === "add" && <button className="secondary" disabled={!video || !placement.length || submitting} onClick={() => submit("fit")}>Check fit</button>}
+              {mode === "simple" && <button className="secondary" disabled={!video || submitting} onClick={() => submit("mask")}>{t("Check mask")}</button>}
+              {mode === "object" && editMode === "add" && <button className="secondary" disabled={!video || !placement.length || submitting} onClick={() => submit("fit")}>{t("Check fit")}</button>}
               {mode === "advanced" && montage ? (<>
-                <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>Find people</button>
-                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}</button>
+                <button className="secondary" disabled={!video || !character || submitting} onClick={() => submit("people")}>{t("Find people")}</button>
+                <button className="primary" disabled={!video || !character || submitting} onClick={() => submit("montage")}>{submitting ? checkingSetup ? t("Checking setup…") : t("Uploading…") : t("Generate")}</button>
               </>) : (
                 <button className="primary" disabled={!video || !ready || submitting} onClick={() => submit(generateKind)}>
-                  {submitting ? checkingSetup ? "Checking setup…" : "Uploading…" : "Generate"}
+                  {submitting ? checkingSetup ? t("Checking setup…") : t("Uploading…") : t("Generate")}
                 </button>
               )}
             </div>
             <small>{colorFix
-              ? !video ? "Add a video." : ready ? `${(part.length || video.duration).toFixed(1)} s of video` : "Turn on detail contrast, the tone mapper or both."
+              ? !video ? t("Add a video.") : ready ? t("{seconds} s of video", { seconds: (part.length || video.duration).toFixed(1) }) : t("Turn on detail contrast, the tone mapper or both.")
               : clips && ready
-              ? mode === "advanced" && montage ? `${clips > 1 ? "About " : ""}${clips} clip${clips > 1 ? "s" : ""} or more at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.`
-              : faceFix ? `Up to ${clips} chunk${clips > 1 ? "s" : ""} of face`
-              : `${clips > 1 ? "About " : ""}${clips} clip${clips > 1 ? "s" : ""} at ${canvas ? `${canvas[0]}×${canvas[1]}` : resolution}`
-              : mode === "object" && editMode === "add" && video && !placement.length ? "Draw where the new object should go."
-              : `Add a video and ${mode === "object" ? editMode === "add" ? "describe the object to add" : "say what it becomes" : faceFix ? "the photo of the person" : mode === "simple" ? "a character photo" : "character photos"}.`}</small>
+              ? mode === "advanced" && montage
+                ? t("{estimate}{count} clip{plural} or more at {resolution}; Find people (about 3 minutes per 18 s) lets you check the picks first.", {
+                    estimate: clips > 1 ? t("About ") : "", count: clips, plural: clips > 1 ? "s" : "",
+                    resolution: canvas ? `${canvas[0]}×${canvas[1]}` : String(resolution),
+                  })
+                : faceFix ? t("Up to {count} chunk{plural} of face", { count: clips, plural: clips > 1 ? "s" : "" })
+                : t("{estimate}{count} clip{plural} at {resolution}", {
+                    estimate: clips > 1 ? t("About ") : "", count: clips, plural: clips > 1 ? "s" : "",
+                    resolution: canvas ? `${canvas[0]}×${canvas[1]}` : String(resolution),
+                  })
+              : mode === "object" && editMode === "add" && video && !placement.length ? t("Draw where the new object should go.")
+              : t("Add a video and {required}.", { required: mode === "object" ? editMode === "add" ? t("describe the object to add") : t("say what it becomes") : faceFix ? t("the photo of the person") : mode === "simple" ? t("a character photo") : t("character photos") })}</small>
           </div>
 
           {history.length > 0 && (
             <section className="history">
               <div className="row">
-                <h2>Recent jobs</h2>
-                <button className="link" onClick={() => setHistory([])}>Clear</button>
+                <h2>{t("Recent jobs")}</h2>
+                <button className="link" onClick={() => setHistory([])}>{t("Clear")}</button>
               </div>
               <ul>
                 {history.map((p) => (
                   <li key={p.id}>
                     <button disabled={submitting} onClick={() => reopen(p)}>
-                      <span>{KIND_LABELS[p.kind]}</span>
-                      <small>{new Date(p.startedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
-                      <small className={p.status}>{STATUS_LABELS[p.status ?? ""] ?? "Not finished"}</small>
+                      <span>{t(KIND_LABELS[p.kind])}</span>
+                      <small>{new Date(p.startedAt).toLocaleString(locale, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small>
+                      <small className={p.status}>{t(STATUS_LABELS[p.status ?? ""] ?? "Not finished")}</small>
                       <small className="file">{p.result}</small>
                     </button>
                   </li>
@@ -1204,6 +1202,7 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
   margin: Margin; onMargin: (margin: Margin) => void; onRecheck: (() => void) | null;
   photos: string[]; onMontage: ((tracks: string, labels: Label[]) => void) | null; frames: string; onRetry: (() => void) | null;
 }) {
+  const t = useT();
   const status = job?.status ?? "queued";
   const clips = Math.max(run.clips, progress?.clip ?? 1);
   const people = run.kind === "people";
@@ -1237,9 +1236,9 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
         {before ? <Compare before={before} after={job.video.url} /> : <video src={job.video.url} controls autoPlay playsInline />}
         {run.kind === "montage" && job.data && <KeptNote url={job.data} />}
         <div className="row">
-          <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>Download MP4</a>
-          {POSTS.filter((p) => p.id !== run.kind).map((p) => <button key={p.id} className="secondary" onClick={() => onFix(p.id)}>{p.label}</button>)}
-          <button className="secondary" onClick={onReset}>{run.kind === "object" ? "New edit" : run.kind === "face" || run.kind === "color" ? "Fix another" : "New swap"}</button>
+          <a className="primary" href={`${job.video.url}?download`} download={job.video.name}>{t("Download MP4")}</a>
+          {POSTS.filter((p) => p.id !== run.kind).map((p) => <button key={p.id} className="secondary" onClick={() => onFix(p.id)}>{t(p.label)}</button>)}
+          <button className="secondary" onClick={onReset}>{run.kind === "object" ? t("New edit") : run.kind === "face" || run.kind === "color" ? t("Fix another") : t("New swap")}</button>
         </div>
       </section>
     );
@@ -1248,13 +1247,13 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
   if (TERMINAL.has(status)) {
     return (
       <section className="panel">
-        <h2>{status === "canceled" ? "Canceled" : status === "succeeded" ? "Finished without a video" : status === "expired" ? "Job no longer available" : "Something went wrong"}</h2>
-        {job?.error && <p className="error">{job.error}</p>}
-        {status === "expired" && <p className="hint">ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI&apos;s output/{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : run.kind === "color" ? "openjutsu_color" : "h3_oneclick_swap"} folder.</p>}
+        <h2>{status === "canceled" ? t("Canceled") : status === "succeeded" ? t("Finished without a video") : status === "expired" ? t("Job no longer available") : t("Something went wrong")}</h2>
+        {job?.error && <p className="error">{t(job.error)}</p>}
+        {status === "expired" && <p className="hint">{t("ComfyUI no longer knows this job, for example after a restart. Finished videos are in ComfyUI's output/")}{run.kind === "object" ? "h3_oneclick_edit" : run.kind === "face" ? "openjutsu_face" : run.kind === "color" ? "openjutsu_color" : "h3_oneclick_swap"}{" "}{t("folder.")}</p>}
         <div className="row">
-          {status !== "succeeded" && onRetry && <button className="primary" onClick={onRetry}>Retry</button>}
-          {(status === "failed" || status === "expired") && <CopyDetails lines={[jobLine(run, job), job?.error ? `Error: ${job.error}` : "", streamError && `Stream error: ${streamError}`]} />}
-          <button className="secondary" onClick={onReset}>Back</button>
+          {status !== "succeeded" && onRetry && <button className="primary" onClick={onRetry}>{t("Retry")}</button>}
+          {(status === "failed" || status === "expired") && <CopyDetails lines={[jobLine(run, job), job?.error ? `Error: ${t(job.error)}` : "", streamError && `Stream error: ${t(streamError)}`]} />}
+          <button className="secondary" onClick={onReset}>{t("Back")}</button>
         </div>
       </section>
     );
@@ -1274,25 +1273,23 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
   return (
     <section className="panel progress">
       <div className="row">
-        <h2>{status === "queued" ? `Queued${job?.queuePosition ? ` (#${job.queuePosition})` : ""}` : people ? "Finding people" : run.kind === "fit" ? "Checking the fit" : mask ? "Checking the mask" : color ? "Fixing the colours"
-          : face ? (sampling ? `Chunk ${chunk} of up to ${run.clips}` : chunk ? "Pasting the face back" : "Tracking the face")
-          : progress?.clip ? `Clip ${progress.clip} of ${clips > 1 || run.kind === "montage" ? "about " : ""}${clips}` : "Preparing"}</h2>
+        <h2>{status === "queued" ? t("Queued{position}", { position: job?.queuePosition ? t(" (#{position})", { position: job.queuePosition }) : "" }) : people ? t("Finding people") : run.kind === "fit" ? t("Checking the fit") : mask ? t("Checking the mask") : color ? t("Fixing the colours") : face ? sampling ? t("Chunk {current} of up to {total}", { current: chunk, total: run.clips }) : chunk ? t("Pasting the face back") : t("Tracking the face") : progress?.clip ? t("Clip {current} of {estimate}{total}", { current: progress.clip, estimate: clips > 1 || run.kind === "montage" ? t("about ") : "", total: clips }) : t("Preparing")}</h2>
         <span className="time">{elapsed(now - run.startedAt)}</span>
       </div>
       <div className="bar"><div style={{ width: `${Math.round(fraction * 100)}%` }} /></div>
       <p className="node">
-        {progress ? progress.title : status === "queued" ? "Waiting for ComfyUI…" : "Working…"}
-        {progress?.steps ? ` · step ${progress.step ?? 0}/${progress.steps}` : ""}
+        {progress ? t(progress.title) : status === "queued" ? t("Waiting for ComfyUI…") : t("Working…")}
+        {progress?.steps ? t(" · step {step}/{total}", { step: progress.step ?? 0, total: progress.steps }) : ""}
       </p>
-      {preview && <img className="preview" src={preview} alt="Mask preview: white areas are regenerated" />}
+      {preview && <img className="preview" src={preview} alt={t("Mask preview: white areas are regenerated")} />}
       {streamError && <div className="row">
-        <p className="error">{streamError}</p>
-        <CopyDetails lines={[jobLine(run, job), `Stream error: ${streamError}`]} />
+        <p className="error">{t(streamError)}</p>
+        <CopyDetails lines={[jobLine(run, job), `Stream error: ${t(streamError)}`]} />
       </div>}
-      <p className="hint">{people ? "SAM tracks everyone over the whole video, then Qwen matches each person to a role." : mask ? "SAM tracks the whole video once, about a minute per 3 s of video." : color ? "Every frame goes through the filters, then the video is saved with its soundtrack." : face ? "The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end." : "Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped."} You can close this page and come back.</p>
+      <p className="hint">{people ? t("SAM tracks everyone over the whole video, then Qwen matches each person to a role.") : mask ? t("SAM tracks the whole video once, about a minute per 3 s of video.") : color ? t("Every frame goes through the filters, then the video is saved with its soundtrack.") : face ? t("The face is tracked over the whole video, then each chunk is regenerated; nothing is saved until the end.") : t("Each clip is saved as it finishes, so a rerun with the same inputs resumes where it stopped.")}{" "}{t("You can close this page and come back.")}</p>
       <div className="row">
-        <button className="secondary" onClick={onCancel}>Cancel</button>
-        <button className="secondary" onClick={onReset}>Back</button>
+        <button className="secondary" onClick={onCancel}>{t("Cancel")}</button>
+        <button className="secondary" onClick={onReset}>{t("Back")}</button>
       </div>
     </section>
   );
@@ -1300,6 +1297,7 @@ function RunView({ run, job, progress, preview, streamError, now, before, onCanc
 
 // The result plays with its own controls; the source follows it from the start of the part used, clipped to the left of the divider.
 function Compare({ before, after }: { before: { url: string; start: number }; after: string }) {
+  const t = useT();
   const result = useRef<HTMLVideoElement>(null);
   const source = useRef<HTMLVideoElement>(null);
   const [split, setSplit] = useState(50);
@@ -1342,10 +1340,10 @@ function Compare({ before, after }: { before: { url: string; start: number }; af
         onRateChange={(event) => { if (source.current) source.current.playbackRate = event.currentTarget.playbackRate; }}
       />
       <video ref={source} className="before" src={before.url} muted playsInline preload="auto" aria-hidden onLoadedMetadata={() => follow()} />
-      <span className="compare-label">Before</span>
-      <span className="compare-label after">After</span>
+      <span className="compare-label">{t("Before")}</span>
+      <span className="compare-label after">{t("After")}</span>
       <div
-        className="compare-line" role="slider" tabIndex={0} aria-label="Before and after divider"
+        className="compare-line" role="slider" tabIndex={0} aria-label={t("Before and after divider")}
         aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(split)}
         onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); drag(event); }}
         onPointerMove={(event) => event.currentTarget.hasPointerCapture(event.pointerId) && drag(event)}
@@ -1364,6 +1362,7 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
   url: string; clipSeconds: number; checked: Margin; margin: Margin; onMargin: (margin: Margin) => void;
   onRecheck: (() => void) | null; onGenerate: (() => void) | null; onBack: () => void;
 }) {
+  const t = useT();
   const player = useRef<HTMLVideoElement>(null);
   const [frames, setFrames] = useState(0);
   const [frame, setFrame] = useState(0);
@@ -1390,39 +1389,37 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
 
   return (
     <section className="panel mask-check">
-      <h2>Check the mask</h2>
+      <h2>{t("Check the mask")}</h2>
       <video
         ref={player} src={url} muted playsInline preload="auto"
         onLoadedMetadata={(event) => setFrames(Number.isFinite(event.currentTarget.duration) ? Math.round(event.currentTarget.duration * 24) : 0)}
         onTimeUpdate={(event) => playing && setFrame(Math.min(frames - 1, Math.floor(event.currentTarget.currentTime * 24)))}
         onEnded={() => setPlaying(false)}
       />
-      <input className="scrub" type="range" min={0} max={Math.max(frames - 1, 0)} value={frame} aria-label="Frame" onChange={(event) => seek(Number(event.target.value))} />
+      <input className="scrub" type="range" min={0} max={Math.max(frames - 1, 0)} value={frame} aria-label={t("Frame")} onChange={(event) => seek(Number(event.target.value))} />
       <div className="row">
         <div className="steps">
-          <button className="secondary" onClick={() => seek(frame - 1)} aria-label="Previous frame">◀</button>
-          <button className="secondary" onClick={toggle}>{playing ? "Pause" : "Play"}</button>
-          <button className="secondary" onClick={() => seek(frame + 1)} aria-label="Next frame">▶</button>
+          <button className="secondary" onClick={() => seek(frame - 1)} aria-label={t("Previous frame")}>◀</button>
+          <button className="secondary" onClick={toggle}>{playing ? t("Pause") : t("Play")}</button>
+          <button className="secondary" onClick={() => seek(frame + 1)} aria-label={t("Next frame")}>▶</button>
         </div>
-        <small>Frame {frame + 1} / {frames} · {(frame / 24).toFixed(2)} s · clip {starts.filter((start) => start <= frame).length} of {starts.length > 1 ? "about " : ""}{starts.length}</small>
+        <small>{t("Frame")}{" "}{frame + 1} / {frames} · {(frame / 24).toFixed(2)}{" "}{t("s · clip")}{" "}{starts.filter((start) => start <= frame).length}{" "}{t("of")}{" "}{starts.length > 1 ? t("about ") : ""}{starts.length}</small>
       </div>
       <p className="hint legend">
-        <i className="swatch cyan" /> regenerated <i className="swatch orange" /> tracked person · right: the grey mannequin H3 copies the motion from.
-        Anything outside the cyan area stays as it is, so the new character should fit inside it.
-      </p>
-      <p className="hint">The check tracks the whole video at once and the render tracks each clip, so they can differ slightly. Clip numbers here are an estimate: the render also ends clips on hard cuts.</p>
+        <i className="swatch cyan" />{" "}{t("regenerated")}{" "}<i className="swatch orange" />{" "}{t("tracked person · right: the grey mannequin H3 copies the motion from. Anything outside the cyan area stays as it is, so the new character should fit inside it.")}</p>
+      <p className="hint">{t("The check tracks the whole video at once and the render tracks each clip, so they can differ slightly. Clip numbers here are an estimate: the render also ends clips on hard cuts.")}</p>
       <div className="setting">
-        <span>Mask margin <small>{margin === checked ? `Showing ${checked}.` : `Showing ${checked}; check again to see ${margin}.`} Tight keeps more background, loose gives a bigger character more room.</small></span>
+        <span>{t("Mask margin")}{" "}<small>{margin === checked ? t("Showing {margin}.", { margin: t(checked) }) : t("Showing {current}; check again to see {requested}.", { current: t(checked), requested: t(margin) })}{" "}{t("Tight keeps more background, loose gives a bigger character more room.")}</small></span>
         <MarginPicker value={margin} onChange={onMargin} />
       </div>
       <div className="row">
-        {margin !== checked && <button className="primary" disabled={!onRecheck} onClick={() => onRecheck?.()}>Check again</button>}
+        {margin !== checked && <button className="primary" disabled={!onRecheck} onClick={() => onRecheck?.()}>{t("Check again")}</button>}
         <button className={margin === checked ? "primary" : "secondary"} disabled={!onGenerate} onClick={() => onGenerate?.()}>
-          {margin === checked ? "Looks good, generate" : `Generate with ${margin}`}
+          {margin === checked ? t("Looks good, generate") : t("Generate with {margin}", { margin: t(margin) })}
         </button>
-        <button className="secondary" onClick={onBack}>Back to settings</button>
+        <button className="secondary" onClick={onBack}>{t("Back to settings")}</button>
       </div>
-      {!onGenerate && <p className="hint">To generate, load the video this check used and add a character photo in the settings.</p>}
+      {!onGenerate && <p className="hint">{t("To generate, load the video this check used and add a character photo in the settings.")}</p>}
     </section>
   );
 }
@@ -1431,6 +1428,7 @@ function MaskCheck({ url, clipSeconds, checked, margin, onMargin, onRecheck, onG
 function FitCheck({ url, data, onUseBox, onGenerate, onBack }: {
   url: string; data: string | null; onUseBox: ((box: NonNullable<FitSummary["needed"]>) => void) | null; onGenerate: (() => void) | null; onBack: () => void;
 }) {
+  const t = useT();
   const [summary, setSummary] = useState<FitSummary | null>(null);
   const [error, setError] = useState("");
 
@@ -1441,44 +1439,41 @@ function FitCheck({ url, data, onUseBox, onGenerate, onBack }: {
   const misses = summary?.outside ?? [];
   return (
     <section className="panel mask-check">
-      <h2>Check the fit</h2>
+      <h2>{t("Check the fit")}</h2>
       <video src={url} controls loop autoPlay muted playsInline />
       <p className="hint legend">
-        <i className="swatch green" /> predicted motion inside the edit area <i className="swatch red" /> outside it: possible clipping. Yellow: edit boundary.
-      </p>
-      {error && <p className="error">{error}</p>}
-      {summary && <p>{!summary.person ? "No one to copy was found in this part, so there is nothing to check the box against."
-        : misses.length ? `${summary.moving ? "Their predicted motion leaves the moving edit area" : "Their routine leaves the box"} at ${misses.map((o) => `${timecode(o.start / 24)}–${timecode(o.end / 24)} (${o.sides.join(", ")})`).join(", ")}.`
-        : summary.moving ? "Their predicted motion stays inside the moving edit area." : "Their whole routine fits inside your box."}</p>}
-      <p className="hint">{summary?.moving ? "The yellow boundary follows the copied routine and is the same moving edit area used for generation. Your box sets placement and scale. H3 can move differently, so this remains a guide." : "The check moves the person nearest your box into it, as tall as the box and standing on its bottom edge. H3 follows a routine loosely, so it is a guide, not a promise. A box much wider than one person can also bring back a copy of the dancer."}</p>
+        <i className="swatch green" />{" "}{t("predicted motion inside the edit area")}{" "}<i className="swatch red" />{" "}{t("outside it: possible clipping. Yellow: edit boundary.")}</p>
+      {error && <p className="error">{t(error)}</p>}
+      {summary && <p>{!summary.person ? t("No one to copy was found in this part, so there is nothing to check the box against.") : misses.length ? t("{description} at {time}.", { description: summary.moving ? t("Their predicted motion leaves the moving edit area") : t("Their routine leaves the box"), time: misses.map((o) => `${timecode(o.start / 24)}–${timecode(o.end / 24)} (${o.sides.map((side) => t(side)).join(", ")})`).join(", ") }) : summary.moving ? t("Their predicted motion stays inside the moving edit area.") : t("Their whole routine fits inside your box.")}</p>}
+      <p className="hint">{summary?.moving ? t("The yellow boundary follows the copied routine and is the same moving edit area used for generation. Your box sets placement and scale. H3 can move differently, so this remains a guide.") : t("The check moves the person nearest your box into it, as tall as the box and standing on its bottom edge. H3 follows a routine loosely, so it is a guide, not a promise. A box much wider than one person can also bring back a copy of the dancer.")}</p>
       <div className="row">
-        {summary?.needed && misses.length > 0 && <button className="primary" disabled={!onUseBox} onClick={() => onUseBox?.(summary.needed!)}>Use a box that fits</button>}
-        <button className={misses.length ? "secondary" : "primary"} disabled={!onGenerate} onClick={() => onGenerate?.()}>Generate</button>
-        <button className="secondary" onClick={onBack}>Back to settings</button>
+        {summary?.needed && misses.length > 0 && <button className="primary" disabled={!onUseBox} onClick={() => onUseBox?.(summary.needed!)}>{t("Use a box that fits")}</button>}
+        <button className={misses.length ? "secondary" : "primary"} disabled={!onGenerate} onClick={() => onGenerate?.()}>{t("Generate")}</button>
+        <button className="secondary" onClick={onBack}>{t("Back to settings")}</button>
       </div>
-      {!onGenerate && <p className="hint">To generate, load the video and part this check used and fill in the Add settings.</p>}
+      {!onGenerate && <p className="hint">{t("To generate, load the video and part this check used and fill in the Add settings.")}</p>}
     </section>
   );
 }
 
 // A montage without review keeps brief or small appearances as they are; say so instead of passing the swap off as complete.
 function KeptNote({ url }: { url: string }) {
+  const t = useT();
   const [kept, setKept] = useState<Kept[]>([]);
   useEffect(() => {
     fetch(url).then((response) => response.json()).then((data: { kept: Kept[] }) => setKept(data.kept), () => setKept([]));
   }, [url]);
   if (!kept.length) return null;
   return (
-    <p className="hint">
-      Left as they are, too {kept.every((k) => k.small) ? "small" : "brief or small"} for H3 to draw:{" "}
-      {kept.map((k) => `photo ${k.photo}'s person at ${timecode(k.start / 24)}–${timecode(k.end / 24)}`).join(", ")}. Use Find people to pick them anyway.
-    </p>
+    <p className="hint">{t("Left as they are, too")}{" "}{kept.every((k) => k.small) ? t("small") : t("brief or small")}{" "}{t("for H3 to draw:")}{" "}
+      {kept.map((k) => t("Person from photo {photo}: {start}–{end}", { photo: k.photo, start: timecode(k.start / 24), end: timecode(k.end / 24) })).join(", ")}{t(". Use Find people to pick them anyway.")}</p>
   );
 }
 
 function PersonList({ url, photos, onBack, onGenerate }: {
   url: string; photos: string[]; onBack: () => void; onGenerate: ((tracks: string, labels: Label[]) => void) | null;
 }) {
+  const t = useT();
   const [found, setFound] = useState<{ tracks: string | null; list: Appearance[] } | null>(null);
   const [error, setError] = useState("");
 
@@ -1495,39 +1490,36 @@ function PersonList({ url, photos, onBack, onGenerate }: {
 
   return (
     <section className="panel">
-      <h2>People {found && <small>{found.list.length} appearance{found.list.length === 1 ? "" : "s"}</small>}</h2>
-      <p className="hint">
-        Everyone SAM tracked, in order of appearance, matched to the photos. Check each one and pick the photo they become,
-        or Keep to leave them as they are. The whole video is then made in one go, with one H3 pass per photo on screen.
-      </p>
-      {error && <p className="error">{error}</p>}
-      {!found && !error && <p className="hint">Loading…</p>}
+      <h2>{t("People")}{" "}{found && <small>{t("Appearances: {count}", { count: found.list.length })}</small>}</h2>
+      <p className="hint">{t("Everyone SAM tracked, in order of appearance, matched to the photos. Check each one and pick the photo they become, or Keep to leave them as they are. The whole video is then made in one go, with one H3 pass per photo on screen.")}</p>
+      {error && <p className="error">{t(error)}</p>}
+      {!found && !error && <p className="hint">{t("Loading…")}</p>}
       <div className="people-list">
         {found?.list.map((a, i) => (
           <div className="person" key={`${a.track}:${a.start}`}>
-            <img src={a.image} alt={`Appearance ${i + 1}`} />
+            <img src={a.image} alt={t("Appearance {index}", { index: i + 1 })} />
             <small>
-              {timecode(a.on[0][0] / 24)}–{timecode(a.on.at(-1)![1] / 24)} · {a.role ? `looks like photo ${a.role}` : "none of the photos"}
-              {a.small ? " · small in the frame" : ""}
+              {timecode(a.on[0][0] / 24)}–{timecode(a.on.at(-1)![1] / 24)} · {a.role ? t("looks like photo {index}", { index: a.role }) : t("none of the photos")}
+              {a.small ? t(" · small in the frame") : ""}
             </small>
             <div className="segmented photo-pick">
               {photos.map((photo, k) => (
-                <button key={k} className={a.pick === k + 1 ? "on" : ""} onClick={() => pick(i, k + 1)} aria-label={`Photo ${k + 1}`}>
+                <button key={k} className={a.pick === k + 1 ? "on" : ""} onClick={() => pick(i, k + 1)} aria-label={t("Photo {index}", { index: k + 1 })}>
                   <img src={photo} alt="" />
                 </button>
               ))}
-              <button className={a.pick ? "" : "on"} onClick={() => pick(i, 0)}>Keep</button>
+              <button className={a.pick ? "" : "on"} onClick={() => pick(i, 0)}>{t("Keep")}</button>
             </div>
           </div>
         ))}
       </div>
-      {found && !found.list.length && <p className="hint">Nobody found.</p>}
-      {found && !onGenerate && <p className="hint">The video, the part to use or the custom size changed since Find people, or a photo is missing. Go back and find the people again.</p>}
+      {found && !found.list.length && <p className="hint">{t("Nobody found.")}</p>}
+      {found && !onGenerate && <p className="hint">{t("The video, the part to use or the custom size changed since Find people, or a photo is missing. Go back and find the people again.")}</p>}
       <div className="row">
         <button className="primary" disabled={!onGenerate || !found?.tracks || !labels.length} onClick={() => onGenerate?.(found!.tracks!, labels)}>
-          {labels.length ? "Generate" : "Pick a photo to generate"}
+          {labels.length ? t("Generate") : t("Pick a photo to generate")}
         </button>
-        <button className="secondary" onClick={onBack}>Back to settings</button>
+        <button className="secondary" onClick={onBack}>{t("Back to settings")}</button>
       </div>
     </section>
   );

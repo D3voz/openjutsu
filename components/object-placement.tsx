@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "./language.tsx";
+
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { placementAt, type PaintKeyframe, type PlacementKeyframe } from "../lib/object.ts";
 
@@ -10,6 +12,7 @@ type Props = { src: string; start: number; end: number; width: number; height: n
 );
 
 export function ObjectPlacement(props: Props) {
+  const t = useT();
   const { src, start, end, width, height, points } = props;
   const painting = props.mode === "paint";
   const video = useRef<HTMLVideoElement>(null);
@@ -125,18 +128,18 @@ export function ObjectPlacement(props: Props) {
 
   return (
     <div className="placement">
-      <strong>{painting ? "Paint edit area" : "Place the new object"}</strong>
-      <p className="hint">{painting ? "Paint extra space around the part SAM tracks. The paint follows its position and size; the tracked area is also edited." : "Drag a box around the whole object's space, including its height above the surface and room for its shadow."}</p>
+      <strong>{painting ? t("Paint edit area") : t("Place the new object")}</strong>
+      <p className="hint">{painting ? t("Paint extra space around the part SAM tracks. The paint follows its position and size; the tracked area is also edited.") : t("Drag a box around the whole object's space, including its height above the surface and room for its shadow.")}</p>
       {painting && <>
         <div className="segmented">
-          <button className={!eraser ? "on" : ""} aria-pressed={!eraser} onClick={() => setEraser(false)}>Brush</button>
-          <button className={eraser ? "on" : ""} aria-pressed={eraser} onClick={() => setEraser(true)}>Eraser</button>
+          <button className={!eraser ? "on" : ""} aria-pressed={!eraser} onClick={() => setEraser(false)}>{t("Brush")}</button>
+          <button className={eraser ? "on" : ""} aria-pressed={eraser} onClick={() => setEraser(true)}>{t("Eraser")}</button>
         </div>
-        <label>Brush size: {brush} px<input type="range" min={4} max={160} step={2} value={brush} onChange={(e) => setBrush(Number(e.target.value))} /></label>
+        <label>{t("Brush size:")}{" "}{brush} px<input type="range" min={4} max={160} step={2} value={brush} onChange={(e) => setBrush(Number(e.target.value))} /></label>
       </>}
       <video ref={video} src={src} preload="auto" muted playsInline hidden
         onLoadedMetadata={() => { if (video.current) video.current.currentTime = time; }} onLoadedData={draw} onSeeked={draw} />
-      <canvas ref={canvas} width={cw} height={ch} aria-label={painting ? "Paint the edit area" : "Draw the new object's placement box"} role="img"
+      <canvas ref={canvas} width={cw} height={ch} aria-label={painting ? t("Paint the edit area") : t("Draw the new object's placement box")} role="img"
         onPointerDown={(event) => {
           event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId);
           origin.current = position(event);
@@ -153,18 +156,18 @@ export function ObjectPlacement(props: Props) {
           origin.current = null; setDraft(null);
         }}
         onPointerCancel={() => { if (painting) savePaint(); origin.current = null; setDraft(null); }} />
-      <label>{painting ? "Paint" : "Placement"} frame: {time.toFixed(2)} s
+      <label>{painting ? t("Paint") : t("Placement")}{" "}{t("frame:")}{" "}{time.toFixed(2)} s
         <input type="range" min={start} max={Math.max(start, end - 1 / 24)} step={1 / 24} value={time}
           onChange={(event) => setTime(Number(event.target.value))} />
       </label>
       <div className="row">
-        <button className="secondary" disabled={!points.some((p) => p.frame === frame)} onClick={() => remove()}>Remove this keyframe</button>
-        <button className="secondary" disabled={!points.length} onClick={() => remove(true)}>{painting ? "Clear paint" : "Clear placement"}</button>
+        <button className="secondary" disabled={!points.some((p) => p.frame === frame)} onClick={() => remove()}>{t("Remove this keyframe")}</button>
+        <button className="secondary" disabled={!points.length} onClick={() => remove(true)}>{painting ? t("Clear paint") : t("Clear placement")}</button>
       </div>
       {points.length > 0 && <div className="placement-keys">{points.map((p) => (
         <button key={p.frame} className={p.frame === frame ? "on" : ""} onClick={() => setTime(Math.max(start, Math.min(end - 1 / 24, p.frame / 24)))}>{(p.frame / 24).toFixed(2)} s</button>
       ))}</div>}
-      <p className="hint">{painting ? "Scrub to paint another keyframe. Paint follows SAM during generation and turns off when tracking is lost. This editor shows paint on its painted frames. Changing the tracked part, video, section or resolution clears paint." : "One box stays fixed on screen. If the camera moves, scrub forward and draw more boxes; placement moves between them. This is manual placement, not automatic tracking. Changing the video, section or resolution clears the boxes."}</p>
+      <p className="hint">{painting ? t("Scrub to paint another keyframe. Paint follows SAM during generation and turns off when tracking is lost. This editor shows paint on its painted frames. Changing the tracked part, video, section or resolution clears paint.") : t("One box stays fixed on screen. If the camera moves, scrub forward and draw more boxes; placement moves between them. This is manual placement, not automatic tracking. Changing the video, section or resolution clears the boxes.")}</p>
     </div>
   );
 }
