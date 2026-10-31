@@ -58,20 +58,23 @@ test("a bigger motion reference gets its own run name, 512 keeps the plan's", ()
   const pruned = pruneSimple(graph, { ...settings(false), motion: 768 });
   assert.deepEqual(byClass(pruned, "ImageScaleToMaxDimension").filter((n) => /motion reference/i.test(n._meta?.title ?? "")).map((n) => n.inputs.largest_size), [768]);
   const production = byClass(pruned, "MiniMaxH3ChainPlanModern")[0].inputs.run_name as [string, number];
-  assert.deepEqual(pruned[production[0]].inputs, { string_a: [NODES.plan, 3], string_b: "_motion768", delimiter: "" });
+  assert.deepEqual(production, ["mask_run_name", 0]);
+  assert.deepEqual(pruned.mask_run_name.inputs.string_a, ["motion_run_name", 0]);
+  assert.deepEqual(pruned.motion_run_name.inputs, { string_a: [NODES.plan, 3], string_b: "_motion768", delimiter: "" });
   const plain = pruneSimple(graph, settings(false));
-  assert.deepEqual(byClass(plain, "MiniMaxH3ChainPlanModern")[0].inputs.run_name, [NODES.plan, 3]);
+  assert.deepEqual(plain.mask_run_name.inputs.string_a, [NODES.plan, 3]);
+  assert.equal(plain.motion_run_name, undefined);
 });
 
 test("with hat fix the full graph is kept", () => {
   const pruned = pruneSimple(graph, settings(true));
-  assert.equal(Object.keys(pruned).length, Object.keys(graph).length);
+  assert.equal(Object.keys(pruned).length, Object.keys(graph).length + 1); // mask run identity
   assert.deepEqual(pruned[NODES.growMask].inputs.mask, [NODES.hat[5], 0]);
 });
 
 test("without No lip-sync H3 hears the soundtrack and the mannequin gets no faces", () => {
   const pruned = pruneSimple(graph, settings(true, false));
-  assert.equal(Object.keys(pruned).length, Object.keys(graph).length - 6);
+  assert.equal(Object.keys(pruned).length, Object.keys(graph).length - 6 + 1); // mask run identity
   assert.deepEqual(byClass(pruned, "AudioAdjustVolume"), []);
   assert.ok(!Object.values(pruned).some((node) => /faces/.test(node._meta?.title ?? "")));
   const [ref] = byClass(pruned, "MiniMaxH3ReferenceToVideo");

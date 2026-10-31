@@ -169,6 +169,15 @@ export function suffixRunName(graph: ApiGraph, id: string, suffix: string, title
   plans[0].inputs.run_name = [id, 0];
 }
 
+// The native Swap Plan cannot hash mask inputs that live elsewhere in the graph.
+// Namespace every mask configuration, including defaults, to avoid resuming legacy
+// clips whose mask settings were never recorded in their saved-run identity.
+export function suffixMaskRunName(graph: ApiGraph, settings: unknown[]) {
+  let hash = 14695981039346656037n;
+  for (const char of JSON.stringify(settings)) hash = BigInt.asUintN(64, (hash ^ BigInt(char.codePointAt(0)!)) * 1099511628211n);
+  suffixRunName(graph, "mask_run_name", `_mask${hash.toString(16)}`, "Run name for these mask settings");
+}
+
 export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGraph {
   const graph = maskSettings(source, settings.hatFix, settings.margin, settings.target, NODES);
   if (!settings.noLipSync) dropNoLipSync(graph);
@@ -178,6 +187,7 @@ export function pruneSimple(source: ApiGraph, settings: SimpleSettings): ApiGrap
   plan.seed = settings.seed;
   plan.clip_seconds = settings.clipSeconds;
   plan.roles = settings.role.replace(/\s+/g, " ").trim();
+  suffixMaskRunName(graph, [settings.hatFix, MARGINS[settings.margin], settings.target]);
   return graph;
 }
 

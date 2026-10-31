@@ -31,7 +31,7 @@ test("two characters drop pictures 3-4 everywhere", () => {
   assert.ok(isLink(plan.picture_2) && !("picture_3" in plan) && !("picture_4_text" in plan));
   const ref = Object.values(pruned).find((n) => n.class_type === "MiniMaxH3ReferenceToVideo")!.inputs;
   assert.deepEqual(Object.keys(ref).filter((k) => k.startsWith("ref_images.")), ["ref_images.ref_image_0", "ref_images.ref_image_1"]);
-  assert.equal(Object.keys(pruned).length, Object.keys(graph).length - 6);
+  assert.equal(Object.keys(pruned).length, Object.keys(graph).length - 6 + 1); // mask run identity
   assert.ok(graph[nodeByTitle(graph, "Picture 4")], "the source graph is not modified");
 });
 
@@ -53,7 +53,7 @@ test("without No lip-sync every pass hears the soundtrack and sees no faces", ()
   for (const [g, n] of [[graph, 4], [maxq, 2]] as const) {
     const pruned = pruneAdvanced(g, n, settings(true, [], false));
     assert.deepEqual(dangling(pruned), []);
-    assert.equal(Object.keys(pruned).length, Object.keys(g).length - 6);
+    assert.equal(Object.values(pruned).filter((node) => node.class_type !== "StringConcatenate").length, Object.values(g).filter((node) => node.class_type !== "StringConcatenate").length - 6);
     for (const node of Object.values(pruned)) {
       if (node.class_type === "MiniMaxH3ReferenceToVideo") assert.equal(pruned[(node.inputs["ref_video_audios.ref_video_audio_0"] as [string, number])[0]].class_type, "MiniMaxH3ChainCurrent");
       if (node.class_type === "H3SourceSlice") assert.equal(pruned[(node.inputs.source_audio as [string, number])[0]].class_type, "TrimAudioDuration");

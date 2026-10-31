@@ -2,7 +2,7 @@
 // workflows/object.api.json is exported (workflows/build/oneclick_object_build.js) in change mode with a picture;
 // each request prunes it. Nodes are found by title.
 import { nodeByTitle } from "./advanced.ts";
-import { setMotionSize, setResolution, suffixRunName, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
+import { setMotionSize, setResolution, suffixMaskRunName, suffixRunName, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
 
 export const EDIT_MODES = ["change", "remove", "background", "add"] as const;
 export type EditMode = (typeof EDIT_MODES)[number];
@@ -190,6 +190,7 @@ export function pruneObject(source: ApiGraph, picture: boolean, settings: Object
     for (const title of drop) delete graph[id(title)];
   }
   setResolution(graph, id("Object Swap Plan (what to change)"), id(OBJECT_VIDEO), settings.resolution);
+  suffixMaskRunName(graph, [grow.expand, settings.mode === "add" ? null : most]);
   return graph;
 }
 
