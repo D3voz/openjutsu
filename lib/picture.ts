@@ -55,10 +55,12 @@ export function parsePictureVideoSettings(value: unknown): PictureVideoSettings 
   }
   if (typeof input.useLoras !== "boolean" || !Array.isArray(input.loras) || input.loras.length > MAX_LORAS) throw new Error(`Use at most ${MAX_LORAS} LoRAs.`);
   const loras = input.loras.map((lora) => {
-    if (!lora || typeof lora.name !== "string" || !Number.isFinite(lora.strength) || lora.strength < STRENGTH.min || lora.strength > STRENGTH.max) throw new Error(`Choose each LoRA and a strength from ${STRENGTH.min} to ${STRENGTH.max}.`);
+    const active = input.renderer === "h3" && input.useLoras && lora?.enabled !== false;
+    if (!lora || typeof lora.name !== "string" || !Number.isFinite(lora.strength) || active && (lora.strength < STRENGTH.min || lora.strength > STRENGTH.max)) throw new Error(`Choose each active LoRA and a strength from ${STRENGTH.min} to ${STRENGTH.max}.`);
     return { name: lora.name.trim(), strength: lora.strength, enabled: lora.enabled !== false };
   });
-  for (const key of ["model", "textEncoder", "videoVae", "audioVae", "solarFourStep", "solarControl"] as const) if (typeof input[key] !== "string" || !input[key].trim()) throw new Error("Choose the model components and both SolarRenderer LoRA files.");
+  const required = new Set(["model", "textEncoder", "videoVae", ...(input.renderer === "solar" ? ["solarFourStep", "solarControl"] : ["audioVae"])]);
+  for (const key of ["model", "textEncoder", "videoVae", "audioVae", "solarFourStep", "solarControl"] as const) if (typeof input[key] !== "string" || required.has(key) && !input[key].trim()) throw new Error("Choose the model components used by this renderer.");
   return { seconds, seed, steps, motion: motion as 0 | MotionSize, resolution, useLoras: input.useLoras, loras,
     renderer: input.renderer, solarRank: input.solarRank, solarFourStep: input.solarFourStep.trim(), solarControl: input.solarControl.trim(),
     model: input.model.trim(), textEncoder: input.textEncoder.trim(), videoVae: input.videoVae.trim(), audioVae: input.audioVae.trim() };
