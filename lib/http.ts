@@ -14,6 +14,24 @@ export class HttpError extends Error {
   }
 }
 
+// Native fetch decodes these content codings but retains the upstream headers.
+// Byte lengths, ranges and validators of the coded representation cannot label
+// the decoded full body. Unknown codings and coded partial bodies fail closed.
+export async function mediaTransferHeaders(response: Response): Promise<Headers> {
+  const coding = response.headers.get("Content-Encoding")?.trim().toLowerCase();
+  if (coding && coding !== "identity") {
+    if (!["gzip", "deflate", "br"].includes(coding) || response.status === 206) {
+      await response.body?.cancel();
+      throw new HttpError(502, response.status === 206 ? "Unsupported compressed byte-range response." : "Unsupported upstream media content encoding.");
+    }
+    return new Headers();
+  }
+  return new Headers(["Content-Length", "Content-Range", "Accept-Ranges"].flatMap((key) => {
+    const value = response.headers.get(key);
+    return value === null ? [] : [[key, value]];
+  }));
+}
+
 export function validateJobId(id: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(id) || id.startsWith("http")) throw new HttpError(400, "Invalid job ID.");
 }
