@@ -151,7 +151,12 @@ link(profile, 0, plan, "chain_policy");
 link(swapPlan, "plan_json", plan, "plan_json_input");
 link(swapPlan, "width", plan, "width");
 link(swapPlan, "height", plan, "height");
-link(swapPlan, "run_name", plan, "run_name");
+if (MAX_QUALITY) {
+  // The native Swap Plan is shared with joint-pass generation; keep its clips in a separate history.
+  const perPersonRun = add("StringConcatenate", "Run name for one pass per person", [lx, 40], {string_b: "_per_person", delimiter: ""});
+  link(swapPlan, "run_name", perPersonRun, "string_a");
+  link(perPersonRun, 0, plan, "run_name");
+} else link(swapPlan, "run_name", plan, "run_name");
 link(soundtrack, 0, timeline, "source_audio");
 link(plan, 0, start, "plan");
 link(timeline, 0, start, "source_timeline");
