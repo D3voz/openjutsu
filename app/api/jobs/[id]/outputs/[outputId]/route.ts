@@ -12,6 +12,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const { id, outputId } = await params;
     const { name, response } = await getOutput(id, outputId, request.headers.get("Range"));
+    if (response.status === 416) {
+      await response.body?.cancel();
+      const headers = new Headers({ "Cache-Control": "private, no-store" });
+      const range = response.headers.get("Content-Range");
+      if (range) headers.set("Content-Range", range);
+      return new Response(null, { status: 416, headers });
+    }
     if (!response.ok || !response.body) return Response.json({ error: "The output is not ready." }, { status: 502 });
 
     const type = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() ?? "";
