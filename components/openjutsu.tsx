@@ -226,6 +226,8 @@ function DropZone({ accept, onFiles, multiple, children, className }: {
 }
 
 export function Openjutsu() {
+  const lifetime = useRef(0);
+  useEffect(() => () => { lifetime.current++; }, []);
   const [mode, setMode] = useState<Mode>("simple");
   const [video, setVideo] = useState<{ file: File; url: string; duration: number; width: number; height: number } | null>(null);
   const [part, setPart] = useState<Section>({ start: 0, length: 0 });
@@ -505,6 +507,7 @@ export function Openjutsu() {
   }
 
   async function submit(kind: Kind, review?: Review) {
+    const startedIn = lifetime.current;
     if (!video || (kind === "fit" ? !placement.length : kind !== "mask" && kind !== "people" && !ready)) return;
     setSubmitting(true);
     setCheckingSetup(true);
@@ -624,12 +627,14 @@ export function Openjutsu() {
     try {
       const checked = await fetch("/api/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection) });
       const result = await checked.json();
+      if (startedIn !== lifetime.current) return;
       if (!checked.ok) throw new Error(result.error ?? "Could not check setup.");
       setSetup(result);
       if (!result.ok) return;
       setCheckingSetup(false);
       const response = await fetch("/api/jobs", { method: "POST", body: form });
       const body = await response.json();
+      if (startedIn !== lifetime.current) return;
       if (!response.ok) throw new Error(body.error ?? "Could not start the job.");
       const next: Run = { id: body.id, kind, margin, clips: Math.max(clips, 1), clipSeconds: kind === "face" ? chunkSeconds : clipSeconds, startedAt: Date.now(), frames };
       writeRun(next);
@@ -640,10 +645,12 @@ export function Openjutsu() {
       setStreamError("");
       setRun(next);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Could not start the job.");
+      if (startedIn === lifetime.current) setFormError(error instanceof Error ? error.message : "Could not start the job.");
     } finally {
-      setCheckingSetup(false);
-      setSubmitting(false);
+      if (startedIn === lifetime.current) {
+        setCheckingSetup(false);
+        setSubmitting(false);
+      }
     }
   }
 
