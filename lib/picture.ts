@@ -1,5 +1,5 @@
 import { DEFAULT_MODEL, MAX_LORAS, STEPS, STRENGTH } from "./model.ts";
-import { canvasSize, MAX_SEED, MOTION_SIZES, RESOLUTIONS, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
+import { canvasSize, CUSTOM_SIZE, MAX_SEED, MOTION_SIZES, RESOLUTIONS, type ApiGraph, type MotionSize, type Resolution } from "./simple.ts";
 
 export type PictureVideoSettings = {
   renderer: "h3" | "solar"; solarRank: 384 | 64; solarFourStep: string; solarControl: string;
@@ -51,7 +51,9 @@ export function parsePictureVideoSettings(value: unknown): PictureVideoSettings 
   else {
     const size = input.resolution;
     if (!size || typeof size !== "object" || ![size.width, size.height].every((side) => Number.isFinite(side) && side > 0)) throw new Error("Choose a video resolution or positive custom dimensions.");
-    resolution = { width: Math.max(32, Math.round(size.width / 32) * 32), height: Math.max(32, Math.round(size.height / 32) * 32) };
+    const [width, height] = [size.width, size.height].map((side) => Math.round(side / CUSTOM_SIZE.step) * CUSTOM_SIZE.step);
+    if (Math.min(width, height) < CUSTOM_SIZE.min || Math.max(width, height) > CUSTOM_SIZE.max) throw new Error(`Choose custom dimensions of ${CUSTOM_SIZE.min}-${CUSTOM_SIZE.max} px a side.`);
+    resolution = { width, height };
   }
   if (typeof input.useLoras !== "boolean" || !Array.isArray(input.loras) || input.loras.length > MAX_LORAS) throw new Error(`Use at most ${MAX_LORAS} LoRAs.`);
   const loras = input.loras.map((lora) => {
