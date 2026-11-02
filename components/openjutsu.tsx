@@ -131,7 +131,8 @@ function readSettings(defaults: Settings): Settings {
 
 function droppedFiles(event: DragEvent, kind: "video" | "image") {
   event.preventDefault();
-  return [...event.dataTransfer.files].filter((file) => file.type.startsWith(`${kind}/`) || (kind === "video" && /\.(mkv|mov|avi)$/i.test(file.name)));
+  const extension = kind === "video" ? /\.(mp4|mov|mkv|webm|avi)$/i : /\.(png|jpe?g|webp)$/i;
+  return [...event.dataTransfer.files].filter((file) => file.type.startsWith(`${kind}/`) || extension.test(file.name));
 }
 
 function elapsed(ms: number) {

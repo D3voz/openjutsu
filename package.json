@@ -18,9 +18,11 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
     "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "jsdom": "^26.1.0",
     "typescript": "^7.0.2"
   },
   "license": "MIT"
