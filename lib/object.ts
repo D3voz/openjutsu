@@ -96,7 +96,11 @@ function describer(settings: ObjectSettings) {
   };
 }
 
-const copiesRoutine = (action: string) => /\b(?:in[ -]sync|same (?:dance )?routine|synchroni[sz](?:ed|e|ing))\b/i.test(action);
+const ROUTINE = "(?:in[ -]sync|same (?:dance )?routine|synchroni[sz](?:ed|e|ing))";
+const NEGATED_ROUTINE = new RegExp(`\\b(?:not|never|without)\\s+(?:(?:be|being|the)\\s+)?${ROUTINE}\\b`, "gi");
+const COPIED_ROUTINE = new RegExp(`\\b${ROUTINE}\\b`, "i");
+// A negated copying instruction must not select the moving-mask branch.
+const copiesRoutine = (action: string) => COPIED_ROUTINE.test(action.replace(NEGATED_ROUTINE, " "));
 
 export function pruneObject(source: ApiGraph, picture: boolean, settings: ObjectSettings): ApiGraph {
   const graph: ApiGraph = structuredClone(source);
