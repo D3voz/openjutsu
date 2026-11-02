@@ -13,7 +13,7 @@ export type SetupRequest =
   | { kind: "object"; settings: ObjectSettings; picture: boolean; model: ModelSettings }
   | { kind: "face"; settings: FaceSettings; model: ModelSettings }
   | { kind: "color"; settings: ColorSettings }
-  | { kind: "mask"; hatFix: boolean; margin: Margin; target: string }
+  | { kind: "mask"; hatFix: boolean; margin: Margin; target: string; resolution?: Resolution }
   | { kind: "people"; resolution: Resolution; describer?: string }
   | { kind: "fit"; resolution: Resolution }
   | { kind: "montage"; settings: AdvancedSettings; pictures: number; review: Review | null; model: ModelSettings };
@@ -62,7 +62,7 @@ export function setupGraph(source: ApiGraph, selection: SetupRequest): ApiGraph 
   else if (selection.kind === "object") graph = pruneObject(source, selection.picture, selection.settings);
   else if (selection.kind === "face") graph = pruneFace(source, selection.settings);
   else if (selection.kind === "color") graph = pruneColor(source, selection.settings);
-  else if (selection.kind === "mask") graph = pruneMask(source, selection.hatFix, selection.margin, selection.target);
+  else if (selection.kind === "mask") graph = pruneMask(source, selection.hatFix, selection.margin, selection.target, selection.resolution);
   else if (selection.kind === "montage") graph = pruneMontage(source, selection.pictures, selection.settings, selection.review);
   else if (selection.kind === "people" || selection.kind === "fit") {
     graph = structuredClone(source);

@@ -214,9 +214,9 @@ export async function submitColor(video: StoredFile, section: Section, settings:
   return submit(comfy, workflow);
 }
 
-export async function submitMask(video: StoredFile, section: Section, hatFix: boolean, margin: Margin, target: string) {
+export async function submitMask(video: StoredFile, section: Section, hatFix: boolean, margin: Margin, target: string, resolution?: Resolution) {
   const comfy = client();
-  const graph = pruneMask(await loadGraph("mask"), hatFix, margin, target);
+  const graph = pruneMask(await loadGraph("mask"), hatFix, margin, target, resolution);
   setSection(graph, MASK_NODES.video, section);
   const workflow = comfy.workflows.fromJson(graph);
   workflow.setInput(MASK_NODES.video, "video", upload(comfy, video));

@@ -246,7 +246,8 @@ async function submitForm(form: FormData) {
     const section = parseSection(form);
     if (mode === "mask") {
       const { hatFix, margin, target } = parseMask(form);
-      submit = () => submitMask(video, section, hatFix, margin, target);
+      const resolution = form.has("resolution") ? parseResolution(form) : undefined;
+      submit = () => submitMask(video, section, hatFix, margin, target, resolution);
     } else if (mode === "fit") {
       const placement = parsePlacement(form.get("placement"));
       const resolution = parseResolution(form);
