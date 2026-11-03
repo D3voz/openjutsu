@@ -47,7 +47,7 @@ Video handling needs FFmpeg: VideoHelperSuite can use the binary from `imageio-f
 
 ## 3. When the setup check lists an installed pack
 
-The check reads ComfyUI's `/object_info`, so a pack that is installed but failed to import looks the same as a missing one. Common causes:
+The check reads ComfyUI's `/object_info`, so a pack that is installed but has failed to import looks the same as a missing one. Common causes:
 
 - **ComfyUI is too old.** comfyui-h3-oneclick-swap uses ComfyUI's SAM 3 code, so on a ComfyUI older than 0.41.2 it can fail to load and all its nodes disappear. Update ComfyUI first.
 - **A Python dependency is missing** from ComfyUI's environment (see section 2).
