@@ -1,12 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { downloadUrl, SUGGESTIONS } from "../lib/describers.ts";
 import { DEFAULT_DESCRIBER } from "../lib/model.ts";
 
-const SUGGESTIONS = [
-  { name: "qwen3vl_8b_int8_convrot.safetensors", label: "Qwen3-VL 8B · INT8", size: "9.35 GB", note: "Openjutsu default", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors" },
-  { name: "qwen3vl_4b_fp8_scaled.safetensors", label: "Qwen3-VL 4B · FP8", size: "5.24 GB", note: "Smaller Qwen alternative", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" },
-  { name: "gemma4_e2b_it_int8_convrot.safetensors", label: "Gemma 4 E2B · INT8", size: "5.2 GB", note: "Smaller vision alternative", url: "https://huggingface.co/Comfy-Org/gemma-4/blob/main/text_encoders/gemma4_e2b_it_int8_convrot.safetensors" },
-];
+type Download = { name: string; state: "idle" | "downloading" | "done" | "error"; received: number; total: number; error?: string };
 
 export function Welcome({ value, options, onChange, loading, error, onRefresh, onContinue }: {
   value: string; options: string[]; onChange: (value: string) => void; loading: boolean; error: string;
@@ -15,8 +13,29 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
   const installed = !error && options.includes(value);
   const suggested = SUGGESTIONS.filter((model) => options.includes(model.name));
   const selected = SUGGESTIONS.find((model) => model.name === value);
-  const download = selected && !installed ? selected.url.replace("/blob/", "/resolve/") + "?download=true" : "";
-  const other =options.filter((name) => !SUGGESTIONS.some((model) => model.name === name));
+  const canDownload = selected && !installed;
+  const [job, setJob] = useState<Download | null>(null);
+  const [downloadError, setDownloadError] = useState("");
+  const downloading = job?.state === "downloading";
+
+  async function startDownload() {
+    setDownloadError("");
+    const response = await fetch("/api/models/download", { method: "POST", body: JSON.stringify({ name: value }) });
+    const result = await response.json();
+    if (!response.ok) return setDownloadError(result.error ?? "Could not start the download.");
+    setJob(result);
+  }
+
+  useEffect(() => {
+    if (!downloading) return;
+    const timer = setInterval(async () => {
+      try { setJob(await (await fetch("/api/models/download")).json()); } catch {}
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [downloading]);
+
+  useEffect(() => { if (job?.state === "done") onRefresh(); }, [job?.state]);
+  const other = options.filter((name) => !SUGGESTIONS.some((model) => model.name === name));
 
   return <main className="shell welcome">
     <header className="top"><div className="brand">
@@ -41,7 +60,10 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
         <p className="hint">Use a vision-language model (VLM) with image understanding and text generation. This choice also applies to Find people.</p>
       </div>
       <div className="row"><label htmlFor="describer">Visual describer</label>
-        {download && <a className="secondary download" href={download} rel="noreferrer">Download model ({selected!.size})</a>}</div>
+        {canDownload && <button className="secondary download" disabled={downloading || loading} onClick={startDownload}>
+          {downloading ? `Downloading… ${job.total ? Math.round(job.received / job.total * 100) + "%" : ""}` : `Download model (${selected.size})`}</button>}</div>
+      {canDownload && downloadError && <p className="hint" role="alert">{downloadError} <a href={downloadUrl(selected.url)} rel="noreferrer">Browser download</a></p>}
+      {job?.state === "error" && <p className="error" role="alert">{job.error}</p>}
       <select id="describer" className="file-name" value={value} onChange={(event) => onChange(event.target.value)} disabled={loading} aria-describedby="describer-help">
         {!options.includes(value) && <option value={value}>{value}{loading ? " — checking…" : " — not installed"}</option>}
         {suggested.length > 0 && <optgroup label="Suggested models installed in ComfyUI">
@@ -57,7 +79,7 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
       <div className="welcome-install">
         <strong>Put the model in this folder first</strong>
         <code>ComfyUI\models\text_encoders</code>
-        <p className="hint">Use your ComfyUI installation folder. Use Download model above to get the selected file, or add a compatible single-file model with its vision weights, then refresh the list. If it still does not appear, restart ComfyUI and refresh again.</p>
+        <p className="hint">Use your ComfyUI installation folder. Use Download model above to save the selected file here automatically (needs COMFYUI_DIR in .env.local), or add a compatible single-file model with its vision weights, then refresh the list. If it still does not appear, restart ComfyUI and refresh again.</p>
         <div className="row"><span className="hint" role="status">{loading ? "Reading installed models…" : error ? "ComfyUI model list unavailable" : installed ? "Selected file is installed" : "Selected file is not installed"}</span>
           <button className="secondary" disabled={loading} onClick={onRefresh}>{loading ? "Refreshing…" : "Refresh models"}</button></div>
         {error && <p className="error" role="alert">{error}</p>}

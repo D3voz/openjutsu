@@ -103,7 +103,7 @@ On Windows, double-click `start_openjutsu.bat` (ComfyUI must be running, or star
 
 4. Open <http://127.0.0.1:3000>.
 
-`.env.local` sets `COMFY_BASE_URL=http://127.0.0.1:8189`. Leave `COMFY_API_KEY` empty for a local proxy. The base model and LoRA pickers read ComfyUI's model lists from `COMFYUI_URL` (default `http://127.0.0.1:8188`); without it they become text fields.
+`.env.local` sets `COMFY_BASE_URL=http://127.0.0.1:8189`. Leave `COMFY_API_KEY` empty for a local proxy. `COMFYUI_DIR` is your ComfyUI folder; with it set, the welcome page's **Download model** button saves the selected describer into `models/text_encoders` (without it, use the browser download link). The base model and LoRA pickers read ComfyUI's model lists from `COMFYUI_URL` (default `http://127.0.0.1:8188`); without it they become text fields.
 
 Uploads are limited to 512 MB total per request, including reference pictures. Uploads are streamed to a temporary folder, and up to three can arrive at once per app process; a fourth is asked to retry shortly. After a job ends, its uploads are removed from comfy-api-proxy, but the files stay in ComfyUI's `input/` folder. Generation continues in ComfyUI independently.
 
