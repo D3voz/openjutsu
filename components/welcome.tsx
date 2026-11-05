@@ -14,7 +14,9 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
 }) {
   const installed = !error && options.includes(value);
   const suggested = SUGGESTIONS.filter((model) => options.includes(model.name));
-  const other = options.filter((name) => !SUGGESTIONS.some((model) => model.name === name));
+  const selected = SUGGESTIONS.find((model) => model.name === value);
+  const download = selected && !installed ? selected.url.replace("/blob/", "/resolve/") + "?download=true" : "";
+  const other =options.filter((name) => !SUGGESTIONS.some((model) => model.name === name));
 
   return <main className="shell welcome">
     <header className="top"><div className="brand">
@@ -38,7 +40,8 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
         <h2 id="describer-heading">A model that can see and write.</h2>
         <p className="hint">Use a vision-language model (VLM) with image understanding and text generation. This choice also applies to Find people.</p>
       </div>
-      <label htmlFor="describer">Visual describer</label>
+      <div className="row"><label htmlFor="describer">Visual describer</label>
+        {download && <a className="secondary download" href={download} rel="noreferrer">Download model ({selected!.size})</a>}</div>
       <select id="describer" className="file-name" value={value} onChange={(event) => onChange(event.target.value)} disabled={loading} aria-describedby="describer-help">
         {!options.includes(value) && <option value={value}>{value}{loading ? " — checking…" : " — not installed"}</option>}
         {suggested.length > 0 && <optgroup label="Suggested models installed in ComfyUI">
@@ -54,7 +57,7 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
       <div className="welcome-install">
         <strong>Put the model in this folder first</strong>
         <code>ComfyUI\models\text_encoders</code>
-        <p className="hint">Use your ComfyUI installation folder. Add a compatible single-file model with its vision weights, then refresh the list. If it still does not appear, restart ComfyUI and refresh again.</p>
+        <p className="hint">Use your ComfyUI installation folder. Use Download model above to get the selected file, or add a compatible single-file model with its vision weights, then refresh the list. If it still does not appear, restart ComfyUI and refresh again.</p>
         <div className="row"><span className="hint" role="status">{loading ? "Reading installed models…" : error ? "ComfyUI model list unavailable" : installed ? "Selected file is installed" : "Selected file is not installed"}</span>
           <button className="secondary" disabled={loading} onClick={onRefresh}>{loading ? "Refreshing…" : "Refresh models"}</button></div>
         {error && <p className="error" role="alert">{error}</p>}

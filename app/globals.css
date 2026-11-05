@@ -235,7 +235,8 @@ input[type="range"] { accent-color: var(--accent); width: 220px; max-width: 100%
 .welcome .panel { padding: 24px; gap: 12px; }
 .welcome .panel h2 { font-size: 1.25rem; margin-bottom: 6px; }
 .welcome-picker { border-color: #657931; }
-.welcome-picker > label { font-size: 0.88rem; font-weight: 600; margin-top: 4px; }
+.welcome-picker label { font-size: 0.88rem; font-weight: 600; margin-top: 4px; }
+.welcome-picker .download { padding: 6px 14px; text-decoration: none; font-size: 0.88rem; }
 .welcome-picker > select { width: 100%; min-width: 0; }
 .welcome-install { padding: 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; display: grid; gap: 10px; margin-top: 6px; }
 .welcome-install code { color: var(--accent); overflow-wrap: anywhere; }
