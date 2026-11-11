@@ -5,6 +5,7 @@ import { TRACKS_FILE, type Label } from "../../../lib/montage.ts";
 import { DEFAULT_TONE, DETAIL, TONE_MODES, TONE_RANGES, type ColorSettings, type ToneMode, type ToneSettings, type ToneValue } from "../../../lib/color.ts";
 import { CHUNK_SECONDS, FACE_STYLES, type FaceSettings, type FaceStyle } from "../../../lib/face.ts";
 import { MAX_CHARACTERS } from "../../../lib/advanced.ts";
+import { getStore } from "../../../lib/db.ts";
 import { checkAcceleration, MAX_LORAS, STEPS, STRENGTH, type Acceleration, type ModelFiles, type ModelSettings } from "../../../lib/model.ts";
 import { EDIT_MODES, OBJECT_MARGINS, parsePaint, parsePlacement, type EditMode, type ObjectMargin, type ObjectSettings } from "../../../lib/object.ts";
 import { CLIP_SECONDS, DEFAULT_TARGET, MARGINS, MAX_SEED, MIN_SECTION_SECONDS, MOTION_SIZES, RESOLUTIONS, CUSTOM_SIZE, type Margin, type MotionSize, type Preset, type Resolution, type Section, type SimpleSettings } from "../../../lib/simple.ts";
@@ -287,7 +288,31 @@ async function submitForm(form: FormData) {
   }
 
   try {
-    return NextResponse.json(await submit(), { status: 202 });
+    const job = await submit();
+    // Local history for the API and the Colab restore flow; a broken database must never block a render.
+    try {
+      const kind = String(form.get("mode") ?? "simple");
+      const title = [kind, form.get("target"), form.get("role")].map((value) => String(value ?? "").trim()).filter(Boolean).join(" · ");
+      getStore().saveJob({
+        id: job.id,
+        kind,
+        status: job.status,
+        title: (title || kind).slice(0, 200),
+        params: {
+          start: Number(form.get("start") ?? 0),
+          length: Number(form.get("length") ?? 0),
+          resolution: String(form.get("resolution") ?? ""),
+          seed: Number(form.get("seed") ?? 0),
+          target: String(form.get("target") ?? ""),
+          edit_mode: String(form.get("edit_mode") ?? ""),
+          roles: form.getAll("role").map(String),
+          model: String(form.get("model") ?? ""),
+          steps: Number(form.get("steps") ?? 0),
+        },
+        comfyPromptId: job.id,
+      });
+    } catch {}
+    return NextResponse.json(job, { status: 202 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to submit the job." }, { status: 502 });
   }

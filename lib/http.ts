@@ -98,12 +98,26 @@ export function authorize(request: Request) {
 
 export const PASSWORD_REQUIRED = "Set OPENJUTSU_PASSWORD before serving Openjutsu on a network address.";
 
+// Machine clients: a key from OPENJUTSU_API_KEY. With it, no browser origin check applies.
+export function suppliedKey(request: Request) {
+  const bearer = request.headers.get("Authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  return bearer ?? request.headers.get("x-api-key") ?? null;
+}
+
+export function apiKeyMatches(request: Request) {
+  const expected = process.env.OPENJUTSU_API_KEY?.trim();
+  const given = suppliedKey(request);
+  if (!expected || !given) return false;
+  return timingSafeEqual(createHash("sha256").update(given).digest(), createHash("sha256").update(expected).digest());
+}
+
 // Any peer can fake a localhost Host header, so password-free use needs every listening socket on loopback or a local pipe.
 export function loopbackOnly(addresses: (AddressInfo | string | null)[]) {
   return addresses.length > 0 && addresses.every((address) => typeof address === "string" || /^(127\.|::1$|::ffff:127\.)/.test(address?.address ?? ""));
 }
 
 export function apiAccess(request: Request) {
+  if (apiKeyMatches(request)) return null;
   const denied = authorize(request);
   if (denied) return denied;
   const url = new URL(request.url);

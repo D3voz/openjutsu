@@ -6,10 +6,20 @@
     "dev": "next dev --hostname 127.0.0.1",
     "build": "next build",
     "start": "next start --hostname 127.0.0.1",
-    "test": "node --test --experimental-strip-types test/*.test.ts && tsc --noEmit"
+    "test": "node --test --experimental-strip-types test/*.test.ts && tsc --noEmit",
+    "db": "node --experimental-strip-types scripts/db.ts",
+    "db:init": "node --experimental-strip-types scripts/db.ts init",
+    "db:info": "node --experimental-strip-types scripts/db.ts info",
+    "db:list": "node --experimental-strip-types scripts/db.ts list",
+    "db:export": "node --experimental-strip-types scripts/db.ts export",
+    "db:import": "node --experimental-strip-types scripts/db.ts import",
+    "db:backup": "node --experimental-strip-types scripts/db.ts backup",
+    "db:restore": "node --experimental-strip-types scripts/db.ts restore",
+    "db:prune": "node --experimental-strip-types scripts/db.ts prune",
+    "db:vacuum": "node --experimental-strip-types scripts/db.ts vacuum"
   },
   "engines": {
-    "node": ">=22.6.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "@comfyorg/sdk": "0.5.0",

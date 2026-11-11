@@ -53,6 +53,8 @@ export type Section = { start: number; length: number };
 export const MIN_SECTION_SECONDS = 2;
 
 export const PLACES = ["Whole", "Start", "Middle", "End"] as const;
+// Display names; the values above are identifiers used in the graph and saved settings.
+export const PLACE_LABELS: Record<(typeof PLACES)[number], string> = { Whole: "Todo", Start: "Inicio", Middle: "Medio", End: "Final" };
 
 // Where a part of the given length sits for each place button.
 export function placeStart(place: (typeof PLACES)[number], duration: number, length: number) {
