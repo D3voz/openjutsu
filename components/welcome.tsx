@@ -3,9 +3,9 @@
 import { DEFAULT_DESCRIBER } from "../lib/model.ts";
 
 const SUGGESTIONS = [
-  { name: "qwen3vl_8b_int8_convrot.safetensors", label: "Qwen3-VL 8B · INT8", size: "9.35 GB", note: "Openjutsu default", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors" },
-  { name: "qwen3vl_4b_fp8_scaled.safetensors", label: "Qwen3-VL 4B · FP8", size: "5.24 GB", note: "Smaller Qwen alternative", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" },
-  { name: "gemma4_e2b_it_int8_convrot.safetensors", label: "Gemma 4 E2B · INT8", size: "5.2 GB", note: "Smaller vision alternative", url: "https://huggingface.co/Comfy-Org/gemma-4/blob/main/text_encoders/gemma4_e2b_it_int8_convrot.safetensors" },
+  { name: "qwen3vl_8b_int8_convrot.safetensors", label: "Qwen3-VL 8B · INT8", size: "9,35 GB", note: "Opción por defecto de Openjutsu", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_8b_int8_convrot.safetensors" },
+  { name: "qwen3vl_4b_fp8_scaled.safetensors", label: "Qwen3-VL 4B · FP8", size: "5,24 GB", note: "Alternativa Qwen más pequeña", url: "https://huggingface.co/Comfy-Org/Qwen3-VL/blob/main/text_encoders/qwen3vl_4b_fp8_scaled.safetensors" },
+  { name: "gemma4_e2b_it_int8_convrot.safetensors", label: "Gemma 4 E2B · INT8", size: "5,2 GB", note: "Alternativa de visión más pequeña", url: "https://huggingface.co/Comfy-Org/gemma-4/blob/main/text_encoders/gemma4_e2b_it_int8_convrot.safetensors" },
 ];
 
 export function Welcome({ value, options, onChange, loading, error, onRefresh, onContinue }: {
@@ -19,67 +19,67 @@ export function Welcome({ value, options, onChange, loading, error, onRefresh, o
   return <main className="shell welcome">
     <header className="top"><div className="brand">
       <span className="mark" aria-hidden>忍</span>
-      <div><h1>Openjutsu</h1><p>Open weights. Your video. Your GPU.</p></div>
+      <div><h1>Openjutsu</h1><p>Pesos abiertos. Tu vídeo. Tu GPU.</p></div>
     </div></header>
 
     <section className="welcome-intro">
-      <p className="eyebrow">BEFORE YOUR FIRST SWAP</p>
-      <h2>Welcome to Openjutsu.</h2>
-      <p>Give your video a new cast, change an object or rebuild the scene. Start by choosing the model that helps Openjutsu understand what it sees.</p>
+      <p className="eyebrow">ANTES DE TU PRIMER CAMBIO</p>
+      <h2>Bienvenido a Openjutsu.</h2>
+      <p>Dale a tu vídeo un reparto nuevo, cambia un objeto o reconstruye la escena. Empieza eligiendo el modelo que ayuda a Openjutsu a entender lo que ve.</p>
       <ol className="welcome-flow">
-        <li><strong>See &amp; describe</strong><span>A vision-language model reads your photos and video frames, identifies people and writes prompts.</span></li>
-        <li><strong>Track the edit</strong><span>SAM follows the people or things you want to change.</span></li>
-        <li><strong>Make the video</strong><span>MiniMax H3 uses those prompts and references to generate the result.</span></li>
+        <li><strong>Ver y describir</strong><span>Un modelo de visión y lenguaje lee tus fotos y fotogramas, identifica a las personas y escribe los prompts.</span></li>
+        <li><strong>Seguir la edición</strong><span>SAM sigue a las personas o cosas que quieres cambiar.</span></li>
+        <li><strong>Hacer el vídeo</strong><span>MiniMax H3 usa esos prompts y referencias para generar el resultado.</span></li>
       </ol>
     </section>
 
     <section className="panel welcome-picker" aria-labelledby="describer-heading">
-      <div><p className="eyebrow">01 / CHOOSE YOUR VISUAL DESCRIBER</p>
-        <h2 id="describer-heading">A model that can see and write.</h2>
-        <p className="hint">Use a vision-language model (VLM) with image understanding and text generation. This choice also applies to Find people.</p>
+      <div><p className="eyebrow">01 / ELIGE TU DESCRIPTOR VISUAL</p>
+        <h2 id="describer-heading">Un modelo que ve y escribe.</h2>
+        <p className="hint">Usa un modelo de visión y lenguaje (VLM) con comprensión de imágenes y generación de texto. Esta elección también se aplica a Buscar personas.</p>
       </div>
-      <label htmlFor="describer">Visual describer</label>
+      <label htmlFor="describer">Descriptor visual</label>
       <select id="describer" className="file-name" value={value} onChange={(event) => onChange(event.target.value)} disabled={loading} aria-describedby="describer-help">
-        {!options.includes(value) && <option value={value}>{value}{loading ? " — checking…" : " — not installed"}</option>}
-        {suggested.length > 0 && <optgroup label="Suggested models installed in ComfyUI">
-          {suggested.map((model) => <option key={model.name} value={model.name}>{model.label}{model.name === DEFAULT_DESCRIBER ? " (default)" : ""}</option>)}
+        {!options.includes(value) && <option value={value}>{value}{loading ? " — comprobando…" : " — no instalado"}</option>}
+        {suggested.length > 0 && <optgroup label="Modelos sugeridos instalados en ComfyUI">
+          {suggested.map((model) => <option key={model.name} value={model.name}>{model.label}{model.name === DEFAULT_DESCRIBER ? " (por defecto)" : ""}</option>)}
         </optgroup>}
-        {other.length > 0 && <optgroup label="Other installed models — check vision support">
+        {other.length > 0 && <optgroup label="Otros modelos instalados — comprueba el soporte de visión">
           {other.map((name) => <option key={name} value={name}>{name}</option>)}
         </optgroup>}
       </select>
-      <p id="describer-help" className="hint">Other models must work with ComfyUI’s CLIPLoader and Generate Text nodes, including image and video-frame input. A file appearing here confirms it is installed; it does not confirm vision support. Text-only models and GGUF files needing a different loader cannot be used here.</p>
-      <p className="hint">The separate MiniMax H3 text encoder stays in Model components. Choose a full vision-language model here, rather than an H3-specific encoder.</p>
+      <p id="describer-help" className="hint">Los demás modelos deben funcionar con los nodos CLIPLoader y Generate Text de ComfyUI, incluida la entrada de imágenes y fotogramas. Que un archivo aparezca aquí confirma que está instalado; no confirma que tenga visión. Los modelos solo de texto y los archivos GGUF que necesitan otro cargador no se pueden usar aquí.</p>
+      <p className="hint">El codificador de texto de MiniMax H3 sigue estando en Componentes del modelo. Elige aquí un modelo de visión y lenguaje completo, no un codificador específico de H3.</p>
 
       <div className="welcome-install">
-        <strong>Put the model in this folder first</strong>
+        <strong>Primero pon el modelo en esta carpeta</strong>
         <code>ComfyUI\models\text_encoders</code>
-        <p className="hint">Use your ComfyUI installation folder. Add a compatible single-file model with its vision weights, then refresh the list. If it still does not appear, restart ComfyUI and refresh again.</p>
-        <div className="row"><span className="hint" role="status">{loading ? "Reading installed models…" : error ? "ComfyUI model list unavailable" : installed ? "Selected file is installed" : "Selected file is not installed"}</span>
-          <button className="secondary" disabled={loading} onClick={onRefresh}>{loading ? "Refreshing…" : "Refresh models"}</button></div>
+        <p className="hint">Usa la carpeta de tu instalación de ComfyUI. Añade un modelo de archivo único compatible con sus pesos de visión y después actualiza la lista. Si sigue sin aparecer, reinicia ComfyUI y vuelve a actualizar.</p>
+        <div className="row"><span className="hint" role="status">{loading ? "Leyendo los modelos instalados…" : error ? "Lista de modelos de ComfyUI no disponible" : installed ? "El archivo elegido está instalado" : "El archivo elegido no está instalado"}</span>
+          <button className="secondary" disabled={loading} onClick={onRefresh}>{loading ? "Actualizando…" : "Actualizar modelos"}</button></div>
         {error && <p className="error" role="alert">{error}</p>}
       </div>
     </section>
 
     <section className="panel welcome-memory" aria-labelledby="vram-heading">
-      <div><p className="eyebrow">02 / LEAVE ROOM FOR THE WORK</p><h2 id="vram-heading">Choose for your available VRAM.</h2></div>
-      <p className="hint">For limited VRAM, start with a smaller quantized model such as Qwen3-VL 4B FP8 or Gemma 4 E2B INT8. With more headroom, keep the Qwen3-VL 8B INT8 default. Higher precision usually needs more memory.</p>
+      <div><p className="eyebrow">02 / DEJA ESPACIO PARA EL TRABAJO</p><h2 id="vram-heading">Elige según tu VRAM disponible.</h2></div>
+      <p className="hint">Con poca VRAM, empieza por un modelo cuantizado más pequeño como Qwen3-VL 4B FP8 o Gemma 4 E2B INT8. Con más margen, mantén el Qwen3-VL 8B INT8 por defecto. Una precisión mayor suele necesitar más memoria.</p>
       <div className="welcome-table"><table>
-        <caption>Examples available as ComfyUI model files</caption>
-        <thead><tr><th scope="col">Model</th><th scope="col">File size</th><th scope="col">Use</th></tr></thead>
+        <caption>Ejemplos disponibles como archivos de modelo de ComfyUI</caption>
+        <thead><tr><th scope="col">Modelo</th><th scope="col">Tamaño del archivo</th><th scope="col">Uso</th></tr></thead>
         <tbody>{SUGGESTIONS.map((model) => <tr key={model.name}>
           <th scope="row"><a href={model.url} target="_blank" rel="noreferrer">{model.label}</a></th>
           <td>{model.size}</td><td>{model.note}</td>
         </tr>)}</tbody>
       </table></div>
-      <p className="hint">File size is a rough guide to weight storage, not a VRAM requirement. Images, video frames, context and working memory need extra space. ComfyUI may offload to system RAM, which can be slower. H3 video generation has its own, larger memory needs; this choice alone does not guarantee a full swap will fit.</p>
-      <p className="hint">Gemma needs a version with vision support. Alternative models can change prompt quality and how reliably people are matched; Openjutsu’s workflows default to Qwen3-VL 8B.</p>
+      <p className="hint">El tamaño del archivo es una guía aproximada del almacenamiento de pesos, no un requisito de VRAM. Las imágenes, los fotogramas, el contexto y la memoria de trabajo necesitan espacio adicional. ComfyUI puede descargar a la RAM del sistema, lo que puede ser más lento. La generación de vídeo con H3 tiene sus propias necesidades de memoria, mayores; esta elección por sí sola no garantiza que quepa un cambio completo.</p>
+      <p className="hint">Gemma necesita una versión con soporte de visión. Otros modelos alternativos pueden cambiar la calidad de los prompts y la fiabilidad con la que se empareja a las personas; los flujos de Openjutsu usan Qwen3-VL 8B por defecto.</p>
     </section>
 
     <footer className="welcome-actions">
-      <div><strong>Your choice stays in this browser.</strong><p className="hint">Reopen Welcome &amp; models any time to change it.</p></div>
-      <div className="row"><button className="secondary" onClick={onContinue}>Set up later</button>
-        <button className="primary" disabled={loading || !installed} onClick={onContinue}>Continue to Openjutsu →</button></div>
+      <div><strong>Tu elección se queda en este navegador.</strong><p className="hint">Vuelve a abrir Bienvenida y modelos cuando quieras cambiarla.</p></div>
+      <div className="row"><button className="secondary" onClick={onContinue}>Configurar más tarde</button>
+        <button className="primary" disabled={loading || !installed} onClick={onContinue}>Continuar a Openjutsu →</button></div>
     </footer>
   </main>;
 }

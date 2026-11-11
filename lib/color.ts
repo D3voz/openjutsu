@@ -18,14 +18,14 @@ export type ToneValue = Exclude<keyof ToneSettings, "mode">;
 
 // Orion's own ranges for each value.
 export const TONE_RANGES: Record<ToneValue, { label: string; min: number; max: number; step: number }> = {
-  exposure: { label: "Exposure", min: -5, max: 5, step: 0.01 },
-  contrast: { label: "Contrast", min: 0, max: 3, step: 0.01 },
-  pivot: { label: "Pivot", min: 0.01, max: 1, step: 0.01 },
-  highlight_rolloff: { label: "Highlight rolloff", min: 0, max: 2, step: 0.01 },
-  shadow_lift: { label: "Shadow lift", min: -1, max: 1, step: 0.01 },
-  black_floor: { label: "Black floor", min: 0, max: 0.25, step: 0.01 },
-  saturation: { label: "Saturation", min: 0, max: 3, step: 0.01 },
-  strength: { label: "Strength", min: 0, max: 2, step: 0.01 },
+  exposure: { label: "Exposición", min: -5, max: 5, step: 0.01 },
+  contrast: { label: "Contraste", min: 0, max: 3, step: 0.01 },
+  pivot: { label: "Pivote", min: 0.01, max: 1, step: 0.01 },
+  highlight_rolloff: { label: "Caída de altas luces", min: 0, max: 2, step: 0.01 },
+  shadow_lift: { label: "Elevación de sombras", min: -1, max: 1, step: 0.01 },
+  black_floor: { label: "Negro base", min: 0, max: 0.25, step: 0.01 },
+  saturation: { label: "Saturación", min: 0, max: 3, step: 0.01 },
+  strength: { label: "Intensidad", min: 0, max: 2, step: 0.01 },
 };
 
 export const DEFAULT_PRESET = "H3 soft";

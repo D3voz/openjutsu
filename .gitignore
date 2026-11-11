@@ -8,3 +8,8 @@ AGENTS.md
 CLAUDE.md
 public/_test
 public/_montage_test
+data
+*.db
+*.db-wal
+*.db-shm
+.ipynb_checkpoints/
